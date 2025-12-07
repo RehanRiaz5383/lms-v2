@@ -90,5 +90,57 @@ class StudentVideoController extends ApiController
             'subjects' => $availableSubjects,
         ], 'Videos retrieved successfully');
     }
+
+    /**
+     * Download a video file.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\Response|\Illuminate\Http\JsonResponse
+     */
+    public function download(int $id)
+    {
+        $user = auth()->user();
+
+        // Get user's assigned batches
+        $userBatchIds = DB::table('user_batches')
+            ->where('user_id', $user->id)
+            ->pluck('batch_id')
+            ->toArray();
+
+        if (empty($userBatchIds)) {
+            return $this->unauthorized('No videos assigned');
+        }
+
+        // Find video and verify it's assigned to user's batch
+        $video = DB::table('batch_subjects_video')
+            ->join('videos', 'batch_subjects_video.video_id', '=', 'videos.id')
+            ->where('videos.id', $id)
+            ->whereIn('batch_subjects_video.batch_id', $userBatchIds)
+            ->whereNull('videos.deleted_at')
+            ->where('videos.source_type', 'internal')
+            ->select('videos.*')
+            ->first();
+
+        if (!$video) {
+            return $this->notFound('Video not found or not accessible');
+        }
+
+        // Get video path
+        $videoPath = $video->path ?? $video->internal_path;
+        
+        if (!$videoPath) {
+            return $this->error('Video file not found', 404);
+        }
+
+        // Check if file exists
+        $filePath = storage_path('app/public/' . $videoPath);
+        
+        if (!file_exists($filePath)) {
+            return $this->notFound('Video file not found on server');
+        }
+
+        // Return file download with proper headers
+        return response()->download($filePath, $video->title . '.' . pathinfo($videoPath, PATHINFO_EXTENSION));
+    }
 }
 

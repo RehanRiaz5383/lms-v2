@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { apiService } from '../../services/api';
-import { API_ENDPOINTS, getStorageUrl } from '../../config/api';
+import { API_ENDPOINTS, getStorageUrl, normalizeStorageUrl } from '../../config/api';
 import { storage } from '../../utils/storage';
 
 // Initial state
@@ -77,6 +77,10 @@ const authSlice = createSlice({
     restoreSession: (state) => {
       const token = storage.getToken();
       const user = storage.getUser();
+      // Normalize picture_url if present (in case old data is in localStorage)
+      if (user?.picture_url) {
+        user.picture_url = normalizeStorageUrl(user.picture_url);
+      }
       state.token = token;
       state.user = user;
       state.isAuthenticated = !!token;
@@ -90,13 +94,22 @@ const authSlice = createSlice({
     updateUserPicture: (state, action) => {
       if (state.user && action.payload) {
         state.user.picture = action.payload.picture;
-        state.user.picture_url = action.payload.picture_url || (action.payload.picture ? getStorageUrl(action.payload.picture) : null);
+        let pictureUrl = action.payload.picture_url || (action.payload.picture ? getStorageUrl(action.payload.picture) : null);
+        // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+        if (pictureUrl) {
+          pictureUrl = normalizeStorageUrl(pictureUrl);
+        }
+        state.user.picture_url = pictureUrl;
         storage.setUser(state.user);
       }
     },
     setUser: (state, action) => {
       // Merge with existing user to preserve fields like user_type_title and roles
       if (state.user && action.payload) {
+        // Normalize picture_url if present
+        if (action.payload.picture_url) {
+          action.payload.picture_url = normalizeStorageUrl(action.payload.picture_url);
+        }
         state.user = {
           ...state.user,
           ...action.payload,
@@ -107,6 +120,10 @@ const authSlice = createSlice({
           is_admin: action.payload.is_admin !== undefined ? action.payload.is_admin : state.user.is_admin,
         };
       } else {
+        // Normalize picture_url if present
+        if (action.payload?.picture_url) {
+          action.payload.picture_url = normalizeStorageUrl(action.payload.picture_url);
+        }
         state.user = action.payload;
       }
       if (action.payload) {
@@ -124,6 +141,10 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
+        // Normalize picture_url if present
+        if (action.payload.user?.picture_url) {
+          action.payload.user.picture_url = normalizeStorageUrl(action.payload.user.picture_url);
+        }
         state.user = action.payload.user;
         state.token = action.payload.token;
         state.error = null;
@@ -160,6 +181,10 @@ const authSlice = createSlice({
       })
       .addCase(getMe.fulfilled, (state, action) => {
         state.loading = false;
+        // Normalize picture_url if present
+        if (action.payload?.picture_url) {
+          action.payload.picture_url = normalizeStorageUrl(action.payload.picture_url);
+        }
         state.user = action.payload;
         state.error = null;
       })

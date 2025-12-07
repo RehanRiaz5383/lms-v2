@@ -604,7 +604,7 @@ const UserManagement = () => {
                             {user.roles_display || (user.roles_titles && user.roles_titles.join(', ')) || user.user_type_title || 'N/A'}
                           </td>
                           <td className="p-4">
-                            {user.block ? (
+                            {Number(user.block) === 1 ? (
                               <span className="text-destructive">Blocked</span>
                             ) : (
                               <span className="text-green-600">Active</span>
@@ -643,7 +643,7 @@ const UserManagement = () => {
                                   </Button>
                                 </Tooltip>
                               )}
-                              {user.block ? (
+                              {Number(user.block) === 1 ? (
                                 <Tooltip content="Unblock User">
                                   <Button
                                     variant="ghost"

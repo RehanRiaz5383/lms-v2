@@ -8,7 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Loader2, Save, Upload, User, X } from 'lucide-react';
-import { getStorageUrl } from '../config/api';
+import { getStorageUrl, normalizeStorageUrl } from '../config/api';
 
 const Profile = () => {
   const dispatch = useAppDispatch();
@@ -61,7 +61,11 @@ const Profile = () => {
       
       // Set profile picture preview if available and no new picture selected
       if (!profilePicture && (profile.picture_url || profile.picture)) {
-        const pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+        let pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+        // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+        if (pictureUrl) {
+          pictureUrl = normalizeStorageUrl(pictureUrl);
+        }
         setProfilePicturePreview(pictureUrl);
       }
     }
@@ -76,26 +80,107 @@ const Profile = () => {
     };
   }, [profilePicturePreview]);
 
-  const handlePictureChange = (e) => {
+  const handlePictureChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        showError('Please select a valid image file');
-        return;
-      }
-      
-      // Validate file size (2MB max)
-      if (file.size > 2 * 1024 * 1024) {
-        showError('Image size should be less than 2MB');
-        return;
-      }
+    if (!file) return;
 
-      setProfilePicture(file);
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      showError('Please select a valid image file');
+      e.target.value = ''; // Reset input
+      return;
+    }
+    
+    // Validate file size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      showError('Image size should be less than 2MB');
+      e.target.value = ''; // Reset input
+      return;
+    }
+
+    // Show preview immediately
+    const previewUrl = URL.createObjectURL(file);
+    setProfilePicturePreview(previewUrl);
+    setProfilePicture(file);
+    
+    // Start upload immediately
+    setIsUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      // Create FormData with only the picture
+      const formData = new FormData();
+      formData.append('picture', file);
       
-      // Create preview
-      const previewUrl = URL.createObjectURL(file);
-      setProfilePicturePreview(previewUrl);
+      // Create progress callback
+      const progressCallback = (progress) => {
+        setUploadProgress(progress);
+      };
+      
+      // Upload picture immediately
+      const updatedProfile = await dispatch(updateProfile({
+        formData: formData,
+        onUploadProgress: progressCallback
+      })).unwrap();
+      
+      setIsUploading(false);
+      setUploadProgress(0);
+      
+      if (updatedProfile) {
+        // Update picture preview with server URL
+        if (updatedProfile.picture_url || updatedProfile.picture) {
+          let pictureUrl = updatedProfile.picture_url || (updatedProfile.picture ? getStorageUrl(updatedProfile.picture) : null);
+          // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+          if (pictureUrl) {
+            pictureUrl = normalizeStorageUrl(pictureUrl);
+          }
+          // Revoke the blob URL and set the server URL
+          URL.revokeObjectURL(previewUrl);
+          setProfilePicturePreview(pictureUrl);
+        }
+        
+        // Update user in auth state
+        const normalizedProfile = {
+          ...updatedProfile,
+          picture_url: updatedProfile.picture_url ? normalizeStorageUrl(updatedProfile.picture_url) : updatedProfile.picture_url,
+        };
+        
+        const mergedUser = {
+          ...currentUser,
+          ...normalizedProfile,
+          user_type: normalizedProfile.user_type || currentUser?.user_type,
+          user_type_title: normalizedProfile.user_type_title || currentUser?.user_type_title,
+          roles: normalizedProfile.roles || currentUser?.roles,
+          is_admin: currentUser?.is_admin,
+        };
+        dispatch(setUser(mergedUser));
+        
+        // Refresh profile to get latest data
+        await dispatch(fetchProfile());
+        
+        success('Profile picture updated successfully');
+      }
+      
+      // Clear the file input and picture state
+      setProfilePicture(null);
+      e.target.value = ''; // Reset input
+    } catch (err) {
+      setIsUploading(false);
+      setUploadProgress(0);
+      // Revert preview to original if upload fails
+      if (profile?.picture_url || profile?.picture) {
+        let pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+        if (pictureUrl) {
+          pictureUrl = normalizeStorageUrl(pictureUrl);
+        }
+        setProfilePicturePreview(pictureUrl);
+      } else {
+        setProfilePicturePreview(null);
+      }
+      URL.revokeObjectURL(previewUrl);
+      setProfilePicture(null);
+      e.target.value = ''; // Reset input
+      showError(err || 'Failed to upload profile picture. Please try again.');
     }
   };
 
@@ -103,7 +188,11 @@ const Profile = () => {
     setProfilePicture(null);
     // Reset to original picture if exists
     if (profile?.picture_url || profile?.picture) {
-      const pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+      let pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+      // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+      if (pictureUrl) {
+        pictureUrl = normalizeStorageUrl(pictureUrl);
+      }
       setProfilePicturePreview(pictureUrl);
     } else {
       setProfilePicturePreview(null);
@@ -117,7 +206,8 @@ const Profile = () => {
       isUpdatingRef.current = true;
       const updateData = { ...profileData };
       
-      // If there's a new picture, add it to FormData
+      // Note: Picture is now uploaded immediately when selected, so we only update other fields here
+      // If there's a new picture that wasn't uploaded yet (shouldn't happen with new flow, but keep for safety)
       if (profilePicture) {
         setIsUploading(true);
         setUploadProgress(0);
@@ -129,15 +219,6 @@ const Profile = () => {
           }
         });
         formData.append('picture', profilePicture);
-        
-        // Debug: Log FormData contents
-        console.log('FormData contents:', {
-          hasPicture: formData.has('picture'),
-          pictureFile: profilePicture,
-          pictureName: profilePicture.name,
-          pictureSize: profilePicture.size,
-          pictureType: profilePicture.type,
-        });
         
         // Create progress callback
         const progressCallback = (progress) => {
@@ -169,7 +250,11 @@ const Profile = () => {
           
           // Update picture preview with new URL
           if (updatedProfile.picture_url || updatedProfile.picture) {
-            const pictureUrl = updatedProfile.picture_url || (updatedProfile.picture ? getStorageUrl(updatedProfile.picture) : null);
+            let pictureUrl = updatedProfile.picture_url || (updatedProfile.picture ? getStorageUrl(updatedProfile.picture) : null);
+            // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+            if (pictureUrl) {
+              pictureUrl = normalizeStorageUrl(pictureUrl);
+            }
             setProfilePicturePreview(pictureUrl);
           }
         }
@@ -179,19 +264,25 @@ const Profile = () => {
         
         // Update user in auth state - merge with existing user data to preserve user_type_title and roles
         if (updatedProfile) {
+          // Normalize picture_url if present - create new object to avoid mutating immutable object
+          const normalizedProfile = {
+            ...updatedProfile,
+            picture_url: updatedProfile.picture_url ? normalizeStorageUrl(updatedProfile.picture_url) : updatedProfile.picture_url,
+          };
+          
           const mergedUser = {
             ...currentUser,
-            ...updatedProfile,
+            ...normalizedProfile,
             // Preserve critical fields if not in updatedProfile
-            user_type: updatedProfile.user_type || currentUser?.user_type,
-            user_type_title: updatedProfile.user_type_title || currentUser?.user_type_title,
-            roles: updatedProfile.roles || currentUser?.roles,
+            user_type: normalizedProfile.user_type || currentUser?.user_type,
+            user_type_title: normalizedProfile.user_type_title || currentUser?.user_type_title,
+            roles: normalizedProfile.roles || currentUser?.roles,
             is_admin: currentUser?.is_admin, // Preserve is_admin flag
           };
           dispatch(setUser(mergedUser));
         }
         
-        // Refresh profile to get latest data
+        // Force profile refetch to ensure UI is in sync with latest data
         await dispatch(fetchProfile());
         isUpdatingRef.current = false;
       } else {
@@ -215,17 +306,26 @@ const Profile = () => {
         success('Profile updated successfully');
         // Update user in auth state - merge with existing user data to preserve user_type_title and roles
         if (updatedProfile) {
+          // Normalize picture_url if present - create new object to avoid mutating immutable object
+          const normalizedProfile = {
+            ...updatedProfile,
+            picture_url: updatedProfile.picture_url ? normalizeStorageUrl(updatedProfile.picture_url) : updatedProfile.picture_url,
+          };
+          
           const mergedUser = {
             ...currentUser,
-            ...updatedProfile,
+            ...normalizedProfile,
             // Preserve critical fields if not in updatedProfile
-            user_type: updatedProfile.user_type || currentUser?.user_type,
-            user_type_title: updatedProfile.user_type_title || currentUser?.user_type_title,
-            roles: updatedProfile.roles || currentUser?.roles,
+            user_type: normalizedProfile.user_type || currentUser?.user_type,
+            user_type_title: normalizedProfile.user_type_title || currentUser?.user_type_title,
+            roles: normalizedProfile.roles || currentUser?.roles,
             is_admin: currentUser?.is_admin, // Preserve is_admin flag
           };
           dispatch(setUser(mergedUser));
         }
+        
+        // Force profile refetch to ensure UI is in sync with latest data
+        await dispatch(fetchProfile());
         isUpdatingRef.current = false;
       }
     } catch (err) {
@@ -336,15 +436,32 @@ const Profile = () => {
                       <img
                         src={profilePicturePreview}
                         alt="Profile"
-                        className="w-32 h-32 rounded-full object-cover border-4 border-border"
+                        className="w-32 h-32 rounded-full object-cover border-4 border-border transition-all duration-500 ease-out"
+                        style={{
+                          filter: isUploading 
+                            ? `blur(${Math.max(0, 20 - (uploadProgress / 100) * 20)}px) brightness(${0.5 + (uploadProgress / 100) * 0.5})` 
+                            : 'blur(0px) brightness(1)',
+                          transform: isUploading 
+                            ? `scale(${0.9 + (uploadProgress / 100) * 0.1})` 
+                            : 'scale(1)',
+                        }}
                       />
-                      <button
-                        type="button"
-                        onClick={handleRemovePicture}
-                        className="absolute top-0 right-0 bg-destructive text-destructive-foreground rounded-full p-1 hover:bg-destructive/90 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      {isUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="bg-background/80 backdrop-blur-sm rounded-full p-2">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        </div>
+                      )}
+                      {!isUploading && (
+                        <button
+                          type="button"
+                          onClick={handleRemovePicture}
+                          className="absolute top-0 right-0 bg-destructive text-destructive-foreground rounded-full p-1 hover:bg-destructive/90 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center border-4 border-border">
@@ -352,11 +469,15 @@ const Profile = () => {
                     </div>
                   )}
                 </div>
-                <div className="text-center">
-                  <Label htmlFor="picture" className="cursor-pointer">
+                <div className="text-center space-y-2">
+                  <Label htmlFor="picture" className={`cursor-pointer ${isUploading ? 'pointer-events-none opacity-50' : ''}`}>
                     <div className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
-                      <Upload className="h-4 w-4" />
-                      <span>{profilePicturePreview ? 'Change Picture' : 'Upload Picture'}</span>
+                      {isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      <span>{isUploading ? 'Uploading...' : (profilePicturePreview ? 'Change Picture' : 'Upload Picture')}</span>
                     </div>
                   </Label>
                   <Input
@@ -365,8 +486,9 @@ const Profile = () => {
                     accept="image/*"
                     onChange={handlePictureChange}
                     className="hidden"
+                    disabled={isUploading}
                   />
-                  <p className="text-xs text-muted-foreground mt-2">
+                  <p className="text-xs text-muted-foreground">
                     JPG, PNG or GIF. Max size 2MB
                   </p>
                 </div>

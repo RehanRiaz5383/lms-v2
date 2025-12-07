@@ -44,7 +44,7 @@ class Video extends Model
         if ($this->source_type === 'internal') {
             // Use path column first, fallback to internal_path for backward compatibility
             $videoPath = $this->path ?? $this->internal_path;
-            return $videoPath ? url('/storage/' . $videoPath) : null;
+            return $videoPath ? url('/load-storage/' . $videoPath) : null;
         }
         
         return $this->external_url;

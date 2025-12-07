@@ -5,8 +5,40 @@
  * endpoints, and API credentials. Update these values as needed.
  */
 
-// Base API URL - Update this to match your Laravel backend URL
-export const API_BASE_URL = 'http://localhost:8000/api';
+/**
+ * Application Mode
+ * Set to 'development' for local development or 'production' for live server
+ * Options: 'development' | 'production'
+ */
+const APP_MODE = 'production'; // Change to 'production' when deploying
+
+/**
+ * Get the API base URL based on application mode
+ */
+const getApiBaseUrl = () => {
+  if (APP_MODE === 'production') {
+    return 'https://lms-v2.techinnsolutions.net/api';
+  }
+  
+  // Default to development (localhost)
+  return 'http://localhost:8000/api';
+};
+
+/**
+ * Get the API timeout based on application mode
+ * Production may need longer timeout due to network latency
+ */
+const getApiTimeout = () => {
+  if (APP_MODE === 'production') {
+    return 600000; // 60 seconds for production
+  }
+  
+  // Default to 10 seconds for development
+  return 10000;
+};
+
+// Base API URL - Determined by APP_MODE
+export const API_BASE_URL = getApiBaseUrl();
 
 // Base URL for the Laravel application (without /api)
 export const APP_BASE_URL = API_BASE_URL.replace('/api', '');
@@ -14,7 +46,7 @@ export const APP_BASE_URL = API_BASE_URL.replace('/api', '');
 // API Configuration
 export const API_CONFIG = {
   baseURL: API_BASE_URL,
-  timeout: 10000, // 10 seconds
+  timeout: getApiTimeout(), // Dynamic timeout based on mode
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -39,7 +71,10 @@ export const API_ENDPOINTS = {
   // Student
   student: {
     dashboardStats: '/student/dashboard/stats',
-    videos: '/student/videos',
+    videos: {
+      list: '/student/videos',
+      download: '/student/videos/:id/download',
+    },
   },
   
   // Profile Management
@@ -146,6 +181,17 @@ export const getStorageUrl = (path) => {
   if (!path) return null;
   // Remove leading slash if present
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${APP_BASE_URL}/storage/${cleanPath}`;
+  return `${APP_BASE_URL}/load-storage/${cleanPath}`;
+};
+
+/**
+ * Normalize storage URL - converts old /storage/ URLs to /load-storage/
+ * @param {string} url - Storage URL (may contain /storage/ or /load-storage/)
+ * @returns {string} Normalized storage URL with /load-storage/
+ */
+export const normalizeStorageUrl = (url) => {
+  if (!url) return null;
+  // Replace /storage/ with /load-storage/ if present
+  return url.replace(/\/storage\//g, '/load-storage/');
 };
 

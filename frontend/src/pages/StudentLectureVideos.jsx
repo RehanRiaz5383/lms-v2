@@ -7,8 +7,9 @@ import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { Video, Eye, Download, ExternalLink, Loader2 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS } from '../config/api';
+import { API_ENDPOINTS, getStorageUrl, API_BASE_URL } from '../config/api';
 import { useToast } from '../components/ui/toast';
+import { storage } from '../utils/storage';
 
 const StudentLectureVideos = () => {
   const { user } = useAppSelector((state) => state.auth);
@@ -33,7 +34,7 @@ const StudentLectureVideos = () => {
       if (selectedBatch) params.batch_id = selectedBatch;
       if (selectedSubject) params.subject_id = selectedSubject;
 
-      const response = await apiService.get(API_ENDPOINTS.student.videos, { params });
+      const response = await apiService.get(API_ENDPOINTS.student.videos.list, { params });
       setVideos(response.data.data.videos || []);
       setBatches(response.data.data.batches || []);
       setSubjects(response.data.data.subjects || []);
@@ -54,18 +55,52 @@ const StudentLectureVideos = () => {
     }
   };
 
-  const handleDownload = () => {
-    if (!selectedVideo) return;
-    
-    const videoPath = selectedVideo.path || selectedVideo.internal_path;
-    if (videoPath) {
-      const downloadUrl = getStorageUrl(videoPath);
+  const handleDownload = async () => {
+    if (!selectedVideo || selectedVideo.source_type !== 'internal') {
+      showError('Only internal videos can be downloaded');
+      return;
+    }
+
+    try {
+      // Get download URL from API endpoint
+      const downloadEndpoint = API_ENDPOINTS.student.videos.download.replace(':id', selectedVideo.id);
+      const downloadUrl = `${API_BASE_URL}${downloadEndpoint}`;
+      
+      // Get auth token
+      const token = storage.getToken();
+      
+      // Create a temporary link to trigger download
       const link = document.createElement('a');
       link.href = downloadUrl;
       link.download = selectedVideo.title || 'video';
+      
+      // Add auth token to headers via fetch, then create blob URL
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/octet-stream',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      // Get blob from response
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Create temporary link and trigger download
+      link.href = blobUrl;
       document.body.appendChild(link);
       link.click();
+      
+      // Cleanup
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download error:', err);
+      showError('Failed to download video. Please try again.');
     }
   };
 

@@ -6,7 +6,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Menu, Moon, Sun, LogOut, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getStorageUrl } from '../../config/api';
+import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
 
 const Header = ({ onMenuClick }) => {
   const dispatch = useAppDispatch();
@@ -26,10 +26,18 @@ const Header = ({ onMenuClick }) => {
   useEffect(() => {
     // Get profile picture from user or profile
     if (user?.picture_url || user?.picture) {
-      const pictureUrl = user.picture_url || (user.picture ? getStorageUrl(user.picture) : null);
+      let pictureUrl = user.picture_url || (user.picture ? getStorageUrl(user.picture) : null);
+      // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+      if (pictureUrl) {
+        pictureUrl = normalizeStorageUrl(pictureUrl);
+      }
       setProfilePicture(pictureUrl);
     } else if (profile?.picture_url || profile?.picture) {
-      const pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+      let pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
+      // Normalize URL to ensure it uses /load-storage/ instead of /storage/
+      if (pictureUrl) {
+        pictureUrl = normalizeStorageUrl(pictureUrl);
+      }
       setProfilePicture(pictureUrl);
     } else {
       setProfilePicture(null);

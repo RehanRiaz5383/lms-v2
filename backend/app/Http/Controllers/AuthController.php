@@ -52,7 +52,7 @@ class AuthController extends ApiController
         // Add picture URL if available
         $pictureUrl = null;
         if ($user->picture) {
-            $pictureUrl = url('/storage/' . $user->picture);
+            $pictureUrl = url('/load-storage/' . $user->picture);
         }
 
         return $this->success([

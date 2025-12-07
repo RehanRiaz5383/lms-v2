@@ -18,6 +18,12 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
+    # Allow direct access to load-storage route (before catch-all)
+    # This ensures /load-storage/* requests go through Laravel routing
+    # This must come BEFORE the catch-all rule
+    RewriteCond %{REQUEST_URI} ^/load-storage/
+    RewriteRule ^ index.php [L,QSA]
+
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f

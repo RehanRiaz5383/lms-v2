@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('student')->group(function () {
         Route::get('/dashboard/stats', [StudentDashboardController::class, 'stats']);
         Route::get('/videos', [StudentVideoController::class, 'index']);
+        Route::get('/videos/{id}/download', [StudentVideoController::class, 'download']);
     });
 
     // Profile routes (all authenticated users)

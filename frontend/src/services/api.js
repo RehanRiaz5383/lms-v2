@@ -39,6 +39,16 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Handle timeout errors
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      console.error('Request timeout:', {
+        url: error.config?.url,
+        timeout: error.config?.timeout,
+        message: error.message
+      });
+      // You can add custom timeout handling here if needed
+    }
+    
     // Handle 401 Unauthorized - Clear auth and redirect to login
     if (error.response?.status === 401) {
       storage.clearAuth();

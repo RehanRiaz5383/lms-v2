@@ -23,7 +23,7 @@ class ProfileController extends ApiController
 
         // Add picture URL if available
         if ($user->picture) {
-            $user->picture_url = url('/storage/' . $user->picture);
+            $user->picture_url = url('/load-storage/' . $user->picture);
         }
 
         // Ensure user_type_title is set
@@ -137,7 +137,7 @@ class ProfileController extends ApiController
 
         // Add full URL for picture
         if ($user->picture) {
-            $user->picture_url = url('/storage/' . $user->picture);
+            $user->picture_url = url('/load-storage/' . $user->picture);
             \Log::info('Profile picture URL', ['url' => $user->picture_url, 'path' => $user->picture]);
         }
 

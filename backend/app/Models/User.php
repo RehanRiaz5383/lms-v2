@@ -67,6 +67,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'expected_fee_promise_date' => 'integer',
+            'block' => 'integer', // Cast block to integer to ensure proper comparison
         ];
     }
 
@@ -76,7 +77,7 @@ class User extends Authenticatable
     public function getPictureUrlAttribute(): ?string
     {
         if ($this->picture) {
-            return url('/storage/' . $this->picture);
+            return url('/load-storage/' . $this->picture);
         }
         return null;
     }
