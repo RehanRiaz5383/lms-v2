@@ -166,7 +166,7 @@ class BatchController extends ApiController
     }
 
     /**
-     * Get available subjects for assignment (not already assigned).
+     * Get available subjects for assignment (subjects assigned to this batch).
      *
      * @param Request $request
      * @param int $id
@@ -174,25 +174,26 @@ class BatchController extends ApiController
      */
     public function getAvailableSubjects(Request $request, int $id): JsonResponse
     {
-        $batch = Batch::find($id);
+        $batch = Batch::with('subjects')->find($id);
 
         if (!$batch) {
             return $this->notFound('Batch not found');
         }
 
-        $query = Subject::where('active', true);
+        // Get only subjects that are assigned to this batch
+        $query = $batch->subjects()->where('subjects.active', true);
 
         // Search filter
         if ($request->has('search') && !empty($request->get('search'))) {
             $search = $request->get('search');
-            $query->where('title', 'like', "%{$search}%");
+            $query->where('subjects.title', 'like', "%{$search}%");
         }
 
-        // Get all subjects (not excluding assigned ones, so user can see and manage them)
+        // Get subjects assigned to this batch
         $subjects = $query->get();
         
         // Get assigned subject IDs for reference
-        $assignedSubjectIds = $batch->subjects->pluck('id')->toArray();
+        $assignedSubjectIds = $subjects->pluck('id')->toArray();
 
         return $this->success([
             'subjects' => $subjects,

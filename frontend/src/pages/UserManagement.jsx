@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import {
   fetchUsers,
@@ -58,6 +58,8 @@ const UserManagement = () => {
   const [selectedRoles, setSelectedRoles] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
+  const rolesLoadedRef = useRef(false);
+  const loadingRolesRef = useRef(false);
   const [editingUser, setEditingUser] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -379,38 +381,87 @@ const UserManagement = () => {
     // Get assigned role IDs from user.roles or user.user_type (backward compatibility)
     const assignedIds = user.roles?.map(r => r.id) || (user.user_type ? [user.user_type] : []);
     setSelectedRoles(assignedIds);
-    setAvailableRoles([]);
+    // Preserve user's current roles in availableRoles so they show up immediately
+    const currentRoles = user.roles?.map(r => ({ id: r.id, title: r.title })) || [];
+    setAvailableRoles(currentRoles);
+    rolesLoadedRef.current = false;
+    loadingRolesRef.current = false;
+    setLoadingRoles(false);
     setShowAssignRolesDialog(true);
-    await loadAvailableRoles(user.id);
+    // Load all available roles after dialog opens (without showing loading state initially)
+    // Use a small delay to let dialog render first, preventing flicker
+    setTimeout(() => {
+      if (user.id && !loadingRolesRef.current) {
+        // Load silently (without showing loading state) to prevent button flicker
+        loadAvailableRoles(user.id, '', false);
+      }
+    }, 100);
   };
 
-  const loadAvailableRoles = async (userId, search = '') => {
-    setLoadingRoles(true);
+  const loadAvailableRoles = async (userId, search = '', showLoading = true) => {
+    // Prevent multiple simultaneous calls
+    if (loadingRolesRef.current) {
+      return;
+    }
+    
+    loadingRolesRef.current = true;
+    if (showLoading) {
+      setLoadingRoles(true);
+    }
     try {
       const result = await dispatch(fetchAvailableRoles({ id: userId, search })).unwrap();
+      let newRoles = [];
+      let assignedIds = [];
+      
       if (Array.isArray(result)) {
-        setAvailableRoles(result);
+        newRoles = result;
       } else {
-        setAvailableRoles(result.roles || []);
+        newRoles = result.roles || [];
         // Always set assigned_ids from API response (it's the source of truth)
         if (result.assigned_ids && Array.isArray(result.assigned_ids)) {
-          setSelectedRoles(result.assigned_ids);
-        } else {
-          // If no assigned_ids in response, set empty array
-          setSelectedRoles([]);
+          assignedIds = result.assigned_ids;
         }
       }
+      
+      // Merge with existing roles to ensure selected roles are always available
+      setAvailableRoles(prevRoles => {
+        const existingMap = new Map(prevRoles.map(r => [r.id, r]));
+        newRoles.forEach(role => {
+          existingMap.set(role.id, role);
+        });
+        return Array.from(existingMap.values());
+      });
+      
+      // Only update selectedRoles if API provided assigned_ids
+      if (assignedIds.length > 0) {
+        setSelectedRoles(assignedIds);
+      }
+      
+      rolesLoadedRef.current = true;
     } catch (err) {
       showError('Failed to load available roles');
       console.error('Error loading roles:', err);
     } finally {
-      setLoadingRoles(false);
+      loadingRolesRef.current = false;
+      if (showLoading) {
+        setLoadingRoles(false);
+      }
     }
   };
 
   const handleRoleSearch = (searchTerm) => {
-    if (userToAssignRoles) {
-      loadAvailableRoles(userToAssignRoles.id, searchTerm);
+    // Only search if user is set
+    if (!userToAssignRoles) return;
+    
+    // Skip empty search on initial load (roles already loaded)
+    if (!searchTerm && rolesLoadedRef.current) {
+      return;
+    }
+    
+    // Only load if not already loading
+    // Show loading state for user-initiated searches
+    if (!loadingRolesRef.current) {
+      loadAvailableRoles(userToAssignRoles.id, searchTerm || '', true);
     }
   };
 
@@ -894,6 +945,10 @@ const UserManagement = () => {
         isOpen={showAssignRolesDialog}
         onClose={() => {
           setShowAssignRolesDialog(false);
+          // Reset refs when dialog closes
+          rolesLoadedRef.current = false;
+          loadingRolesRef.current = false;
+          setLoadingRoles(false);
           if (userToAssignRoles?.id) {
             // Editing existing user - just close
             setUserToAssignRoles(null);
@@ -911,6 +966,7 @@ const UserManagement = () => {
           <div>
             <Label>Select Roles *</Label>
             <Select
+              key={`roles-${userToAssignRoles?.id || 'new'}-${showAssignRolesDialog}`}
               options={availableRoles.map(r => ({ id: r.id, title: r.title }))}
               value={selectedRoles}
               onChange={setSelectedRoles}

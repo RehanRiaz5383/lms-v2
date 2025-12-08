@@ -28,14 +28,45 @@ const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
   const [expandedMenus, setExpandedMenus] = useState(['management', 'academics', 'settings']); // Default expanded
 
-  // Check if user is admin (user_type = 1 or has admin role)
-  const isAdmin = user?.user_type === 1 || 
-                  user?.roles?.some(role => role.title?.toLowerCase() === 'admin') ||
-                  user?.user_type_title?.toLowerCase() === 'admin';
+  // Get user roles
+  const getUserRoles = () => {
+    const roles = [];
+    
+    // Check user_type (backward compatibility)
+    if (user?.user_type === 1 || user?.user_type_title?.toLowerCase() === 'admin') {
+      roles.push('admin');
+    }
+    if (user?.user_type === 2 || user?.user_type_title?.toLowerCase() === 'student') {
+      roles.push('student');
+    }
+    if (user?.user_type === 3 || user?.user_type_title?.toLowerCase() === 'teacher') {
+      roles.push('teacher');
+    }
+    
+    // Check roles array
+    if (user?.roles && Array.isArray(user.roles)) {
+      user.roles.forEach(role => {
+        const roleTitle = role.title?.toLowerCase();
+        if (roleTitle === 'admin' && !roles.includes('admin')) {
+          roles.push('admin');
+        } else if (roleTitle === 'student' && !roles.includes('student')) {
+          roles.push('student');
+        } else if (roleTitle === 'teacher' && !roles.includes('teacher')) {
+          roles.push('teacher');
+        }
+      });
+    }
+    
+    return roles;
+  };
+
+  const userRoles = getUserRoles();
+  const hasAdminRole = userRoles.includes('admin');
+  const hasStudentRole = userRoles.includes('student');
+  const hasTeacherRole = userRoles.includes('teacher');
   
-  // Check if user is student
-  const isStudent = user?.roles?.some(role => role.title?.toLowerCase() === 'student') || 
-                   user?.user_type_title?.toLowerCase() === 'student';
+  // Check if user is blocked
+  const isBlocked = Number(user?.block) === 1;
 
   const toggleMenu = (menuKey) => {
     setExpandedMenus((prev) =>
@@ -151,7 +182,134 @@ const Sidebar = ({ isOpen, onClose }) => {
     },
   ];
 
-  const menuItems = isStudent ? studentMenuItems : adminMenuItems;
+  // Build menu items grouped by role
+  const buildMenuItems = () => {
+    const menuGroups = [];
+    
+    // Add Admin menu items if user has admin role
+    if (hasAdminRole) {
+      menuGroups.push({
+        role: 'Admin',
+        items: adminMenuItems,
+      });
+    }
+    
+    // Add Student menu items if user has student role
+    if (hasStudentRole) {
+      menuGroups.push({
+        role: 'Student',
+        items: studentMenuItems,
+      });
+    }
+    
+    // Add Teacher menu items if user has teacher role (if needed in future)
+    // For now, teachers might use admin or student menus based on their permissions
+    
+    // If no roles found, default to admin (backward compatibility)
+    if (menuGroups.length === 0) {
+      menuGroups.push({
+        role: 'Admin',
+        items: adminMenuItems,
+      });
+    }
+    
+    return menuGroups;
+  };
+
+  const menuGroups = buildMenuItems();
+  
+  // Helper to render menu items (avoid duplicates like Dashboard)
+  const renderMenuItems = (items, seenPaths = new Set()) => {
+    return items.map((item) => {
+      // Skip Dashboard if already shown
+      if (item.path === '/dashboard' && seenPaths.has('/dashboard')) {
+        return null;
+      }
+      
+      if (item.path) {
+        seenPaths.add(item.path);
+      }
+      
+      const Icon = item.icon;
+
+      // Handle submenu items
+      if (item.submenu) {
+        const isExpanded = expandedMenus.includes(item.key);
+        const hasActiveChild = item.submenu.some(
+          (subItem) => location.pathname === subItem.path
+        );
+
+        return (
+          <div key={item.key}>
+            <button
+              onClick={() => toggleMenu(item.key)}
+              className={cn(
+                'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                hasActiveChild
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Icon className="h-5 w-5" />
+                <span>{item.title}</span>
+              </div>
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+            {isExpanded && (
+              <div className="ml-4 mt-1 space-y-1">
+                {item.submenu.map((subItem) => {
+                  const SubIcon = subItem.icon;
+                  const isActive = location.pathname === subItem.path;
+
+                  return (
+                    <Link
+                      key={subItem.path}
+                      to={subItem.path}
+                      onClick={onClose}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )}
+                    >
+                      <SubIcon className="h-4 w-4" />
+                      <span>{subItem.title}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // Handle regular menu items
+      const isActive = location.pathname === item.path;
+
+      return (
+        <Link
+          key={item.path}
+          to={item.path}
+          onClick={onClose}
+          className={cn(
+            'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+            isActive
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+          )}
+        >
+          <Icon className="h-5 w-5" />
+          <span>{item.title}</span>
+        </Link>
+      );
+    }).filter(Boolean);
+  };
 
   return (
     <>
@@ -177,87 +335,26 @@ const Sidebar = ({ isOpen, onClose }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-
-              // Handle submenu items
-              if (item.submenu) {
-                const isExpanded = expandedMenus.includes(item.key);
-                const hasActiveChild = item.submenu.some(
-                  (subItem) => location.pathname === subItem.path
-                );
-
+          <nav className="flex-1 overflow-y-auto p-4 space-y-4">
+            {(() => {
+              const seenPaths = new Set();
+              return menuGroups.map((group) => {
                 return (
-                  <div key={item.key}>
-                    <button
-                      onClick={() => toggleMenu(item.key)}
-                      className={cn(
-                        'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                        hasActiveChild
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5" />
-                        <span>{item.title}</span>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </button>
-                    {isExpanded && (
-                      <div className="ml-4 mt-1 space-y-1">
-                        {item.submenu.map((subItem) => {
-                          const SubIcon = subItem.icon;
-                          const isActive = location.pathname === subItem.path;
-
-                          return (
-                            <Link
-                              key={subItem.path}
-                              to={subItem.path}
-                              onClick={onClose}
-                              className={cn(
-                                'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                                isActive
-                                  ? 'bg-primary text-primary-foreground'
-                                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                              )}
-                            >
-                              <SubIcon className="h-4 w-4" />
-                              <span>{subItem.title}</span>
-                            </Link>
-                          );
-                        })}
+                  <div key={group.role} className="space-y-1">
+                    {/* Role Header */}
+                    {menuGroups.length > 1 && (
+                      <div className="px-3 py-2">
+                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          {group.role}
+                        </h3>
                       </div>
                     )}
+                    {/* Menu Items for this role */}
+                    {renderMenuItems(group.items, seenPaths)}
                   </div>
                 );
-              }
-
-              // Handle regular menu items
-              const isActive = location.pathname === item.path;
-
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={onClose}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span>{item.title}</span>
-                </Link>
-              );
-            })}
+              });
+            })()}
           </nav>
         </div>
       </aside>

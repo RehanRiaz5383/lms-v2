@@ -16,6 +16,13 @@ const Select = ({
   const [isOpen, setIsOpen] = React.useState(false);
   const [searchTerm, setSearchTerm] = React.useState("");
   const selectRef = React.useRef(null);
+  
+  // Reset search term when dropdown closes
+  React.useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm("");
+    }
+  }, [isOpen]);
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -28,31 +35,106 @@ const Select = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Track if this is the initial mount to prevent empty search on mount
+  const isInitialMount = React.useRef(true);
+  const lastSearchTerm = React.useRef('');
+  
+  // Debounced search effect
   React.useEffect(() => {
-    if (onSearch && searchTerm) {
-      const timeoutId = setTimeout(() => {
-        onSearch(searchTerm);
-      }, 300);
-      return () => clearTimeout(timeoutId);
+    if (!onSearch) return;
+    
+    // Skip search on initial mount if searchTerm is empty
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      // Only call onSearch on initial mount if searchTerm is not empty
+      if (!searchTerm) {
+        lastSearchTerm.current = '';
+        return;
+      }
     }
+    
+    // Skip if search term hasn't actually changed
+    if (lastSearchTerm.current === searchTerm) {
+      return;
+    }
+    
+    lastSearchTerm.current = searchTerm;
+    
+    const timeoutId = setTimeout(() => {
+      onSearch(searchTerm || '');
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
   }, [searchTerm, onSearch]);
+  
+  // Reset initial mount when component is remounted (when key changes)
+  React.useEffect(() => {
+    isInitialMount.current = true;
+    lastSearchTerm.current = '';
+  }, [options.length]);
 
-  const filteredOptions = options.filter((option) =>
-    option.title?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const selectedOptions = options.filter((opt) => value.includes(opt.id));
+  // Get selected options - use useMemo to prevent unnecessary recalculations
+  const selectedOptions = React.useMemo(() => {
+    return options.filter((opt) => {
+      // Handle both number and string IDs
+      const optId = typeof opt.id === 'number' ? opt.id : Number(opt.id);
+      return value.some(val => {
+        const valId = typeof val === 'number' ? val : Number(val);
+        return optId === valId;
+      });
+    });
+  }, [options, value]);
+  
+  // Filter options - use useMemo to prevent unnecessary recalculations
+  const filteredOptions = React.useMemo(() => {
+    if (onSearch) {
+      // When using API search, always show selected items and items matching search
+      return options.filter((option) => {
+        const isSelected = value.some(val => {
+          const optId = typeof option.id === 'number' ? option.id : Number(option.id);
+          const valId = typeof val === 'number' ? val : Number(val);
+          return optId === valId;
+        });
+        const matchesSearch = !searchTerm || option.title?.toLowerCase().includes(searchTerm.toLowerCase());
+        return isSelected || matchesSearch;
+      });
+    } else {
+      // Local filtering: show selected items or items matching search
+      return options.filter((option) => {
+        const matchesSearch = !searchTerm || option.title?.toLowerCase().includes(searchTerm.toLowerCase());
+        const isSelected = value.some(val => {
+          const optId = typeof option.id === 'number' ? option.id : Number(option.id);
+          const valId = typeof val === 'number' ? val : Number(val);
+          return optId === valId;
+        });
+        return isSelected || matchesSearch;
+      });
+    }
+  }, [options, value, searchTerm, onSearch]);
 
   const toggleOption = (optionId) => {
-    const newValue = value.includes(optionId)
-      ? value.filter((id) => id !== optionId)
+    // Normalize IDs for comparison
+    const normalizedOptionId = typeof optionId === 'number' ? optionId : Number(optionId);
+    const newValue = value.some(id => {
+      const normalizedId = typeof id === 'number' ? id : Number(id);
+      return normalizedId === normalizedOptionId;
+    })
+      ? value.filter((id) => {
+          const normalizedId = typeof id === 'number' ? id : Number(id);
+          return normalizedId !== normalizedOptionId;
+        })
       : [...value, optionId];
     onChange(newValue);
   };
 
   const removeOption = (optionId, e) => {
     e.stopPropagation();
-    onChange(value.filter((id) => id !== optionId));
+    // Normalize IDs for comparison
+    const normalizedOptionId = typeof optionId === 'number' ? optionId : Number(optionId);
+    onChange(value.filter((id) => {
+      const normalizedId = typeof id === 'number' ? id : Number(id);
+      return normalizedId !== normalizedOptionId;
+    }));
   };
 
   return (
@@ -108,31 +190,52 @@ const Select = ({
                 No options found
               </div>
             ) : (
-              filteredOptions.map((option) => {
-                const isSelected = value.includes(option.id);
-                return (
-                  <div
-                    key={option.id}
-                    onClick={() => toggleOption(option.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent transition-colors",
-                      isSelected && "bg-accent"
-                    )}
-                  >
+              filteredOptions
+                .sort((a, b) => {
+                  // Sort selected items first
+                  const aSelected = value.some(val => {
+                    const aId = typeof a.id === 'number' ? a.id : Number(a.id);
+                    const valId = typeof val === 'number' ? val : Number(val);
+                    return aId === valId;
+                  });
+                  const bSelected = value.some(val => {
+                    const bId = typeof b.id === 'number' ? b.id : Number(b.id);
+                    const valId = typeof val === 'number' ? val : Number(val);
+                    return bId === valId;
+                  });
+                  if (aSelected && !bSelected) return -1;
+                  if (!aSelected && bSelected) return 1;
+                  return 0;
+                })
+                .map((option) => {
+                  const isSelected = value.some(val => {
+                    const optId = typeof option.id === 'number' ? option.id : Number(option.id);
+                    const valId = typeof val === 'number' ? val : Number(val);
+                    return optId === valId;
+                  });
+                  return (
                     <div
+                      key={option.id}
+                      onClick={() => toggleOption(option.id)}
                       className={cn(
-                        "flex h-4 w-4 items-center justify-center rounded border",
-                        isSelected
-                          ? "bg-primary border-primary text-primary-foreground"
-                          : "border-input"
+                        "flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent transition-colors",
+                        isSelected && "bg-accent"
                       )}
                     >
-                      {isSelected && <Check className="h-3 w-3" />}
+                      <div
+                        className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded border",
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-input"
+                        )}
+                      >
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </div>
+                      <span className="text-sm">{option.title}</span>
                     </div>
-                    <span className="text-sm">{option.title}</span>
-                  </div>
-                );
-              })
+                  );
+                })
             )}
           </div>
         </div>

@@ -119,6 +119,130 @@ php artisan migrate --force
 
 **Security Note**: The migration endpoint is disabled in production by default. To enable it, set `ALLOW_MIGRATIONS_IN_PRODUCTION=true` in your `.env` file, but remember to disable it again after use.
 
+## Queue Processing (Cron Jobs for Shared Hosting)
+
+Since shared hosting doesn't support long-running processes, queue jobs must be processed via cron jobs. The application uses the **database** queue driver by default.
+
+### Option 1: Laravel Scheduler (Recommended if you have SSH access)
+
+If your shared hosting supports SSH and allows running `php artisan schedule:run`, set up a cron job:
+
+1. **Add to your `.env` file:**
+   ```
+   QUEUE_CONNECTION=database
+   QUEUE_TOKEN=your-strong-random-token-here
+   ```
+
+2. **Set up a cron job in cPanel (or via SSH):**
+   ```
+   * * * * * cd /path/to/your/laravel/project && php artisan schedule:run >> /dev/null 2>&1
+   ```
+   
+   Replace `/path/to/your/laravel/project` with your actual Laravel project path (e.g., `/home/username/public_html/lms-v2` or `/home/username/sites-data/lms-v2`).
+
+3. **The scheduler will automatically process queue jobs every minute.**
+
+### Option 2: URL-Based Queue Processing (Recommended for cPanel-only hosting)
+
+If you don't have SSH access, use the URL-based queue processing endpoint:
+
+1. **Add to your `.env` file:**
+   ```
+   QUEUE_CONNECTION=database
+   QUEUE_TOKEN=your-strong-random-token-here
+   ```
+
+2. **Set up a cron job in cPanel:**
+   - Go to **cPanel → Cron Jobs**
+   - Add a new cron job with:
+     - **Minute**: `*` (every minute)
+     - **Hour**: `*`
+     - **Day**: `*`
+     - **Month**: `*`
+     - **Weekday**: `*`
+     - **Command**: 
+       ```bash
+       curl -s "https://yourdomain.com/process-queue?token=your-strong-random-token-here" > /dev/null 2>&1
+       ```
+       
+       Or using `wget`:
+       ```bash
+       wget -q -O - "https://yourdomain.com/process-queue?token=your-strong-random-token-here" > /dev/null 2>&1
+       ```
+   
+   Replace:
+   - `yourdomain.com` with your actual domain
+   - `your-strong-random-token-here` with the token you set in `.env`
+
+3. **The cron job will call the endpoint every minute, processing one queue job per call.**
+
+### Option 3: Process Multiple Jobs Per Minute
+
+If you have many queued jobs and want to process multiple jobs per minute:
+
+1. **Create multiple cron jobs** (e.g., every 30 seconds):
+   ```bash
+   */1 * * * * curl -s "https://yourdomain.com/process-queue?token=YOUR_TOKEN" > /dev/null 2>&1
+   */1 * * * * sleep 30 && curl -s "https://yourdomain.com/process-queue?token=YOUR_TOKEN" > /dev/null 2>&1
+   ```
+
+2. **Or use a script that processes multiple jobs:**
+   Create a file `process-queue-batch.php` in your public directory:
+   ```php
+   <?php
+   $token = 'your-strong-random-token-here';
+   $domain = 'https://yourdomain.com';
+   $jobsToProcess = 5; // Process 5 jobs per call
+   
+   for ($i = 0; $i < $jobsToProcess; $i++) {
+       $ch = curl_init("{$domain}/process-queue?token={$token}");
+       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+       curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+       curl_exec($ch);
+       curl_close($ch);
+       usleep(500000); // Wait 0.5 seconds between jobs
+   }
+   ```
+   
+   Then set up a cron job to call this script:
+   ```bash
+   * * * * * php /path/to/public/process-queue-batch.php > /dev/null 2>&1
+   ```
+
+### Verifying Queue Processing
+
+1. **Check if jobs are being processed:**
+   - Visit: `https://yourdomain.com/process-queue?token=YOUR_TOKEN`
+   - You should see a JSON response with `"success": true` and `"remaining_jobs"` count
+
+2. **Monitor queue status:**
+   - Check the `jobs` table in your database
+   - Jobs should decrease over time as they're processed
+   - Failed jobs will be moved to the `failed_jobs` table
+
+3. **Check logs:**
+   - Laravel logs: `storage/logs/laravel.log`
+   - Look for queue processing messages
+
+### Troubleshooting
+
+**Jobs not processing:**
+- Verify `QUEUE_CONNECTION=database` in `.env`
+- Check that the `jobs` table exists (run migrations)
+- Verify the cron job is running (check cPanel cron job logs)
+- Check that `QUEUE_TOKEN` matches in both `.env` and cron job command
+
+**Jobs failing:**
+- Check `failed_jobs` table for error details
+- Review `storage/logs/laravel.log` for error messages
+- Ensure SMTP settings are configured if jobs involve email sending
+
+**Cron job not working:**
+- Verify the cron job path is correct
+- Test the URL manually in a browser (with token)
+- Check cPanel cron job execution logs
+- Ensure your hosting provider allows cron jobs
+
 ## Environment Configuration
 
 Make sure to update `.env` file with:
@@ -126,6 +250,8 @@ Make sure to update `.env` file with:
 - `APP_URL` (your production URL)
 - `APP_ENV=production`
 - `APP_DEBUG=false`
+- `QUEUE_CONNECTION=database` (for queue processing)
+- `QUEUE_TOKEN=your-strong-random-token-here` (for queue processing via URL)
 - `MIGRATION_TOKEN=your-strong-random-token-here` (for running migrations via URL)
 - `ALLOW_MIGRATIONS_IN_PRODUCTION=false` (set to `true` only when you need to run migrations, then set back to `false`)
 

@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\Route;
 
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
+// Public video creation route for testing (excluded from auth)
+Route::post('/videos', [VideoController::class, 'store']);
 
 // Protected routes (require authentication)
 Route::middleware('auth:sanctum')->group(function () {
@@ -89,7 +91,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Videos Management
     Route::prefix('videos')->group(function () {
         Route::get('/', [VideoController::class, 'index']);
-        Route::post('/', [VideoController::class, 'store']);
+        // POST /videos is now public (moved above for testing)
         Route::get('/{id}', [VideoController::class, 'show']);
         Route::put('/{id}', [VideoController::class, 'update']);
         Route::delete('/{id}', [VideoController::class, 'destroy']);

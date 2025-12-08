@@ -64,6 +64,8 @@ class AuthController extends ApiController
                 'user_type_title' => $user->userType?->title ?? null,
                 'picture' => $user->picture,
                 'picture_url' => $pictureUrl,
+                'block' => $user->block ?? 0,
+                'block_reason' => $user->block_reason,
                 'roles' => $user->roles->map(function($role) {
                     return [
                         'id' => $role->id,
@@ -104,7 +106,13 @@ class AuthController extends ApiController
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->load('userType');
+        $user->load('userType', 'roles');
+
+        // Add picture URL if available
+        $pictureUrl = null;
+        if ($user->picture) {
+            $pictureUrl = url('/load-storage/' . $user->picture);
+        }
 
         return $this->success([
             'id' => $user->id,
@@ -112,6 +120,16 @@ class AuthController extends ApiController
             'email' => $user->email,
             'user_type' => $user->user_type,
             'user_type_title' => $user->userType?->title ?? null,
+            'picture' => $user->picture,
+            'picture_url' => $pictureUrl,
+            'block' => $user->block ?? 0,
+            'block_reason' => $user->block_reason,
+            'roles' => $user->roles->map(function($role) {
+                return [
+                    'id' => $role->id,
+                    'title' => $role->title,
+                ];
+            }),
         ], 'User retrieved successfully');
     }
 }

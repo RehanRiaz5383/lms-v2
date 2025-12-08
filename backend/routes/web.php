@@ -193,3 +193,72 @@ Route::match(['get', 'post'], '/run-migrations', function (Request $request) {
         ], 500);
     }
 })->name('run-migrations');
+
+/**
+ * Queue Processing Endpoint - Process queued jobs via URL
+ * 
+ * SECURITY: This endpoint requires a secret token to prevent unauthorized access.
+ * Add QUEUE_TOKEN to your .env file with a strong random string.
+ * 
+ * Usage: GET /process-queue?token=YOUR_SECRET_TOKEN
+ *        or POST /process-queue?token=YOUR_SECRET_TOKEN
+ * 
+ * This is useful for shared hosting where you can't run long-running queue workers.
+ * Set up a cron job to call this URL every minute.
+ */
+Route::match(['get', 'post'], '/process-queue', function (Request $request) {
+    // Get token from request (query parameter or header)
+    $providedToken = $request->get('token') ?? $request->header('X-Queue-Token');
+    $expectedToken = env('QUEUE_TOKEN');
+    
+    // Security check: Require token
+    if (empty($expectedToken)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Queue token not configured. Please set QUEUE_TOKEN in .env file.',
+            'error' => 'Configuration missing'
+        ], 500);
+    }
+    
+    if (empty($providedToken) || $providedToken !== $expectedToken) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Invalid or missing queue token.',
+            'error' => 'Unauthorized'
+        ], 401);
+    }
+    
+    try {
+        // Process one job from the queue
+        // Using --once flag to process one job and exit (perfect for cron)
+        Artisan::call('queue:work', [
+            '--once' => true,
+            '--tries' => 3,
+            '--timeout' => 60,
+        ]);
+        
+        $output = Artisan::output();
+        
+        // Count remaining jobs
+        $remainingJobs = \DB::table('jobs')->count();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Queue processed successfully.',
+            'remaining_jobs' => $remainingJobs,
+            'output' => $output,
+            'timestamp' => now()->toDateTimeString()
+        ], 200);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Queue processing failed: ' . $e->getMessage(),
+            'error' => config('app.debug') ? [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ] : 'Queue processing error occurred'
+        ], 500);
+    }
+})->name('process-queue');

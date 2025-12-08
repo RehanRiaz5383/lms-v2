@@ -197,6 +197,7 @@ class UserController extends ApiController
                 'first_name' => 'nullable|string|max:255',
                 'last_name' => 'nullable|string|max:255',
                 'email' => 'sometimes|email|unique:users,email,' . $id,
+                'password' => 'sometimes|string|min:8',
                 'contact_no' => 'nullable|string|max:20',
                 'emergency_contact_no' => 'nullable|string|max:20',
                 'address' => 'nullable|string',
@@ -212,6 +213,14 @@ class UserController extends ApiController
             ]);
         } catch (ValidationException $e) {
             return $this->validationError($e->errors(), 'Validation failed');
+        }
+
+        // Hash password if provided
+        if (isset($validated['password']) && !empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        } else {
+            // Remove password from validated data if not provided or empty
+            unset($validated['password']);
         }
 
         // Track changes for notification
