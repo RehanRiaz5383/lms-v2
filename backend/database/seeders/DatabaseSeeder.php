@@ -15,11 +15,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Seed user types (roles) first
+        $this->call([
+            UserTypeSeeder::class,
+        ]);
+
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // User::factory()->create([
+        //     'name' => 'Test User',
+        //     'email' => 'test@example.com',
+        // ]);
     }
 }

@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class UserController extends ApiController
@@ -192,7 +193,7 @@ class UserController extends ApiController
         }
 
         try {
-            $validated = $request->validate([
+            $validationRules = [
                 'name' => 'sometimes|string|max:255',
                 'first_name' => 'nullable|string|max:255',
                 'last_name' => 'nullable|string|max:255',
@@ -210,9 +211,45 @@ class UserController extends ApiController
                 'expected_fee_promise_date' => 'nullable|integer|min:1|max:31',
                 'requested_course' => 'nullable|string',
                 'source' => 'nullable|string',
-            ]);
+            ];
+            
+            // Only validate picture if it's being uploaded
+            if ($request->hasFile('picture')) {
+                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif|max:2048'; // 2MB max
+            }
+            
+            $validated = $request->validate($validationRules);
         } catch (ValidationException $e) {
             return $this->validationError($e->errors(), 'Validation failed');
+        }
+
+        // Handle profile picture upload
+        if ($request->hasFile('picture')) {
+            try {
+                // Delete old picture if exists
+                if ($user->picture) {
+                    $oldPicturePath = str_replace('storage/', '', $user->picture);
+                    if (Storage::disk('public')->exists($oldPicturePath)) {
+                        Storage::disk('public')->delete($oldPicturePath);
+                    }
+                }
+
+                // Store new picture
+                $file = $request->file('picture');
+                
+                // Ensure User_Profile directory exists
+                if (!Storage::disk('public')->exists('User_Profile')) {
+                    Storage::disk('public')->makeDirectory('User_Profile');
+                }
+
+                $fileName = time() . '_' . $user->id . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $path = $file->storeAs('User_Profile', $fileName, 'public');
+                
+                // Store relative path
+                $validated['picture'] = $path;
+            } catch (\Exception $e) {
+                return $this->error('Failed to upload profile picture: ' . $e->getMessage(), 500);
+            }
         }
 
         // Hash password if provided
@@ -237,6 +274,11 @@ class UserController extends ApiController
         }
         $user->roles_titles = $rolesTitles;
         $user->roles_display = implode(', ', $rolesTitles);
+        
+        // Add picture URL if available
+        if ($user->picture) {
+            $user->picture_url = url('/load-storage/' . $user->picture);
+        }
 
         // Dispatch event for any user update (all user types)
         if (!empty($changes)) {
@@ -244,6 +286,149 @@ class UserController extends ApiController
         }
 
         return $this->success($user, 'User updated successfully');
+    }
+
+    /**
+     * Update a student (for CR/Teacher - limited access).
+     * CR/Teacher can only update students in batches they are assigned to.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function updateStudent(Request $request, int $id): JsonResponse
+    {
+        $currentUser = $request->user();
+        $student = User::find($id);
+
+        if (!$student) {
+            return $this->notFound('Student not found');
+        }
+
+        // Check if current user is admin, teacher, or CR
+        $currentUser->load('roles');
+        $isAdmin = $currentUser->roles->contains(function ($role) {
+            return strtolower($role->title) === 'admin';
+        }) || $currentUser->user_type == 1;
+        
+        $isTeacherOrCR = $currentUser->roles->contains(function ($role) {
+            $title = strtolower($role->title);
+            return $title === 'teacher' || $title === 'class representative (cr)';
+        });
+
+        if (!$isAdmin && !$isTeacherOrCR) {
+            return $this->error('Unauthorized. Only admins, teachers, and class representatives can update students.', 403);
+        }
+
+        // If not admin, verify that student is in a batch assigned to the teacher/CR
+        if (!$isAdmin) {
+            $studentBatches = DB::table('user_batches')
+                ->where('user_id', $student->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $teacherBatches = DB::table('user_batches')
+                ->where('user_id', $currentUser->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $hasCommonBatch = !empty(array_intersect($studentBatches, $teacherBatches));
+            
+            if (!$hasCommonBatch) {
+                return $this->error('Unauthorized. You can only update students in batches assigned to you.', 403);
+            }
+        }
+
+        // Verify student has student role
+        $student->load('roles');
+        $isStudent = $student->roles->contains(function ($role) {
+            return strtolower($role->title) === 'student';
+        }) || $student->user_type == 2;
+
+        if (!$isStudent) {
+            return $this->error('User is not a student', 400);
+        }
+
+        try {
+            $validationRules = [
+                'name' => 'sometimes|string|max:255',
+                'first_name' => 'nullable|string|max:255',
+                'last_name' => 'nullable|string|max:255',
+                'email' => 'sometimes|email|unique:users,email,' . $id,
+                'password' => 'sometimes|string|min:8',
+                'contact_no' => 'nullable|string|max:20',
+                'emergency_contact_no' => 'nullable|string|max:20',
+                'address' => 'nullable|string',
+                'country' => 'nullable|string|max:100',
+                'city' => 'nullable|string|max:100',
+                'guardian_name' => 'nullable|string|max:255',
+                'guardian_email' => 'nullable|email',
+                'guardian_contact_no' => 'nullable|string|max:20',
+            ];
+            
+            // Only validate picture if it's being uploaded
+            if ($request->hasFile('picture')) {
+                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif|max:2048'; // 2MB max
+            }
+            
+            $validated = $request->validate($validationRules);
+        } catch (ValidationException $e) {
+            return $this->validationError($e->errors(), 'Validation failed');
+        }
+
+        // Handle profile picture upload
+        if ($request->hasFile('picture')) {
+            try {
+                // Delete old picture if exists
+                if ($student->picture) {
+                    $oldPicturePath = str_replace('storage/', '', $student->picture);
+                    if (Storage::disk('public')->exists($oldPicturePath)) {
+                        Storage::disk('public')->delete($oldPicturePath);
+                    }
+                }
+
+                // Store new picture
+                $file = $request->file('picture');
+                
+                // Ensure User_Profile directory exists
+                if (!Storage::disk('public')->exists('User_Profile')) {
+                    Storage::disk('public')->makeDirectory('User_Profile');
+                }
+
+                $fileName = time() . '_' . $student->id . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
+                $path = $file->storeAs('User_Profile', $fileName, 'public');
+                
+                // Store relative path
+                $validated['picture'] = $path;
+            } catch (\Exception $e) {
+                return $this->error('Failed to upload profile picture: ' . $e->getMessage(), 500);
+            }
+        }
+
+        // Hash password if provided
+        if (isset($validated['password']) && !empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        } else {
+            // Remove password from validated data if not provided or empty
+            unset($validated['password']);
+        }
+
+        $student->update($validated);
+        $student->load('userType', 'roles');
+        $student->user_type_title = $student->userType?->title ?? 'N/A';
+        $rolesTitles = $student->roles->pluck('title')->toArray();
+        if (empty($rolesTitles) && $student->userType) {
+            $rolesTitles = [$student->userType->title];
+        }
+        $student->roles_titles = $rolesTitles;
+        $student->roles_display = implode(', ', $rolesTitles);
+        
+        // Add picture URL if available
+        if ($student->picture) {
+            $student->picture_url = url('/load-storage/' . $student->picture);
+        }
+
+        return $this->success($student, 'Student updated successfully');
     }
 
     /**
@@ -274,10 +459,54 @@ class UserController extends ApiController
      */
     public function block(Request $request, int $id): JsonResponse
     {
+        $currentUser = $request->user();
         $user = User::find($id);
 
         if (!$user) {
             return $this->notFound('User not found');
+        }
+
+        // Check if current user is admin, teacher, or CR
+        $currentUser->load('roles');
+        $isAdmin = $currentUser->roles->contains(function ($role) {
+            return strtolower($role->title) === 'admin';
+        }) || $currentUser->user_type == 1;
+        
+        $isTeacherOrCR = $currentUser->roles->contains(function ($role) {
+            $title = strtolower($role->title);
+            return $title === 'teacher' || $title === 'class representative (cr)';
+        });
+
+        if (!$isAdmin && !$isTeacherOrCR) {
+            return $this->error('Unauthorized. Only admins, teachers, and class representatives can block users.', 403);
+        }
+
+        // If not admin, verify that user is a student in a batch assigned to the teacher/CR
+        if (!$isAdmin) {
+            $user->load('roles');
+            $isStudent = $user->roles->contains(function ($role) {
+                return strtolower($role->title) === 'student';
+            }) || $user->user_type == 2;
+
+            if (!$isStudent) {
+                return $this->error('You can only block students', 403);
+            }
+
+            $studentBatches = DB::table('user_batches')
+                ->where('user_id', $user->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $teacherBatches = DB::table('user_batches')
+                ->where('user_id', $currentUser->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $hasCommonBatch = !empty(array_intersect($studentBatches, $teacherBatches));
+            
+            if (!$hasCommonBatch) {
+                return $this->error('Unauthorized. You can only block students in batches assigned to you.', 403);
+            }
         }
 
         try {
@@ -313,15 +542,60 @@ class UserController extends ApiController
     /**
      * Unblock a user.
      *
+     * @param Request $request
      * @param int $id
      * @return JsonResponse
      */
-    public function unblock(int $id): JsonResponse
+    public function unblock(Request $request, int $id): JsonResponse
     {
+        $currentUser = $request->user();
         $user = User::find($id);
 
         if (!$user) {
             return $this->notFound('User not found');
+        }
+
+        // Check if current user is admin, teacher, or CR
+        $currentUser->load('roles');
+        $isAdmin = $currentUser->roles->contains(function ($role) {
+            return strtolower($role->title) === 'admin';
+        }) || $currentUser->user_type == 1;
+        
+        $isTeacherOrCR = $currentUser->roles->contains(function ($role) {
+            $title = strtolower($role->title);
+            return $title === 'teacher' || $title === 'class representative (cr)';
+        });
+
+        if (!$isAdmin && !$isTeacherOrCR) {
+            return $this->error('Unauthorized. Only admins, teachers, and class representatives can unblock users.', 403);
+        }
+
+        // If not admin, verify that user is a student in a batch assigned to the teacher/CR
+        if (!$isAdmin) {
+            $user->load('roles');
+            $isStudent = $user->roles->contains(function ($role) {
+                return strtolower($role->title) === 'student';
+            }) || $user->user_type == 2;
+
+            if (!$isStudent) {
+                return $this->error('You can only unblock students', 403);
+            }
+
+            $studentBatches = DB::table('user_batches')
+                ->where('user_id', $user->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $teacherBatches = DB::table('user_batches')
+                ->where('user_id', $currentUser->id)
+                ->pluck('batch_id')
+                ->toArray();
+            
+            $hasCommonBatch = !empty(array_intersect($studentBatches, $teacherBatches));
+            
+            if (!$hasCommonBatch) {
+                return $this->error('Unauthorized. You can only unblock students in batches assigned to you.', 403);
+            }
         }
 
         $user->update([

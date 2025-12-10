@@ -7,8 +7,10 @@ use App\Http\Controllers\NotificationSettingsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SmtpSettingsController;
 use App\Http\Controllers\StudentDashboardController;
+use App\Http\Controllers\StudentTaskController;
 use App\Http\Controllers\StudentVideoController;
 use App\Http\Controllers\SubjectController;
+use App\Http\Controllers\TaskController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +45,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard/stats', [StudentDashboardController::class, 'stats']);
         Route::get('/videos', [StudentVideoController::class, 'index']);
         Route::get('/videos/{id}/download', [StudentVideoController::class, 'download']);
+        Route::get('/tasks', [StudentTaskController::class, 'index']);
+        Route::get('/tasks/{id}', [StudentTaskController::class, 'show']);
+        Route::post('/tasks/{id}/submit', [StudentTaskController::class, 'submit']);
+        Route::get('/tasks/submissions', [StudentTaskController::class, 'submissions']);
     });
 
     // Profile routes (all authenticated users)
@@ -68,6 +74,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}/available-roles', [UserController::class, 'getAvailableRoles']);
     });
 
+    // Student update routes (for CR/Teacher - limited access)
+    Route::prefix('users')->group(function () {
+        Route::put('/{id}/student', [UserController::class, 'updateStudent']);
+        Route::post('/{id}/block', [UserController::class, 'block']); // Allow CR/Teacher to block
+        Route::post('/{id}/unblock', [UserController::class, 'unblock']); // Allow CR/Teacher to unblock
+    });
+
     // Batches Management
     Route::prefix('batches')->group(function () {
         Route::get('/', [BatchController::class, 'index']);
@@ -77,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [BatchController::class, 'destroy']);
         Route::post('/{id}/assign-subjects', [BatchController::class, 'assignSubjects']);
         Route::get('/{id}/available-subjects', [BatchController::class, 'getAvailableSubjects']);
+        Route::get('/{id}/students', [BatchController::class, 'getStudents']);
     });
 
     // Subjects Management
@@ -99,6 +113,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/batch/{batchId}/subject/{subjectId}', [VideoController::class, 'getBatchSubjectVideos']);
         Route::post('/batch/{batchId}/subject/{subjectId}/reorder', [VideoController::class, 'reorderBatchSubjectVideos']);
         Route::delete('/{id}/batch-subject', [VideoController::class, 'removeFromBatchSubject'])->middleware('admin');
+    });
+
+    // Tasks Management (Admin, Teacher, CR)
+    Route::prefix('tasks')->group(function () {
+        Route::get('/', [TaskController::class, 'index']);
+        Route::post('/', [TaskController::class, 'store']);
+        Route::get('/{id}', [TaskController::class, 'show']);
+        Route::put('/{id}', [TaskController::class, 'update']);
+        Route::delete('/{id}', [TaskController::class, 'destroy']);
+        Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
+        Route::post('/{taskId}/submissions/{submissionId}/grade', [TaskController::class, 'gradeSubmission']);
     });
 
     // SMTP Settings (Admin only)

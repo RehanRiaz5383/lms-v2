@@ -37,7 +37,37 @@ const BatchManagement = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { batches, pagination, loading, filters, currentBatch } = useAppSelector((state) => state.batches);
+  const { user } = useAppSelector((state) => state.auth);
   const { success, error: showError } = useToast();
+
+  // Check if user is admin (has admin role)
+  const isAdmin = () => {
+    if (!user) return false;
+    // Check roles array (primary method)
+    if (user.roles && Array.isArray(user.roles)) {
+      return user.roles.some(role => role.title?.toLowerCase() === 'admin');
+    }
+    // Fallback to user_type (backward compatibility)
+    return user.user_type === 1 || user.user_type_title?.toLowerCase() === 'admin';
+  };
+
+  // Check if user is teacher or CR (has teacher/CR role but not admin)
+  const isTeacherOrCR = () => {
+    if (!user) return false;
+    // Check roles array (primary method)
+    if (user.roles && Array.isArray(user.roles)) {
+      const hasTeacher = user.roles.some(role => {
+        const title = role.title?.toLowerCase();
+        return title === 'teacher' || title === 'class representative (cr)';
+      });
+      const hasAdmin = user.roles.some(role => role.title?.toLowerCase() === 'admin');
+      return hasTeacher && !hasAdmin;
+    }
+    return false; // Don't use user_type for teacher/CR
+  };
+
+  const hasAdminAccess = isAdmin();
+  const isTeacherCR = isTeacherOrCR();
 
   const [showDrawer, setShowDrawer] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
@@ -174,13 +204,15 @@ const BatchManagement = () => {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Batch Management</h1>
           <p className="text-muted-foreground mt-2">
-            Manage batches and assign subjects
+            {hasAdminAccess ? 'Manage batches and assign subjects' : (isTeacherCR ? 'View your assigned batches' : 'Manage batches and assign subjects')}
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Batch
-        </Button>
+        {hasAdminAccess && (
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Batch
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -282,33 +314,37 @@ const BatchManagement = () => {
                                   <ExternalLink className="h-4 w-4" />
                                 </Button>
                               </Tooltip>
-                              <Tooltip content="Edit Batch">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleEdit(batch)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </Tooltip>
-                              <Tooltip content="Assign Subjects">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleAssignClick(batch)}
-                                >
-                                  <BookOpen className="h-4 w-4" />
-                                </Button>
-                              </Tooltip>
-                              <Tooltip content="Delete Batch">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDelete(batch.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </Tooltip>
+                              {hasAdminAccess && (
+                                <>
+                                  <Tooltip content="Edit Batch">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleEdit(batch)}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip content="Assign Subjects">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleAssignClick(batch)}
+                                    >
+                                      <BookOpen className="h-4 w-4" />
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip content="Delete Batch">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDelete(batch.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </Tooltip>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>

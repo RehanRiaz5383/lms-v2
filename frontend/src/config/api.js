@@ -10,7 +10,7 @@
  * Set to 'development' for local development or 'production' for live server
  * Options: 'development' | 'production'
  */
-const APP_MODE = 'production'; // Change to 'production' when deploying
+const APP_MODE = 'development'; // Change to 'production' when deploying
 
 /**
  * Get the API base URL based on application mode
@@ -75,6 +75,12 @@ export const API_ENDPOINTS = {
       list: '/student/videos',
       download: '/student/videos/:id/download',
     },
+    tasks: {
+      list: '/student/tasks',
+      show: '/student/tasks/:id',
+      submit: '/student/tasks/:id/submit',
+      submissions: '/student/tasks/submissions',
+    },
   },
   
   // Profile Management
@@ -90,6 +96,7 @@ export const API_ENDPOINTS = {
     show: '/users/:id',
     create: '/users',
     update: '/users/:id',
+    updateStudent: '/users/:id/student',
     delete: '/users/:id',
     block: '/users/:id/block',
     unblock: '/users/:id/unblock',
@@ -109,6 +116,7 @@ export const API_ENDPOINTS = {
     delete: '/batches/:id',
     assignSubjects: '/batches/:id/assign-subjects',
     availableSubjects: '/batches/:id/available-subjects',
+    getStudents: '/batches/:id/students',
   },
   
   // Subjects Management
@@ -131,6 +139,17 @@ export const API_ENDPOINTS = {
     getBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId',
     reorderBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId/reorder',
     removeFromBatchSubject: '/videos/:id/batch-subject',
+  },
+  
+  // Tasks Management (Admin, Teacher, CR)
+  tasks: {
+    list: '/tasks',
+    show: '/tasks/:id',
+    create: '/tasks',
+    update: '/tasks/:id',
+    delete: '/tasks/:id',
+    getSubmissions: '/tasks/:id/submissions',
+    gradeSubmission: '/tasks/:taskId/submissions/:submissionId/grade',
   },
   
   // SMTP Settings (Admin only)

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { cn } from '../../utils/cn';
@@ -26,24 +26,13 @@ import {
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
-  const [expandedMenus, setExpandedMenus] = useState(['management', 'academics', 'settings']); // Default expanded
+  const [expandedMenus, setExpandedMenus] = useState([]); // Start with all collapsed
 
-  // Get user roles
+  // Get user roles - prioritize user_roles table, use user_type only for backward compatibility
   const getUserRoles = () => {
     const roles = [];
     
-    // Check user_type (backward compatibility)
-    if (user?.user_type === 1 || user?.user_type_title?.toLowerCase() === 'admin') {
-      roles.push('admin');
-    }
-    if (user?.user_type === 2 || user?.user_type_title?.toLowerCase() === 'student') {
-      roles.push('student');
-    }
-    if (user?.user_type === 3 || user?.user_type_title?.toLowerCase() === 'teacher') {
-      roles.push('teacher');
-    }
-    
-    // Check roles array
+    // First, check roles array from user_roles table (primary method)
     if (user?.roles && Array.isArray(user.roles)) {
       user.roles.forEach(role => {
         const roleTitle = role.title?.toLowerCase();
@@ -53,8 +42,22 @@ const Sidebar = ({ isOpen, onClose }) => {
           roles.push('student');
         } else if (roleTitle === 'teacher' && !roles.includes('teacher')) {
           roles.push('teacher');
+        } else if (roleTitle === 'class representative (cr)' && !roles.includes('cr')) {
+          roles.push('cr');
         }
       });
+    }
+    
+    // Fallback to user_type only if roles array is empty (backward compatibility)
+    // Note: Do NOT use user_type for teacher/CR role - only use user_roles table
+    if (roles.length === 0 && user?.user_type) {
+      if (user.user_type === 1 || user?.user_type_title?.toLowerCase() === 'admin') {
+        roles.push('admin');
+      }
+      if (user.user_type === 2 || user?.user_type_title?.toLowerCase() === 'student') {
+        roles.push('student');
+      }
+      // Explicitly NOT checking user_type === 3 for teacher/CR - only use user_roles table
     }
     
     return roles;
@@ -63,7 +66,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const userRoles = getUserRoles();
   const hasAdminRole = userRoles.includes('admin');
   const hasStudentRole = userRoles.includes('student');
-  const hasTeacherRole = userRoles.includes('teacher');
+  const hasTeacherRole = userRoles.includes('teacher') || userRoles.includes('cr');
   
   // Check if user is blocked
   const isBlocked = Number(user?.block) === 1;
@@ -182,6 +185,27 @@ const Sidebar = ({ isOpen, onClose }) => {
     },
   ];
 
+  // Teacher menu items (no User Management, but has Batch Management)
+  const teacherMenuItems = [
+    {
+      title: 'Dashboard',
+      icon: LayoutDashboard,
+      path: '/dashboard',
+    },
+    {
+      title: 'Academics',
+      icon: GraduationCap,
+      key: 'academics',
+      submenu: [
+        {
+          title: 'Batch Management',
+          icon: Layers,
+          path: '/dashboard/batches',
+        },
+      ],
+    },
+  ];
+
   // Build menu items grouped by role
   const buildMenuItems = () => {
     const menuGroups = [];
@@ -194,6 +218,20 @@ const Sidebar = ({ isOpen, onClose }) => {
       });
     }
     
+    // Add Teacher/CR menu items if user has teacher or CR role (but not admin)
+    // Teachers/CRs can have multiple roles, so only show teacher menu if they're not admin
+    if (hasTeacherRole && !hasAdminRole) {
+      // Determine role label
+      const roleLabel = userRoles.includes('cr') && !userRoles.includes('teacher') 
+        ? 'Class Representative' 
+        : 'Teacher';
+      
+      menuGroups.push({
+        role: roleLabel,
+        items: teacherMenuItems,
+      });
+    }
+    
     // Add Student menu items if user has student role
     if (hasStudentRole) {
       menuGroups.push({
@@ -201,9 +239,6 @@ const Sidebar = ({ isOpen, onClose }) => {
         items: studentMenuItems,
       });
     }
-    
-    // Add Teacher menu items if user has teacher role (if needed in future)
-    // For now, teachers might use admin or student menus based on their permissions
     
     // If no roles found, default to admin (backward compatibility)
     if (menuGroups.length === 0) {
@@ -215,6 +250,27 @@ const Sidebar = ({ isOpen, onClose }) => {
     
     return menuGroups;
   };
+
+  // Auto-expand parent menu only if current path matches a child
+  useEffect(() => {
+    const menuGroups = buildMenuItems();
+    const activeMenuKeys = [];
+
+    menuGroups.forEach((group) => {
+      group.items.forEach((item) => {
+        if (item.submenu && item.key) {
+          const hasActiveChild = item.submenu.some(
+            (subItem) => location.pathname === subItem.path
+          );
+          if (hasActiveChild) {
+            activeMenuKeys.push(item.key);
+          }
+        }
+      });
+    });
+
+    setExpandedMenus(activeMenuKeys);
+  }, [location.pathname, hasAdminRole, hasStudentRole, hasTeacherRole]);
 
   const menuGroups = buildMenuItems();
   

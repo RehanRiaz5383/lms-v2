@@ -262,3 +262,109 @@ Route::match(['get', 'post'], '/process-queue', function (Request $request) {
         ], 500);
     }
 })->name('process-queue');
+
+/**
+ * Database Upgrade Endpoint - Run migrations and seeders
+ * 
+ * This endpoint runs all pending migrations and seeders (if not already in DB).
+ * No high-end security, just a simple GET URL.
+ * 
+ * Usage: GET /upgrade-db
+ * 
+ * IMPORTANT: This is a simple endpoint without authentication.
+ * Consider adding basic security in production if needed.
+ */
+Route::get('/upgrade-db', function () {
+    try {
+        $results = [
+            'migrations' => null,
+            'seeders' => null,
+            'timestamp' => now()->toDateTimeString(),
+        ];
+
+        // Run migrations
+        try {
+            \Artisan::call('migrate', [
+                '--force' => true,
+            ]);
+            $results['migrations'] = [
+                'success' => true,
+                'output' => \Artisan::output(),
+            ];
+        } catch (\Exception $e) {
+            $results['migrations'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        // Run seeders (only if CR role doesn't exist)
+        try {
+            $crRoleExists = \DB::table('user_types')
+                ->where('title', 'Class Representative (CR)')
+                ->exists();
+            
+            if (!$crRoleExists) {
+                // Run UserTypeSeeder to add CR role
+                \Artisan::call('db:seed', [
+                    '--class' => 'UserTypeSeeder',
+                    '--force' => true,
+                ]);
+                $seederOutput = \Artisan::output();
+                
+                $results['seeders'] = [
+                    'success' => true,
+                    'message' => 'UserTypeSeeder ran successfully - CR role added',
+                    'output' => $seederOutput,
+                ];
+            } else {
+                // Check if all required roles exist
+                $allRolesExist = \DB::table('user_types')
+                    ->whereIn('title', ['Admin', 'Student', 'Teacher', 'Class Representative (CR)'])
+                    ->count() >= 4;
+                
+                if (!$allRolesExist) {
+                    // Run UserTypeSeeder to ensure all roles exist
+                    \Artisan::call('db:seed', [
+                        '--class' => 'UserTypeSeeder',
+                        '--force' => true,
+                    ]);
+                    $seederOutput = \Artisan::output();
+                    
+                    $results['seeders'] = [
+                        'success' => true,
+                        'message' => 'UserTypeSeeder ran successfully - missing roles added',
+                        'output' => $seederOutput,
+                    ];
+                } else {
+                    $results['seeders'] = [
+                        'success' => true,
+                        'message' => 'Seeders skipped - all roles already exist in database',
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            $results['seeders'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Database upgrade completed',
+            'results' => $results,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Database upgrade failed: ' . $e->getMessage(),
+            'error' => config('app.debug') ? [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ] : 'Upgrade error occurred'
+        ], 500);
+    }
+})->name('upgrade-db');

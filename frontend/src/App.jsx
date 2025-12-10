@@ -16,6 +16,7 @@ import SmtpSettings from './pages/SmtpSettings';
 import NotificationSettings from './pages/NotificationSettings';
 import Profile from './pages/Profile';
 import StudentLectureVideos from './pages/StudentLectureVideos';
+import StudentTasks from './pages/StudentTasks';
 import BatchExplore from './pages/BatchExplore';
 import DashboardLayout from './components/layout/DashboardLayout';
 
@@ -92,7 +93,7 @@ function App() {
             } />
             <Route path="tasks" element={
               <BlockedRoute>
-                <div className="p-6"><h1 className="text-2xl font-bold">Task Assigned</h1><p className="text-muted-foreground mt-2">Coming soon...</p></div>
+                <StudentTasks />
               </BlockedRoute>
             } />
             <Route path="quizzes" element={

@@ -6,6 +6,7 @@ use App\Models\Batch;
 use App\Models\Subject;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class BatchController extends ApiController
@@ -18,7 +19,29 @@ class BatchController extends ApiController
      */
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
         $query = Batch::with('subjects');
+
+        // If user is a teacher or CR (has teacher/CR role), only show batches assigned to them
+        if ($user) {
+            $user->load('roles');
+            $hasTeacherRole = $user->roles->contains(function ($role) {
+                $title = strtolower($role->title);
+                return $title === 'teacher' || $title === 'class representative (cr)';
+            });
+            
+            // If user has teacher/CR role but NOT admin role, filter batches
+            $hasAdminRole = $user->roles->contains(function ($role) {
+                return strtolower($role->title) === 'admin';
+            }) || $user->user_type == 1;
+            
+            if ($hasTeacherRole && !$hasAdminRole) {
+                // Only show batches assigned to this teacher/CR
+                $query->whereHas('users', function ($q) use ($user) {
+                    $q->where('users.id', $user->id);
+                });
+            }
+        }
 
         // Search filter
         if ($request->has('search') && !empty($request->get('search'))) {
@@ -199,6 +222,78 @@ class BatchController extends ApiController
             'subjects' => $subjects,
             'assigned_ids' => $assignedSubjectIds,
         ], 'Subjects retrieved successfully');
+    }
+
+    /**
+     * Get students assigned to a batch.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function getStudents(Request $request, int $id): JsonResponse
+    {
+        $batch = Batch::find($id);
+
+        if (!$batch) {
+            return $this->notFound('Batch not found');
+        }
+
+        // Get user IDs assigned to this batch
+        $batchUserIds = DB::table('user_batches')
+            ->where('batch_id', $id)
+            ->pluck('user_id')
+            ->toArray();
+
+        if (empty($batchUserIds)) {
+            return $this->success([
+                'data' => [],
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => 15,
+                'total' => 0,
+            ], 'Students retrieved successfully');
+        }
+
+        // Get students assigned to this batch (users with student role)
+        $query = \App\Models\User::whereIn('id', $batchUserIds)
+            ->where(function ($q) {
+                $q->whereHas('roles', function ($roleQuery) {
+                    $roleQuery->where('user_types.title', 'Student');
+                })->orWhere(function ($q2) {
+                    $q2->where('user_type', 2) // Backward compatibility
+                       ->whereDoesntHave('roles'); // Only use user_type if no roles exist
+                });
+            })
+            ->with(['userType', 'roles']);
+
+        // Search filter
+        if ($request->has('search') && !empty($request->get('search'))) {
+            $search = $request->get('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
+
+        // Block status filter
+        if ($request->has('block') && $request->get('block') !== '' && $request->get('block') !== null) {
+            $query->where('block', $request->get('block'));
+        }
+
+        // Pagination
+        $perPage = $request->get('per_page', 15);
+        $students = $query->paginate($perPage);
+
+        // Transform students to include picture_url
+        $students->getCollection()->transform(function ($student) {
+            $student->picture_url = $student->picture_url;
+            return $student;
+        });
+
+        return $this->success($students, 'Students retrieved successfully');
     }
 }
 
