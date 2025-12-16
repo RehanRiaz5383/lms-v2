@@ -50,7 +50,7 @@ class StudentDashboardController extends ApiController
                 
                 $totalTasks = $tasksQuery->count();
 
-                // Get submitted task IDs
+                // Get submitted task IDs - use the same logic as StudentTaskController
                 $submittedTaskIds = [];
                 if (DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
                     $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'student_id');
@@ -72,33 +72,61 @@ class StudentDashboardController extends ApiController
                 // Calculate pending tasks (all tasks minus submitted)
                 $pendingTasks = max(0, $totalTasks - $submittedTasks);
 
-                // Get nearest task due date (earliest expiry_date for tasks that can still be submitted)
+                // Get nearest task due date (earliest expiry_date for pending tasks that can still be submitted)
                 $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
                 if ($hasExpiryDateColumn) {
                     $nearestTaskQuery = DB::table('tasks');
                     
                     if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                         if (!empty($userBatchIds)) {
-                            $nearestTaskQuery->whereIn('batch_id', $userBatchIds)
-                                            ->orWhereNull('batch_id');
+                            // Only get tasks from student's assigned batches
+                            $nearestTaskQuery->whereIn('batch_id', $userBatchIds);
                         } else {
-                            $nearestTaskQuery->whereNull('batch_id');
+                            // If no batches assigned, don't show any tasks
+                            $nearestTaskQuery->whereRaw('1 = 0'); // Force no results
                         }
                     } else if (DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
                         $nearestTaskQuery->where('user_id', $userId);
                     }
 
-                    // Filter by expiry_date >= today (Asia/Karachi timezone) - tasks that can still be submitted
-                    $today = now()->setTimezone('Asia/Karachi')->startOfDay()->format('Y-m-d');
-                    $nearestTaskQuery->where('expiry_date', '>=', $today);
+                    // Exclude tasks that have already been submitted
+                    if (!empty($submittedTaskIds)) {
+                        $nearestTaskQuery->whereNotIn('id', $submittedTaskIds);
+                    }
                     
-                    // Get nearest task due date (earliest expiry_date)
+                    // Get current date/time in Asia/Karachi timezone for comparison
+                    $now = now()->setTimezone('Asia/Karachi');
+                    $todayStart = $now->copy()->startOfDay();
+                    
+                    // Filter by expiry_date >= today (tasks that can still be submitted)
+                    // Compare dates properly - expiry_date should be >= today (end of day)
+                    $nearestTaskQuery->where(function($q) use ($todayStart) {
+                        // Get expiry_date and compare with today's date
+                        // If expiry_date is a date-only field, compare dates
+                        // If expiry_date is datetime, compare with end of today
+                        $q->whereRaw("DATE(expiry_date) >= ?", [$todayStart->format('Y-m-d')]);
+                    });
+                    
+                    // Get nearest task due date (earliest expiry_date) for most recent pending task
                     $nearestTask = $nearestTaskQuery
                         ->orderBy('expiry_date', 'asc')
                         ->first();
                     
                     if ($nearestTask && isset($nearestTask->expiry_date)) {
-                        $nearestTaskDueDate = $nearestTask->expiry_date;
+                        // Verify the date is actually in the future (end of day)
+                        try {
+                            $expiryDate = \Carbon\Carbon::parse($nearestTask->expiry_date)->setTimezone('Asia/Karachi');
+                            // Set to end of day for the expiry date
+                            $expiryDateEndOfDay = $expiryDate->copy()->endOfDay();
+                            
+                            // Only use if the expiry date (end of day) is in the future
+                            if ($expiryDateEndOfDay->isFuture()) {
+                                $nearestTaskDueDate = $nearestTask->expiry_date;
+                            }
+                        } catch (\Exception $e) {
+                            // Invalid date format, skip
+                            \Log::warning('Invalid expiry_date format in dashboard: ' . $nearestTask->expiry_date);
+                        }
                     }
                 }
                 $taskCompletionRate = $totalTasks > 0 ? round(($submittedTasks / $totalTasks) * 100, 1) : 0;

@@ -35,32 +35,57 @@ import { useToast } from '../components/ui/toast';
 // Countdown timer component for nearest task
 const TaskCountdownTimer = ({ dueDate }) => {
   const [timeLeft, setTimeLeft] = useState(null);
+  const [isExpired, setIsExpired] = useState(false);
 
   useEffect(() => {
     if (!dueDate) {
       setTimeLeft(null);
+      setIsExpired(false);
       return;
     }
 
     const updateTimer = () => {
-      const now = new Date();
-      // Parse due date and set to end of day (23:59:59) in Asia/Karachi timezone
-      const due = new Date(dueDate);
-      due.setHours(23, 59, 59, 999);
-      
-      const diff = due - now;
+      try {
+        const now = new Date();
+        // Parse due date - handle both date-only and datetime formats
+        let due = new Date(dueDate);
+        
+        // If the date is invalid, return
+        if (isNaN(due.getTime())) {
+          console.warn('Invalid date received:', dueDate);
+          setTimeLeft(null);
+          setIsExpired(false);
+          return;
+        }
 
-      if (diff <= 0) {
+        // Check if it's a date-only format (YYYY-MM-DD) and set to end of day
+        const dateStr = String(dueDate);
+        // If the string is just a date (10 chars: YYYY-MM-DD) or doesn't have time info
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || (!dateStr.includes('T') && !dateStr.includes(' ') && dateStr.length <= 10)) {
+          // It's a date-only format, set to end of day (23:59:59)
+          due.setHours(23, 59, 59, 999);
+        }
+        
+        const diff = due - now;
+
+        if (diff <= 0) {
+          setTimeLeft(null);
+          setIsExpired(true);
+          return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        setTimeLeft({ days, hours, minutes, seconds });
+        setIsExpired(false);
+      } catch (error) {
+        console.error('Error calculating countdown:', error, 'dueDate:', dueDate);
         setTimeLeft(null);
-        return;
+        setIsExpired(false);
       }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setTimeLeft({ days, hours, minutes, seconds });
     };
 
     updateTimer();
@@ -69,24 +94,36 @@ const TaskCountdownTimer = ({ dueDate }) => {
     return () => clearInterval(interval);
   }, [dueDate]);
 
-  if (!timeLeft) return null;
+  if (isExpired) {
+    return (
+      <div className="text-xs text-red-500 font-medium">
+        Expired
+      </div>
+    );
+  }
+
+  if (!timeLeft) {
+    return (
+      <div className="text-xs text-muted-foreground">
+        Calculating...
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-1 text-xs mb-2">
-      <Clock className="h-3 w-3 text-muted-foreground" />
-      <span className="text-muted-foreground">Next due:</span>
+    <div className="flex items-center gap-1.5 text-xs">
       {timeLeft.days > 0 && (
-        <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 rounded font-medium">
+        <span className="px-2 py-1 bg-blue-500/10 text-blue-600 rounded font-semibold">
           {timeLeft.days}d
         </span>
       )}
-      <span className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 rounded font-medium">
+      <span className="px-2 py-1 bg-orange-500/10 text-orange-600 rounded font-semibold">
         {String(timeLeft.hours).padStart(2, '0')}h
       </span>
-      <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-600 rounded font-medium">
+      <span className="px-2 py-1 bg-yellow-500/10 text-yellow-600 rounded font-semibold">
         {String(timeLeft.minutes).padStart(2, '0')}m
       </span>
-      <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 rounded font-medium">
+      <span className="px-2 py-1 bg-green-500/10 text-green-600 rounded font-semibold">
         {String(timeLeft.seconds).padStart(2, '0')}s
       </span>
     </div>
@@ -215,14 +252,24 @@ const Dashboard = () => {
               </div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted-foreground">
-                  {stats.tasks?.submitted || 0} submitted
+                  {stats.tasks?.pending || 0} pending
                 </p>
                 <div className={`text-xs font-medium ${getStatusColor(stats.tasks?.completion_rate || 0)}`}>
                   {stats.tasks?.completion_rate || 0}%
                 </div>
               </div>
               {stats.tasks?.nearest_due_date && (
-                <TaskCountdownTimer dueDate={stats.tasks.nearest_due_date} />
+                <div className="mb-2 p-2 bg-muted/50 rounded-md border border-border/50">
+                  <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Most Recent Pending Task:
+                  </p>
+                  <TaskCountdownTimer dueDate={stats.tasks.nearest_due_date} />
+                  {/* Debug: Show the date value to help diagnose */}
+                  <p className="text-xs text-muted-foreground mt-1 opacity-50">
+                    Due: {new Date(stats.tasks.nearest_due_date).toLocaleString()}
+                  </p>
+                </div>
               )}
               <div className="mt-2 w-full bg-muted rounded-full h-2">
                 <div
