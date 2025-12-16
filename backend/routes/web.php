@@ -3,11 +3,16 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Http\Request;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Scheduled Jobs Endpoint (for cron) - No authentication required for cron calls
+// You can add IP whitelist or token authentication if needed
+Route::get('/cron/execute-jobs', [\App\Http\Controllers\ScheduledJobController::class, 'execute']);
 
 /**
  * Test endpoint to debug storage route and server configuration
@@ -316,51 +321,66 @@ Route::get('/upgrade-db', function () {
             ];
         }
 
-        // Run seeders (only if CR role doesn't exist)
+        // Run seeders
+        $seederResults = [];
         try {
+            // Run UserTypeSeeder if needed
             $crRoleExists = \DB::table('user_types')
                 ->where('title', 'Class Representative (CR)')
                 ->exists();
             
             if (!$crRoleExists) {
-                // Run UserTypeSeeder to add CR role
                 \Artisan::call('db:seed', [
                     '--class' => 'UserTypeSeeder',
                     '--force' => true,
                 ]);
-                $seederOutput = \Artisan::output();
-                
-                $results['seeders'] = [
+                $seederResults[] = [
+                    'seeder' => 'UserTypeSeeder',
                     'success' => true,
-                    'message' => 'UserTypeSeeder ran successfully - CR role added',
-                    'output' => $seederOutput,
+                    'message' => 'CR role added',
                 ];
             } else {
-                // Check if all required roles exist
                 $allRolesExist = \DB::table('user_types')
                     ->whereIn('title', ['Admin', 'Student', 'Teacher', 'Class Representative (CR)'])
                     ->count() >= 4;
                 
                 if (!$allRolesExist) {
-                    // Run UserTypeSeeder to ensure all roles exist
                     \Artisan::call('db:seed', [
                         '--class' => 'UserTypeSeeder',
                         '--force' => true,
                     ]);
-                    $seederOutput = \Artisan::output();
-                    
-                    $results['seeders'] = [
+                    $seederResults[] = [
+                        'seeder' => 'UserTypeSeeder',
                         'success' => true,
-                        'message' => 'UserTypeSeeder ran successfully - missing roles added',
-                        'output' => $seederOutput,
-                    ];
-                } else {
-                    $results['seeders'] = [
-                        'success' => true,
-                        'message' => 'Seeders skipped - all roles already exist in database',
+                        'message' => 'Missing roles added',
                     ];
                 }
             }
+
+            // Run ScheduledJobSeeder if scheduled_jobs table exists
+            if (\Schema::hasTable('scheduled_jobs')) {
+                $taskReminderJobExists = \DB::table('scheduled_jobs')
+                    ->where('job_class', 'TaskReminderJob')
+                    ->exists();
+                
+                if (!$taskReminderJobExists) {
+                    \Artisan::call('db:seed', [
+                        '--class' => 'ScheduledJobSeeder',
+                        '--force' => true,
+                    ]);
+                    $seederResults[] = [
+                        'seeder' => 'ScheduledJobSeeder',
+                        'success' => true,
+                        'message' => 'Task Reminder job added',
+                    ];
+                }
+            }
+            
+            $results['seeders'] = [
+                'success' => true,
+                'message' => count($seederResults) > 0 ? 'Seeders executed' : 'All seeders up to date',
+                'details' => $seederResults,
+            ];
         } catch (\Exception $e) {
             $results['seeders'] = [
                 'success' => false,

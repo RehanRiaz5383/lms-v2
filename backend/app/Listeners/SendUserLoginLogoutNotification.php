@@ -4,9 +4,11 @@ namespace App\Listeners;
 
 use App\Events\StudentLogin;
 use App\Events\StudentLogout;
-use App\Jobs\SendNotificationEmail;
+use App\Mail\UserLoginMail;
+use App\Mail\UserLogoutMail;
 use App\Models\NotificationSetting;
-use App\Models\SmtpSetting;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class SendUserLoginLogoutNotification
 {
@@ -31,37 +33,43 @@ class SendUserLoginLogoutNotification
      */
     private function sendNotification($user, $action): void
     {
-        // Check if notification is enabled
-        $settings = NotificationSetting::first();
-        if (!$settings || !$settings->user_login_logout) {
-            return;
-        }
+        try {
+            // Check if notification is enabled
+            $settings = NotificationSetting::first();
+            if (!$settings || !$settings->user_login_logout) {
+                Log::info("Login/logout email notification is disabled for user {$user->id}");
+                return;
+            }
 
-        // Get active SMTP settings
-        $smtpSettings = SmtpSetting::where('is_active', true)->first();
-        if (!$smtpSettings) {
-            \Log::warning('Cannot send user login/logout notification: No active SMTP settings');
-            return;
-        }
+            // Format date
+            $dateTime = now()->setTimezone('Asia/Karachi')->format('M d, Y h:i A');
+            
+            // Get IP address if available (for login)
+            $ipAddress = null;
+            if ($action === 'login' && request()) {
+                $ipAddress = request()->ip();
+            }
 
-        // Send notification to the user who logged in/out
-        $actionText = ucfirst($action);
-        $subject = "Account {$actionText} Notification";
-        
-        $message = "Hello {$user->name},\n\n";
-        $message .= "Your account has been successfully {$action}ed.\n\n";
-        $message .= "Account Details:\n";
-        $message .= "Name: {$user->name}\n";
-        $message .= "Email: {$user->email}\n";
-        $message .= "{$actionText} Date: " . now()->format('Y-m-d H:i:s') . "\n";
-        
-        if ($action === 'login') {
-            $message .= "\nIf you did not perform this login, please secure your account immediately.\n";
-        } else {
-            $message .= "\nThank you for using our system.\n";
+            // Send email using the new template system
+            if ($action === 'login') {
+                Mail::to($user->email)->queue(
+                    new UserLoginMail($user->name, $user->email, $dateTime, $ipAddress)
+                );
+                Log::info("Login email queued for user {$user->id} ({$user->email})");
+            } else {
+                Mail::to($user->email)->queue(
+                    new UserLogoutMail($user->name, $user->email, $dateTime)
+                );
+                Log::info("Logout email queued for user {$user->id} ({$user->email})");
+            }
+        } catch (\Exception $e) {
+            Log::error("Failed to send {$action} email to user {$user->id}: " . $e->getMessage(), [
+                'exception' => $e,
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+            ]);
+            // Don't throw - we don't want to break login/logout flow
         }
-
-        SendNotificationEmail::dispatch($user->email, $subject, $message, $smtpSettings);
     }
 }
 

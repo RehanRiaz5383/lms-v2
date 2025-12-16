@@ -15,6 +15,7 @@ use App\Http\Controllers\TaskController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VideoController;
 use App\Http\Controllers\StudentPerformanceController;
+use App\Http\Controllers\ScheduledJobController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -79,6 +80,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Performance Report - accessible by students (own report) and admins (any report)
     Route::get('/users/{id}/performance-report', [StudentPerformanceController::class, 'show']);
+
+    // Scheduled Jobs Management (Admin only)
+    Route::middleware('admin')->prefix('scheduled-jobs')->group(function () {
+        Route::get('/', [ScheduledJobController::class, 'index']);
+        Route::post('/', [ScheduledJobController::class, 'store']);
+        Route::put('/{id}', [ScheduledJobController::class, 'update']);
+        Route::delete('/{id}', [ScheduledJobController::class, 'destroy']);
+    });
 
     // Student update routes (for CR/Teacher - limited access)
     Route::prefix('users')->group(function () {

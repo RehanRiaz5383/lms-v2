@@ -99,6 +99,14 @@ export const API_ENDPOINTS = {
     markAsRead: '/notifications/:id/read',
     markAllAsRead: '/notifications/mark-all-read',
   },
+
+  // Scheduled Jobs (Admin only)
+  scheduledJobs: {
+    list: '/scheduled-jobs',
+    create: '/scheduled-jobs',
+    update: '/scheduled-jobs/:id',
+    delete: '/scheduled-jobs/:id',
+  },
   
   // User Management (Admin only)
   users: {

@@ -20,6 +20,7 @@ import StudentTasks from './pages/StudentTasks';
 import BatchExplore from './pages/BatchExplore';
 import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
+import ScheduledJobs from './pages/ScheduledJobs';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 function App() {
@@ -80,6 +81,11 @@ function App() {
             <Route path="settings/notifications" element={
               <BlockedRoute>
                 <NotificationSettings />
+              </BlockedRoute>
+            } />
+            <Route path="scheduled-jobs" element={
+              <BlockedRoute>
+                <ScheduledJobs />
               </BlockedRoute>
             } />
             <Route path="profile" element={

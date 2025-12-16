@@ -23,6 +23,7 @@ import {
   ClipboardList,
   HelpCircle,
   Wallet,
+  Clock,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -183,6 +184,11 @@ const Sidebar = ({ isOpen, onClose }) => {
           title: 'Notifications',
           icon: Bell,
           path: '/dashboard/settings/notifications',
+        },
+        {
+          title: 'Scheduled Jobs',
+          icon: Clock,
+          path: '/dashboard/scheduled-jobs',
         },
       ],
     },
