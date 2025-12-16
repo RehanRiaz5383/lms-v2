@@ -274,6 +274,24 @@ Route::match(['get', 'post'], '/process-queue', function (Request $request) {
  * IMPORTANT: This is a simple endpoint without authentication.
  * Consider adding basic security in production if needed.
  */
+Route::get('/check-notifications-table', function () {
+    try {
+        $columns = DB::select('DESCRIBE notifications');
+        $sample = DB::table('notifications')->first();
+        return response()->json([
+            'columns' => $columns,
+            'sample' => $sample,
+            'has_user_id' => DB::getSchemaBuilder()->hasColumn('notifications', 'user_id'),
+            'has_notifiable_id' => DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id'),
+            'has_type' => DB::getSchemaBuilder()->hasColumn('notifications', 'type'),
+            'has_title' => DB::getSchemaBuilder()->hasColumn('notifications', 'title'),
+            'has_message' => DB::getSchemaBuilder()->hasColumn('notifications', 'message'),
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
 Route::get('/upgrade-db', function () {
     try {
         $results = [
@@ -345,6 +363,21 @@ Route::get('/upgrade-db', function () {
             }
         } catch (\Exception $e) {
             $results['seeders'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+
+        // Clear application cache
+        try {
+            \Artisan::call('optimize:clear');
+            $results['cache_clear'] = [
+                'success' => true,
+                'message' => 'Application cache cleared successfully',
+                'output' => \Artisan::output(),
+            ];
+        } catch (\Exception $e) {
+            $results['cache_clear'] = [
                 'success' => false,
                 'error' => $e->getMessage(),
             ];

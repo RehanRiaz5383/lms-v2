@@ -32,6 +32,67 @@ import { API_ENDPOINTS } from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/toast';
 
+// Countdown timer component for nearest task
+const TaskCountdownTimer = ({ dueDate }) => {
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    if (!dueDate) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      // Parse due date and set to end of day (23:59:59) in Asia/Karachi timezone
+      const due = new Date(dueDate);
+      due.setHours(23, 59, 59, 999);
+      
+      const diff = due - now;
+
+      if (diff <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeLeft({ days, hours, minutes, seconds });
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [dueDate]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <div className="flex items-center gap-1 text-xs mb-2">
+      <Clock className="h-3 w-3 text-muted-foreground" />
+      <span className="text-muted-foreground">Next due:</span>
+      {timeLeft.days > 0 && (
+        <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 rounded font-medium">
+          {timeLeft.days}d
+        </span>
+      )}
+      <span className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 rounded font-medium">
+        {String(timeLeft.hours).padStart(2, '0')}h
+      </span>
+      <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-600 rounded font-medium">
+        {String(timeLeft.minutes).padStart(2, '0')}m
+      </span>
+      <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 rounded font-medium">
+        {String(timeLeft.seconds).padStart(2, '0')}s
+      </span>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user } = useAppSelector((state) => state.auth);
   const navigate = useNavigate();
@@ -152,14 +213,17 @@ const Dashboard = () => {
               <div className="text-2xl font-bold text-foreground mb-1">
                 {stats.tasks?.submitted || 0} / {stats.tasks?.total || 0}
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted-foreground">
-                  {stats.tasks?.pending || 0} pending
+                  {stats.tasks?.submitted || 0} submitted
                 </p>
                 <div className={`text-xs font-medium ${getStatusColor(stats.tasks?.completion_rate || 0)}`}>
                   {stats.tasks?.completion_rate || 0}%
                 </div>
               </div>
+              {stats.tasks?.nearest_due_date && (
+                <TaskCountdownTimer dueDate={stats.tasks.nearest_due_date} />
+              )}
               <div className="mt-2 w-full bg-muted rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all ${

@@ -10,7 +10,7 @@
  * Set to 'development' for local development or 'production' for live server
  * Options: 'development' | 'production'
  */
-const APP_MODE = 'development'; // Change to 'production' when deploying
+const APP_MODE = 'production'; // Change to 'production' when deploying 
 
 /**
  * Get the API base URL based on application mode
@@ -77,6 +77,7 @@ export const API_ENDPOINTS = {
     },
     tasks: {
       list: '/student/tasks',
+      pendingCount: '/student/tasks/pending-count',
       show: '/student/tasks/:id',
       submit: '/student/tasks/:id/submit',
       submissions: '/student/tasks/submissions',
@@ -89,10 +90,20 @@ export const API_ENDPOINTS = {
     update: '/profile',
     changePassword: '/profile/change-password',
   },
+
+  // Notifications
+  notifications: {
+    list: '/notifications',
+    show: '/notifications/:id',
+    unreadCount: '/notifications/unread-count',
+    markAsRead: '/notifications/:id/read',
+    markAllAsRead: '/notifications/mark-all-read',
+  },
   
   // User Management (Admin only)
   users: {
     list: '/users',
+    performanceReport: '/users/:id/performance-report',
     show: '/users/:id',
     create: '/users',
     update: '/users/:id',

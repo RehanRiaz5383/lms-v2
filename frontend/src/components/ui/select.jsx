@@ -88,14 +88,20 @@ const Select = ({
   // Filter options - use useMemo to prevent unnecessary recalculations
   const filteredOptions = React.useMemo(() => {
     if (onSearch) {
-      // When using API search, always show selected items and items matching search
+      // When using API search, show all options when search term is empty
+      // Otherwise show selected items and items matching search
+      if (!searchTerm) {
+        // When search is empty, show all options
+        return options;
+      }
+      // When search has a term, show selected items OR items matching search
       return options.filter((option) => {
         const isSelected = value.some(val => {
           const optId = typeof option.id === 'number' ? option.id : Number(option.id);
           const valId = typeof val === 'number' ? val : Number(val);
           return optId === valId;
         });
-        const matchesSearch = !searchTerm || option.title?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = option.title?.toLowerCase().includes(searchTerm.toLowerCase());
         return isSelected || matchesSearch;
       });
     } else {

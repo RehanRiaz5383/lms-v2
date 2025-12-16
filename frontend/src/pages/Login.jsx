@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import { login, clearError } from '../store/slices/authSlice';
@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2, Quote } from 'lucide-react';
+import quotes from '../data/quotes.json';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -19,6 +20,13 @@ const Login = () => {
   });
 
   const [formErrors, setFormErrors] = useState({});
+  const [randomQuote, setRandomQuote] = useState('');
+
+  // Set a random quote when component mounts
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * quotes.length);
+    setRandomQuote(quotes[randomIndex]);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -71,11 +79,11 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
-            Welcome back
+            Sign In to Continue Learning ...
           </CardTitle>
           <CardDescription className="text-center">
             Please sign in to access your dashboard
@@ -152,6 +160,18 @@ const Login = () => {
           </form>
         </CardContent>
       </Card>
+
+      {/* Random Quote Display */}
+      {randomQuote && (
+        <div className="mt-8 w-full max-w-md">
+          <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border/50">
+            <Quote className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+            <p className="text-sm text-muted-foreground italic leading-relaxed">
+              {randomQuote}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

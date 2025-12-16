@@ -154,7 +154,8 @@ const BatchManagement = () => {
     setSelectedSubjects(assignedIds);
     setAvailableSubjects([]);
     setShowAssignDialog(true);
-    await loadAvailableSubjects(batch.id);
+    // Load all subjects (empty search to get all)
+    await loadAvailableSubjects(batch.id, '');
   };
 
   const loadAvailableSubjects = async (batchId, search = '') => {

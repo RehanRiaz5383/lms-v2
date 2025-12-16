@@ -12,8 +12,7 @@ class SubmittedTask extends Model
     protected $fillable = [
         'task_id',
         'student_id',
-        'file_path',
-        'remarks',
+        'answer_file', // Use answer_file instead of file_path
     ];
 
     protected $casts = [

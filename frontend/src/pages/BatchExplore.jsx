@@ -92,8 +92,8 @@ const BatchExplore = () => {
   const [taskFile, setTaskFile] = useState(null);
   const taskFileInputRef = useRef(null);
   const [gradeFormData, setGradeFormData] = useState({
-    marks: '',
-    teacher_remarks: '',
+    obtained_marks: '',
+    instructor_comments: '',
   });
 
   useEffect(() => {
@@ -304,8 +304,8 @@ const BatchExplore = () => {
   const handleGradeSubmission = (submission) => {
     setSelectedSubmission(submission);
     setGradeFormData({
-      marks: submission.marks || '',
-      teacher_remarks: submission.teacher_remarks || '',
+      obtained_marks: submission.obtained_marks ?? submission.marks ?? '',
+      instructor_comments: submission.instructor_comments ?? submission.teacher_remarks ?? '',
     });
     setShowGradeDialog(true);
   };
@@ -1054,6 +1054,30 @@ const BatchExplore = () => {
                             <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
                               {task.description}
                             </p>
+                          )}
+                          {/* Task Attachment Files */}
+                          {task.attachment_files && task.attachment_files.length > 0 && (
+                            <div className="mb-2">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Attachments:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {task.attachment_files.map((file, idx) => (
+                                  <Button
+                                    key={idx}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 text-xs px-2"
+                                    onClick={() => {
+                                      if (file.file_url) {
+                                        window.open(file.file_url, '_blank');
+                                      }
+                                    }}
+                                  >
+                                    <Download className="h-3 w-3 mr-1" />
+                                    {file.name || file.file_path?.split('/').pop() || `File ${idx + 1}`}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
                           )}
                           <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
@@ -1872,6 +1896,34 @@ const BatchExplore = () => {
               </p>
             )}
           </div>
+          {/* Task Attachment Files from files table */}
+          {editingTask && editingTask.attachment_files && editingTask.attachment_files.length > 0 && (
+            <div>
+              <Label>Task Attachments</Label>
+              <div className="space-y-2 mt-2">
+                {editingTask.attachment_files.map((file, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 border rounded">
+                    <span className="text-sm text-muted-foreground">
+                      {file.name || file.file_path?.split('/').pop() || `Attachment ${idx + 1}`}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        if (file.file_url) {
+                          window.open(file.file_url, '_blank');
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <Label htmlFor="edit_task_user_id">Assign to Specific Student (Optional)</Label>
             <select
@@ -2039,8 +2091,8 @@ const BatchExplore = () => {
           setShowGradeDialog(false);
           setSelectedSubmission(null);
           setGradeFormData({
-            marks: '',
-            teacher_remarks: '',
+            obtained_marks: '',
+            instructor_comments: '',
           });
         }}
         title="Grade Submission"
@@ -2056,25 +2108,24 @@ const BatchExplore = () => {
               </p>
             </div>
             <div>
-              <Label htmlFor="marks">Marks (0-100)</Label>
+              <Label htmlFor="obtained_marks">Marks</Label>
               <Input
-                id="marks"
+                id="obtained_marks"
                 type="number"
                 min="0"
-                max="100"
-                value={gradeFormData.marks}
-                onChange={(e) => setGradeFormData({ ...gradeFormData, marks: e.target.value })}
+                value={gradeFormData.obtained_marks}
+                onChange={(e) => setGradeFormData({ ...gradeFormData, obtained_marks: e.target.value })}
                 placeholder="Enter marks"
               />
             </div>
             <div>
-              <Label htmlFor="teacher_remarks">Teacher Remarks</Label>
+              <Label htmlFor="instructor_comments">Instructor Comments</Label>
               <textarea
-                id="teacher_remarks"
-                value={gradeFormData.teacher_remarks}
-                onChange={(e) => setGradeFormData({ ...gradeFormData, teacher_remarks: e.target.value })}
+                id="instructor_comments"
+                value={gradeFormData.instructor_comments}
+                onChange={(e) => setGradeFormData({ ...gradeFormData, instructor_comments: e.target.value })}
                 className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="Enter teacher remarks..."
+                placeholder="Enter instructor comments..."
                 maxLength={1000}
               />
             </div>
@@ -2090,8 +2141,8 @@ const BatchExplore = () => {
                   setShowGradeDialog(false);
                   setSelectedSubmission(null);
                   setGradeFormData({
-                    marks: '',
-                    teacher_remarks: '',
+                    obtained_marks: '',
+                    instructor_comments: '',
                   });
                 }}
               >

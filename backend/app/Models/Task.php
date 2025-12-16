@@ -114,5 +114,18 @@ class Task extends Model
     {
         return $this->hasOne(SubmittedTask::class)->where('student_id', $userId);
     }
+
+    /**
+     * Get files attached to this task (from files table if it exists).
+     */
+    public function files()
+    {
+        if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('files')) {
+            return \Illuminate\Support\Facades\DB::table('files')
+                ->where('task_id', $this->id)
+                ->get();
+        }
+        return collect([]);
+    }
 }
 

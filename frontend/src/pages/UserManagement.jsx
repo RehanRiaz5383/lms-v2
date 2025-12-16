@@ -25,6 +25,7 @@ import { Tooltip } from '../components/ui/tooltip';
 import { DateRangePicker } from '../components/ui/date-range-picker';
 import { Select } from '../components/ui/select';
 import { cn } from '../utils/cn';
+import StudentPerformanceReport from '../components/reports/StudentPerformanceReport';
 import {
   Plus,
   Search,
@@ -35,6 +36,7 @@ import {
   Loader2,
   Layers,
   UserCog,
+  FileText,
 } from 'lucide-react';
 import { debounce } from '../utils/debounce';
 
@@ -61,6 +63,8 @@ const UserManagement = () => {
   const rolesLoadedRef = useRef(false);
   const loadingRolesRef = useRef(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [showPerformanceReport, setShowPerformanceReport] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [formData, setFormData] = useState({
@@ -480,6 +484,11 @@ const UserManagement = () => {
     }
   };
 
+  const handleViewPerformanceReport = (user) => {
+    setSelectedStudent(user);
+    setShowPerformanceReport(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -638,6 +647,13 @@ const UserManagement = () => {
                           roleIds.includes(2) || 
                           roleIds.includes(3);
                         
+                        // Check if user is a student
+                        const isStudent = 
+                          userTypeId === 2 || 
+                          roleIds.includes(2) ||
+                          user.user_type_title?.toLowerCase() === 'student' ||
+                          userRoles.some(r => r.title?.toLowerCase() === 'student');
+                        
                         const isSelected = selectedUsers.includes(user.id);
                         return (
                         <tr key={user.id} className={cn("border-b hover:bg-muted/50", isSelected && "bg-muted")}>
@@ -691,6 +707,18 @@ const UserManagement = () => {
                                     onClick={() => handleAssignBatchesClick(user)}
                                   >
                                     <Layers className="h-4 w-4" />
+                                  </Button>
+                                </Tooltip>
+                              )}
+                              {/* Show Performance Report button only for students */}
+                              {isStudent && (
+                                <Tooltip content="Student Performance Report">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleViewPerformanceReport(user)}
+                                  >
+                                    <FileText className="h-4 w-4" />
                                   </Button>
                                 </Tooltip>
                               )}
@@ -1065,6 +1093,18 @@ const UserManagement = () => {
           </div>
         </div>
       </Dialog>
+
+      {/* Student Performance Report */}
+      {showPerformanceReport && selectedStudent && (
+        <StudentPerformanceReport
+          student={selectedStudent}
+          isOpen={showPerformanceReport}
+          onClose={() => {
+            setShowPerformanceReport(false);
+            setSelectedStudent(null);
+          }}
+        />
+      )}
     </div>
   );
 };

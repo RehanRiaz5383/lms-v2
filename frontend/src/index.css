@@ -89,3 +89,48 @@
     animation: slide-in-from-right 0.3s ease-out;
   }
 }
+
+/* Print styles for performance report */
+@media print {
+  body {
+    background: white;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  
+  /* Page break controls */
+  .print\\:break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  .print\\:break-after {
+    break-after: page;
+    page-break-after: always;
+  }
+  
+  /* Ensure tables don't break awkwardly */
+  table {
+    break-inside: auto;
+  }
+  
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+  
+  tfoot {
+    display: table-footer-group;
+  }
+}

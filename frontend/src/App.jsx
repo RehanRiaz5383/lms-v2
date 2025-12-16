@@ -18,6 +18,8 @@ import Profile from './pages/Profile';
 import StudentLectureVideos from './pages/StudentLectureVideos';
 import StudentTasks from './pages/StudentTasks';
 import BatchExplore from './pages/BatchExplore';
+import NotificationDetail from './pages/NotificationDetail';
+import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 function App() {
@@ -94,6 +96,16 @@ function App() {
             <Route path="tasks" element={
               <BlockedRoute>
                 <StudentTasks />
+              </BlockedRoute>
+            } />
+            <Route path="notifications/:id" element={
+              <BlockedRoute>
+                <NotificationDetail />
+              </BlockedRoute>
+            } />
+            <Route path="performance-report" element={
+              <BlockedRoute>
+                <StudentPerformanceReportPage />
               </BlockedRoute>
             } />
             <Route path="quizzes" element={

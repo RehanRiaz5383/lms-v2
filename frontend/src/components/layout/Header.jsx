@@ -4,9 +4,10 @@ import { logout } from '../../store/slices/authSlice';
 import { fetchProfile } from '../../store/slices/profileSlice';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { Menu, Moon, Sun, LogOut, User } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, User, BarChart3 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
+import NotificationDropdown from '../notifications/NotificationDropdown';
 
 const Header = ({ onMenuClick }) => {
   const dispatch = useAppDispatch();
@@ -49,6 +50,21 @@ const Header = ({ onMenuClick }) => {
     navigate('/login');
   };
 
+  // Check if user is a student
+  const isStudent = () => {
+    if (!user) return false;
+    
+    // Check roles array
+    if (user.roles && Array.isArray(user.roles)) {
+      return user.roles.some(role => 
+        role.title?.toLowerCase() === 'student' || role.id == 2
+      );
+    }
+    
+    // Fallback to user_type
+    return user.user_type == 2 || user.user_type_title?.toLowerCase() === 'student';
+  };
+
   return (
     <header className="h-16 border-b border-border bg-card flex items-center justify-between px-4 lg:px-6">
       <div className="flex items-center gap-4">
@@ -64,6 +80,22 @@ const Header = ({ onMenuClick }) => {
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Notifications */}
+        <NotificationDropdown />
+
+        {/* Performance Report (Students only) */}
+        {isStudent() && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/dashboard/performance-report')}
+            aria-label="Performance Report"
+            title="Performance Report"
+          >
+            <BarChart3 className="h-5 w-5" />
+          </Button>
+        )}
+
         {/* Theme Toggle */}
         <Button
           variant="ghost"

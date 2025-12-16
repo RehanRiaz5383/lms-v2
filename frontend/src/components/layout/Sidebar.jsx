@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { cn } from '../../utils/cn';
+import { apiService } from '../../services/api';
+import { API_ENDPOINTS } from '../../config/api';
 import {
   LayoutDashboard,
   Users,
@@ -27,6 +29,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
   const [expandedMenus, setExpandedMenus] = useState([]); // Start with all collapsed
+  const [pendingTasksCount, setPendingTasksCount] = useState(0);
 
   // Get user roles - prioritize user_roles table, use user_type only for backward compatibility
   const getUserRoles = () => {
@@ -272,6 +275,25 @@ const Sidebar = ({ isOpen, onClose }) => {
     setExpandedMenus(activeMenuKeys);
   }, [location.pathname, hasAdminRole, hasStudentRole, hasTeacherRole]);
 
+  // Fetch pending tasks count for students
+  useEffect(() => {
+    if (hasStudentRole) {
+      const fetchPendingCount = async () => {
+        try {
+          const response = await apiService.get(API_ENDPOINTS.student.tasks.pendingCount);
+          setPendingTasksCount(response.data.data?.count || 0);
+        } catch (err) {
+          // Silently fail - don't show error for badge count
+          setPendingTasksCount(0);
+        }
+      };
+      fetchPendingCount();
+      // Refresh count every 30 seconds
+      const interval = setInterval(fetchPendingCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [hasStudentRole]);
+
   const menuGroups = buildMenuItems();
   
   // Helper to render menu items (avoid duplicates like Dashboard)
@@ -347,6 +369,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       // Handle regular menu items
       const isActive = location.pathname === item.path;
+      const showBadge = item.path === '/dashboard/tasks' && hasStudentRole && pendingTasksCount > 0;
 
       return (
         <Link
@@ -361,7 +384,12 @@ const Sidebar = ({ isOpen, onClose }) => {
           )}
         >
           <Icon className="h-5 w-5" />
-          <span>{item.title}</span>
+          <span className="flex-1">{item.title}</span>
+          {showBadge && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold text-white bg-red-500 rounded-full">
+              {pendingTasksCount > 99 ? '99+' : pendingTasksCount}
+            </span>
+          )}
         </Link>
       );
     }).filter(Boolean);

@@ -93,6 +93,26 @@ class TaskController extends ApiController
                     $task->description = null;
                 }
 
+                // Attach task files from files table if it exists
+                if (DB::getSchemaBuilder()->hasTable('files')) {
+                    $taskFiles = DB::table('files')
+                        ->where('task_id', $task->id)
+                        ->get()
+                        ->map(function ($file) {
+                            $appUrl = env('APP_URL', 'http://localhost:8000');
+                            $filePath = $file->file_path ?? null;
+                            if ($filePath) {
+                                $file->file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
+                            } else {
+                                $file->file_url = null;
+                            }
+                            return $file;
+                        });
+                    $task->attachment_files = $taskFiles;
+                } else {
+                    $task->attachment_files = [];
+                }
+
                 return $task;
             });
 
@@ -160,8 +180,13 @@ class TaskController extends ApiController
             }
             
             // Only include expiry_date if column exists (map from due_date to expiry_date)
-            if ($hasExpiryDateColumn && $request->has('due_date') && $request->input('due_date')) {
-                $taskData['expiry_date'] = $request->input('due_date');
+            // Since validation requires due_date, it should always be present
+            if ($hasExpiryDateColumn && $request->has('due_date')) {
+                $dueDate = $request->input('due_date');
+                // Only set if not empty (validation will catch empty values)
+                if (!empty($dueDate)) {
+                    $taskData['expiry_date'] = $dueDate;
+                }
             }
 
             // Only include description if column exists
@@ -209,7 +234,27 @@ class TaskController extends ApiController
             if ($hasCreatedByColumn) {
                 $loadRelations[] = 'creator';
             }
+            // Eager load files relationship if files table exists
+            if (DB::getSchemaBuilder()->hasTable('files')) {
+                $loadRelations[] = 'files';
+            }
             $task->load($loadRelations);
+
+            // Create notifications for assigned students
+            if ($task->batch_id) {
+                // Get all students in the batch
+                $studentIds = DB::table('user_batches')
+                    ->where('batch_id', $task->batch_id)
+                    ->pluck('user_id')
+                    ->toArray();
+
+                foreach ($studentIds as $studentId) {
+                    $this->createTaskAssignedNotification($task, $studentId);
+                }
+            } else if ($request->has('user_id') && $request->input('user_id')) {
+                // Task assigned to specific student
+                $this->createTaskAssignedNotification($task, $request->input('user_id'));
+            }
 
             return $this->success($task, 'Task created successfully', 201);
         } catch (\Exception $e) {
@@ -354,6 +399,26 @@ class TaskController extends ApiController
                 }
             }
 
+            // Attach task files from files table if it exists
+            if (DB::getSchemaBuilder()->hasTable('files')) {
+                $taskFiles = DB::table('files')
+                    ->where('task_id', $task->id)
+                    ->get()
+                    ->map(function ($file) {
+                        $appUrl = env('APP_URL', 'http://localhost:8000');
+                        $filePath = $file->file_path ?? null;
+                        if ($filePath) {
+                            $file->file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
+                        } else {
+                            $file->file_url = null;
+                        }
+                        return $file;
+                    });
+                $task->attachment_files = $taskFiles;
+            } else {
+                $task->attachment_files = [];
+            }
+
             return $this->success($task, 'Task retrieved successfully');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to retrieve task', 500);
@@ -414,8 +479,12 @@ class TaskController extends ApiController
             }
             
             // Only include expiry_date if column exists (map from due_date to expiry_date)
-            if ($hasExpiryDateColumn && $request->has('due_date') && $request->input('due_date')) {
-                $updateData['expiry_date'] = $request->input('due_date');
+            if ($hasExpiryDateColumn && $request->has('due_date')) {
+                $dueDate = $request->input('due_date');
+                // Only set if not empty (validation will catch empty values)
+                if (!empty($dueDate)) {
+                    $updateData['expiry_date'] = $dueDate;
+                }
             }
             
             // Only include status if column exists
@@ -457,9 +526,20 @@ class TaskController extends ApiController
 
             // Delete associated submissions and their files
             $submissions = SubmittedTask::where('task_id', $task->id)->get();
+            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+            
             foreach ($submissions as $submission) {
-                if ($submission->file_path && Storage::disk('public')->exists($submission->file_path)) {
-                    Storage::disk('public')->delete($submission->file_path);
+                // Check for answer_file first, then file_path
+                $filePath = null;
+                if ($hasAnswerFileColumn && isset($submission->answer_file)) {
+                    $filePath = $submission->answer_file;
+                } else if ($hasFilePathColumn && isset($submission->file_path)) {
+                    $filePath = $submission->file_path;
+                }
+                
+                if ($filePath && Storage::disk('public')->exists($filePath)) {
+                    Storage::disk('public')->delete($filePath);
                 }
                 $submission->delete();
             }
@@ -563,8 +643,10 @@ class TaskController extends ApiController
     public function gradeSubmission(Request $request, int $taskId, int $submissionId): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'marks' => 'nullable|numeric|min:0|max:100',
-            'teacher_remarks' => 'nullable|string|max:1000',
+            'obtained_marks' => 'nullable|numeric|min:0',
+            'instructor_comments' => 'nullable|string|max:1000',
+            'marks' => 'nullable|numeric|min:0|max:100', // Keep for backward compatibility
+            'teacher_remarks' => 'nullable|string|max:1000', // Keep for backward compatibility
         ]);
 
         if ($validator->fails()) {
@@ -572,7 +654,8 @@ class TaskController extends ApiController
         }
 
         try {
-            $task = Task::find($taskId);
+            // Load task with relationships
+            $task = Task::with(['subject', 'batch'])->find($taskId);
 
             if (!$task) {
                 return $this->notFound('Task not found');
@@ -585,32 +668,333 @@ class TaskController extends ApiController
             if (!$submission) {
                 return $this->notFound('Submission not found');
             }
+            
+            // Log submission data for debugging
+            \Log::info('Grading submission', [
+                'submission_id' => $submissionId,
+                'task_id' => $taskId,
+                'submission_student_id' => $submission->student_id ?? null,
+                'submission_user_id' => $submission->user_id ?? null,
+                'submission_attributes' => $submission->getAttributes() ?? null,
+            ]);
 
             // Check which columns exist in submitted_tasks table
+            $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'obtained_marks');
+            $hasInstructorCommentsColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'instructor_comments');
             $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'marks');
             $hasTeacherRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'teacher_remarks');
             $hasGradedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'graded_at');
             $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
 
-            if ($hasMarksColumn) {
-                $submission->marks = $request->input('marks');
+            // Use obtained_marks if column exists, otherwise fallback to marks
+            if ($hasObtainedMarksColumn) {
+                $submission->obtained_marks = $request->input('obtained_marks') ?? $request->input('marks');
+            } else if ($hasMarksColumn) {
+                $submission->marks = $request->input('obtained_marks') ?? $request->input('marks');
             }
-            if ($hasTeacherRemarksColumn) {
-                $submission->teacher_remarks = $request->input('teacher_remarks');
+
+            // Use instructor_comments if column exists, otherwise fallback to teacher_remarks
+            if ($hasInstructorCommentsColumn) {
+                $submission->instructor_comments = $request->input('instructor_comments') ?? $request->input('teacher_remarks');
+            } else if ($hasTeacherRemarksColumn) {
+                $submission->teacher_remarks = $request->input('instructor_comments') ?? $request->input('teacher_remarks');
             }
+
+            // Check if this is an update (submission already has grades) BEFORE saving new values
+            $isUpdate = false;
+            if (DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'obtained_marks')) {
+                $isUpdate = !empty($submission->obtained_marks);
+            } else if (DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'marks')) {
+                $isUpdate = !empty($submission->marks);
+            }
+
             if ($hasGradedAtColumn) {
                 $submission->graded_at = now();
             }
             if ($hasStatusColumn) {
                 $submission->status = 'graded';
             }
+            
+            // Set is_checked to 1 if column exists
+            $hasIsCheckedColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'is_checked');
+            if ($hasIsCheckedColumn) {
+                $submission->is_checked = 1;
+            }
+
             $submission->save();
+
+            // Reload task with relationships to ensure they're available for notification
+            $task->refresh();
+            $task->load(['subject', 'batch']);
+
+            // Create notification for student about grade
+            $marks = $request->input('obtained_marks') ?? $request->input('marks');
+            $this->createGradeNotification($submission, $task, $marks, $isUpdate);
 
             $submission->load(['user', 'task']);
 
             return $this->success($submission, 'Submission graded successfully');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to grade submission', 500);
+        }
+    }
+
+    /**
+     * Create notification for grade awarded/updated.
+     *
+     * @param SubmittedTask $submission
+     * @param Task $task
+     * @param float|null $marks
+     * @param bool $isUpdate
+     * @return void
+     */
+    private function createGradeNotification(SubmittedTask $submission, Task $task, $marks = null, $isUpdate = false): void
+    {
+        try {
+            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+                \Log::warning('Notifications table does not exist');
+                return;
+            }
+
+            // Get student_id - check both student_id and user_id columns
+            $studentId = null;
+            if (is_object($submission)) {
+                // Try multiple ways to get student_id
+                if (property_exists($submission, 'student_id') && $submission->student_id) {
+                    $studentId = $submission->student_id;
+                } else if (property_exists($submission, 'user_id') && $submission->user_id) {
+                    $studentId = $submission->user_id;
+                } else if (method_exists($submission, 'getAttribute')) {
+                    $studentId = $submission->getAttribute('student_id') ?? $submission->getAttribute('user_id') ?? null;
+                } else if (method_exists($submission, 'getAttributes')) {
+                    $attrs = $submission->getAttributes();
+                    $studentId = $attrs['student_id'] ?? $attrs['user_id'] ?? null;
+                } else {
+                    // Try direct property access
+                    $studentId = $submission->student_id ?? $submission->user_id ?? null;
+                }
+            }
+            
+            \Log::info('Creating grade notification', [
+                'submission_id' => is_object($submission) ? ($submission->id ?? null) : null,
+                'student_id' => $studentId,
+                'task_id' => $task->id ?? null,
+            ]);
+            
+            if (!$studentId) {
+                \Log::warning('Cannot create grade notification: student_id not found', [
+                    'submission_id' => is_object($submission) ? ($submission->id ?? null) : null,
+                    'submission_class' => get_class($submission),
+                ]);
+                return;
+            }
+
+            // Ensure relationships are loaded
+            if (!$task->relationLoaded('subject')) {
+                $task->load('subject');
+            }
+
+            $taskTitle = $task->title ?? 'Task';
+            $subjectTitle = $task->subject->title ?? 'Unknown Subject';
+            $type = $isUpdate ? 'grade_updated' : 'grade_awarded';
+            $title = $isUpdate ? 'Grade Updated' : 'Grade Awarded';
+            $message = $isUpdate 
+                ? "Your grade for task '{$taskTitle}' in {$subjectTitle} has been updated."
+                : "You have been awarded a grade for task '{$taskTitle}' in {$subjectTitle}.";
+
+            if ($marks !== null) {
+                $message .= " Marks: {$marks}";
+            }
+
+            // Check which column structure exists
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasTypeColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'type');
+            $hasTitleColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'title');
+            $hasMessageColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'message');
+            $hasDataColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'data');
+            $hasReadColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read');
+
+            // If neither user_id nor notifiable_id exists, we can't create notification
+            if (!$hasUserIdColumn && !$hasNotifiableIdColumn) {
+                \Log::warning('Cannot create notification: neither user_id nor notifiable_id column exists');
+                return;
+            }
+
+            $notificationData = [];
+
+            if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            if ($hasTypeColumn) {
+                $notificationData['type'] = $type;
+            }
+
+            if ($hasTitleColumn) {
+                $notificationData['title'] = $title;
+            }
+
+            if ($hasMessageColumn) {
+                $notificationData['message'] = $message;
+            }
+
+            if ($hasDataColumn) {
+                // Store data as JSON string (works for both JSON and TEXT columns)
+                $notificationData['data'] = json_encode([
+                    'task_id' => $task->id,
+                    'task_title' => $taskTitle,
+                    'subject_id' => $task->subject_id,
+                    'subject_title' => $subjectTitle,
+                    'marks' => $marks,
+                    'submission_id' => $submission->id,
+                ]);
+            }
+
+            if ($hasReadColumn) {
+                $notificationData['read'] = false;
+            } else {
+                // If read column doesn't exist, use read_at
+                $hasReadAtColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read_at');
+                if ($hasReadAtColumn) {
+                    // Leave read_at as null to indicate unread
+                }
+            }
+
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            // Check if id column is UUID (char(36)) or auto-increment
+            $idColumnInfo = DB::select("SHOW COLUMNS FROM notifications WHERE Field = 'id'");
+            $isUuidId = isset($idColumnInfo[0]) && strpos(strtolower($idColumnInfo[0]->Type), 'char') !== false;
+            
+            if ($isUuidId) {
+                // Generate UUID for id
+                $notificationData['id'] = \Illuminate\Support\Str::uuid()->toString();
+            }
+            // Otherwise, let database auto-generate the id
+
+            \Log::info('Inserting notification', [
+                'notification_data' => $notificationData,
+                'has_user_id' => $hasUserIdColumn,
+                'has_notifiable_id' => $hasNotifiableIdColumn,
+                'is_uuid_id' => $isUuidId,
+            ]);
+
+            if (empty($notificationData)) {
+                \Log::warning('Notification data is empty, cannot insert');
+                return;
+            }
+
+            try {
+                $inserted = DB::table('notifications')->insert($notificationData);
+                
+                \Log::info('Notification created successfully', [
+                    'inserted' => $inserted,
+                    'student_id' => $studentId,
+                    'notification_id' => $isUuidId ? ($notificationData['id'] ?? null) : (DB::getPdo()->lastInsertId() ?? null),
+                ]);
+            } catch (\Exception $insertException) {
+                \Log::error('Failed to insert notification', [
+                    'error' => $insertException->getMessage(),
+                    'error_trace' => $insertException->getTraceAsString(),
+                    'notification_data' => $notificationData,
+                    'student_id' => $studentId,
+                ]);
+                throw $insertException; // Re-throw to be caught by outer catch
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to create grade notification', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'submission_id' => is_object($submission) ? ($submission->id ?? null) : null,
+                'task_id' => $task->id ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * Create notification for task assigned.
+     *
+     * @param Task $task
+     * @param int $studentId
+     * @return void
+     */
+    private function createTaskAssignedNotification(Task $task, int $studentId): void
+    {
+        try {
+            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+                return;
+            }
+
+            // Ensure relationships are loaded
+            if (!$task->relationLoaded('subject')) {
+                $task->load('subject');
+            }
+            if (!$task->relationLoaded('batch')) {
+                $task->load('batch');
+            }
+
+            $taskTitle = $task->title ?? 'Task';
+            $subjectTitle = $task->subject->title ?? 'Unknown Subject';
+            $batchTitle = $task->batch->title ?? 'Unknown Batch';
+
+            // Check which column structure exists
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasTypeColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'type');
+            $hasTitleColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'title');
+            $hasMessageColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'message');
+            $hasDataColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'data');
+            $hasReadColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read');
+
+            $notificationData = [];
+
+            if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            if ($hasTypeColumn) {
+                $notificationData['type'] = 'task_assigned';
+            }
+
+            if ($hasTitleColumn) {
+                $notificationData['title'] = 'New Task Assigned';
+            }
+
+            if ($hasMessageColumn) {
+                $notificationData['message'] = "A new task '{$taskTitle}' has been assigned to you in {$subjectTitle} ({$batchTitle}).";
+            }
+
+            if ($hasDataColumn) {
+                $notificationData['data'] = json_encode([
+                    'task_id' => $task->id,
+                    'task_title' => $taskTitle,
+                    'subject_id' => $task->subject_id,
+                    'subject_title' => $subjectTitle,
+                    'batch_id' => $task->batch_id,
+                    'batch_title' => $batchTitle,
+                    'expiry_date' => $task->expiry_date,
+                ]);
+            }
+
+            if ($hasReadColumn) {
+                $notificationData['read'] = false;
+            }
+
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            DB::table('notifications')->insert($notificationData);
+        } catch (\Exception $e) {
+            // Silently fail - notifications are not critical
+            \Log::error('Failed to create task assigned notification: ' . $e->getMessage());
         }
     }
 }

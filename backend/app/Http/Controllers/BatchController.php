@@ -203,20 +203,20 @@ class BatchController extends ApiController
             return $this->notFound('Batch not found');
         }
 
-        // Get only subjects that are assigned to this batch
-        $query = $batch->subjects()->where('subjects.active', true);
+        // Get ALL active subjects (not just assigned ones)
+        $query = Subject::where('active', true);
 
         // Search filter
         if ($request->has('search') && !empty($request->get('search'))) {
             $search = $request->get('search');
-            $query->where('subjects.title', 'like', "%{$search}%");
+            $query->where('title', 'like', "%{$search}%");
         }
 
-        // Get subjects assigned to this batch
-        $subjects = $query->get();
+        // Get all available subjects
+        $subjects = $query->orderBy('title', 'asc')->get();
         
         // Get assigned subject IDs for reference
-        $assignedSubjectIds = $subjects->pluck('id')->toArray();
+        $assignedSubjectIds = $batch->subjects->pluck('id')->toArray();
 
         return $this->success([
             'subjects' => $subjects,

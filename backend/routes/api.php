@@ -6,6 +6,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificationSettingsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SmtpSettingsController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\StudentDashboardController;
 use App\Http\Controllers\StudentTaskController;
 use App\Http\Controllers\StudentVideoController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\SubjectController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VideoController;
+use App\Http\Controllers\StudentPerformanceController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -46,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/videos', [StudentVideoController::class, 'index']);
         Route::get('/videos/{id}/download', [StudentVideoController::class, 'download']);
         Route::get('/tasks', [StudentTaskController::class, 'index']);
+        Route::get('/tasks/pending-count', [StudentTaskController::class, 'pendingCount']);
         Route::get('/tasks/{id}', [StudentTaskController::class, 'show']);
         Route::post('/tasks/{id}/submit', [StudentTaskController::class, 'submit']);
         Route::get('/tasks/submissions', [StudentTaskController::class, 'submissions']);
@@ -73,6 +76,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/assign-roles', [UserController::class, 'assignRoles']);
         Route::get('/{id}/available-roles', [UserController::class, 'getAvailableRoles']);
     });
+
+    // Performance Report - accessible by students (own report) and admins (any report)
+    Route::get('/users/{id}/performance-report', [StudentPerformanceController::class, 'show']);
 
     // Student update routes (for CR/Teacher - limited access)
     Route::prefix('users')->group(function () {
@@ -124,6 +130,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [TaskController::class, 'destroy']);
         Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
         Route::post('/{taskId}/submissions/{submissionId}/grade', [TaskController::class, 'gradeSubmission']);
+    });
+
+    // Notifications
+    Route::prefix('notifications')->group(function () {
+        Route::get('/', [NotificationController::class, 'index']);
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::get('/{id}', [NotificationController::class, 'show']);
+        Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     });
 
     // SMTP Settings (Admin only)

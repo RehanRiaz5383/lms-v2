@@ -28,6 +28,7 @@ class StudentDashboardController extends ApiController
         $submittedTasks = 0;
         $pendingTasks = 0;
         $taskCompletionRate = 0;
+        $nearestTaskDueDate = null;
 
         try {
             // Check if tasks table exists and has required columns
@@ -49,14 +50,57 @@ class StudentDashboardController extends ApiController
                 
                 $totalTasks = $tasksQuery->count();
 
-                // Get submitted tasks
+                // Get submitted task IDs
+                $submittedTaskIds = [];
                 if (DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
-                    $submittedTasks = DB::table('submitted_tasks')
-                        ->where('user_id', $userId)
-                        ->count();
+                    $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'student_id');
+                    if ($hasStudentIdColumn) {
+                        $submittedTaskIds = DB::table('submitted_tasks')
+                            ->where('student_id', $userId)
+                            ->pluck('task_id')
+                            ->toArray();
+                    } else if (DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'user_id')) {
+                        $submittedTaskIds = DB::table('submitted_tasks')
+                            ->where('user_id', $userId)
+                            ->pluck('task_id')
+                            ->toArray();
+                    }
                 }
 
+                $submittedTasks = count($submittedTaskIds);
+
+                // Calculate pending tasks (all tasks minus submitted)
                 $pendingTasks = max(0, $totalTasks - $submittedTasks);
+
+                // Get nearest task due date (earliest expiry_date for tasks that can still be submitted)
+                $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
+                if ($hasExpiryDateColumn) {
+                    $nearestTaskQuery = DB::table('tasks');
+                    
+                    if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
+                        if (!empty($userBatchIds)) {
+                            $nearestTaskQuery->whereIn('batch_id', $userBatchIds)
+                                            ->orWhereNull('batch_id');
+                        } else {
+                            $nearestTaskQuery->whereNull('batch_id');
+                        }
+                    } else if (DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
+                        $nearestTaskQuery->where('user_id', $userId);
+                    }
+
+                    // Filter by expiry_date >= today (Asia/Karachi timezone) - tasks that can still be submitted
+                    $today = now()->setTimezone('Asia/Karachi')->startOfDay()->format('Y-m-d');
+                    $nearestTaskQuery->where('expiry_date', '>=', $today);
+                    
+                    // Get nearest task due date (earliest expiry_date)
+                    $nearestTask = $nearestTaskQuery
+                        ->orderBy('expiry_date', 'asc')
+                        ->first();
+                    
+                    if ($nearestTask && isset($nearestTask->expiry_date)) {
+                        $nearestTaskDueDate = $nearestTask->expiry_date;
+                    }
+                }
                 $taskCompletionRate = $totalTasks > 0 ? round(($submittedTasks / $totalTasks) * 100, 1) : 0;
             }
         } catch (\Exception $e) {
@@ -276,6 +320,7 @@ class StudentDashboardController extends ApiController
                 'submitted' => $submittedTasks,
                 'pending' => $pendingTasks,
                 'completion_rate' => $taskCompletionRate,
+                'nearest_due_date' => $nearestTaskDueDate,
             ],
             'quizzes' => [
                 'total' => $totalQuizzes,

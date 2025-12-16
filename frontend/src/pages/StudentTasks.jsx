@@ -5,6 +5,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Dialog } from '../components/ui/dialog';
+import { Drawer } from '../components/ui/drawer';
+import { Tooltip } from '../components/ui/tooltip';
 import { 
   ClipboardList, 
   Upload, 
@@ -28,6 +30,10 @@ const StudentTasks = () => {
   const { user } = useAppSelector((state) => state.auth);
   const { success: showSuccess, error: showError } = useToast();
   const [tasks, setTasks] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [selectedBatch, setSelectedBatch] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
@@ -40,7 +46,7 @@ const StudentTasks = () => {
 
   useEffect(() => {
     loadTasks();
-  }, [filter]);
+  }, [filter, selectedBatch, selectedSubject]);
 
   const loadTasks = async () => {
     setLoading(true);
@@ -49,8 +55,14 @@ const StudentTasks = () => {
       if (filter !== 'all') {
         params.status = filter;
       }
+      if (selectedBatch) params.batch_id = selectedBatch;
+      if (selectedSubject) params.subject_id = selectedSubject;
+
       const response = await apiService.get(API_ENDPOINTS.student.tasks.list, { params });
-      setTasks(response.data.data || []);
+      const data = response.data.data || {};
+      setTasks(data.tasks || []);
+      setBatches(data.batches || []);
+      setSubjects(data.subjects || []);
     } catch (err) {
       showError('Failed to load tasks');
     } finally {
@@ -87,9 +99,7 @@ const StudentTasks = () => {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      if (remarks) {
-        formData.append('remarks', remarks);
-      }
+      // Remarks not needed - removed as per database schema
 
       const endpoint = API_ENDPOINTS.student.tasks.submit.replace(':id', selectedTask.id);
       await apiService.post(endpoint, formData, {
@@ -123,9 +133,10 @@ const StudentTasks = () => {
   };
 
   const handleDownloadSubmission = (submission) => {
-    if (submission.file_path) {
+    const filePath = submission.answer_file || submission.file_path;
+    if (filePath) {
       // Use file_url if available (from backend), otherwise construct URL
-      const fileUrl = submission.file_url || normalizeStorageUrl(submission.file_path) || getStorageUrl(submission.file_path);
+      const fileUrl = submission.file_url || normalizeStorageUrl(filePath) || getStorageUrl(filePath);
       window.open(fileUrl, '_blank');
     }
   };
@@ -144,7 +155,73 @@ const StudentTasks = () => {
 
   const isOverdue = (dueDate) => {
     if (!dueDate) return false;
-    return new Date(dueDate) < new Date();
+    // Set timezone to Asia/Karachi for comparison
+    const now = new Date();
+    const due = new Date(dueDate);
+    // Set due date to end of day (23:59:59) in Asia/Karachi
+    due.setHours(23, 59, 59, 999);
+    return now > due;
+  };
+
+  // Countdown timer component
+  const CountdownTimer = ({ dueDate }) => {
+    const [timeLeft, setTimeLeft] = useState(null);
+
+    useEffect(() => {
+      if (!dueDate) {
+        setTimeLeft(null);
+        return;
+      }
+
+      const updateTimer = () => {
+        const now = new Date();
+        // Parse due date and set to end of day (23:59:59) in Asia/Karachi timezone
+        const due = new Date(dueDate);
+        due.setHours(23, 59, 59, 999);
+        
+        const diff = due - now;
+
+        // If expired, don't show countdown (status badge will show "Overdue")
+        if (diff <= 0) {
+          setTimeLeft(null);
+          return;
+        }
+
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        setTimeLeft({ days, hours, minutes, seconds });
+      };
+
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+
+      return () => clearInterval(interval);
+    }, [dueDate]);
+
+    // Don't show countdown if expired or no time left
+    if (!timeLeft) return null;
+
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        {timeLeft.days > 0 && (
+          <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 rounded font-medium">
+            {timeLeft.days}d
+          </span>
+        )}
+        <span className="px-1.5 py-0.5 bg-orange-500/10 text-orange-600 rounded font-medium">
+          {String(timeLeft.hours).padStart(2, '0')}h
+        </span>
+        <span className="px-1.5 py-0.5 bg-yellow-500/10 text-yellow-600 rounded font-medium">
+          {String(timeLeft.minutes).padStart(2, '0')}m
+        </span>
+        <span className="px-1.5 py-0.5 bg-green-500/10 text-green-600 rounded font-medium">
+          {String(timeLeft.seconds).padStart(2, '0')}s
+        </span>
+      </div>
+    );
   };
 
   const getStatusBadge = (task) => {
@@ -186,6 +263,52 @@ const StudentTasks = () => {
           </p>
         </div>
       </div>
+
+      {/* Batch and Subject Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="batch">Batch Selection</Label>
+              <select
+                id="batch"
+                value={selectedBatch}
+                onChange={(e) => {
+                  setSelectedBatch(e.target.value);
+                  setSelectedSubject(''); // Reset subject when batch changes
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+              >
+                <option value="">All Batches</option>
+                {batches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="subject">Subject Selection</Label>
+              <select
+                id="subject"
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+              >
+                <option value="">All Subjects</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 border-b border-border">
@@ -234,95 +357,114 @@ const StudentTasks = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {tasks.map((task) => (
-            <Card key={task.id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-lg">{task.title || 'Untitled Task'}</CardTitle>
-                  {getStatusBadge(task)}
-                </div>
-                {task.description && (
-                  <CardDescription className="line-clamp-2 mt-2">
-                    {task.description}
-                  </CardDescription>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {/* Batch and Subject */}
-                  {(task.batch || task.subject) && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      {task.batch && (
-                        <span className="px-2 py-1 bg-accent rounded">
-                          {task.batch.title}
-                        </span>
-                      )}
-                      {task.subject && (
-                        <span className="px-2 py-1 bg-accent rounded">
-                          {task.subject.title}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Due Date */}
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className={isOverdue(task.due_date) && !task.is_submitted ? 'text-red-500 font-medium' : 'text-muted-foreground'}>
-                      {formatDate(task.due_date)}
-                    </span>
-                  </div>
-
-                  {/* Teacher Remarks (if submitted) */}
-                  {task.is_submitted && task.submission?.teacher_remarks && (
-                    <div className="flex items-start gap-2 text-sm p-2 bg-accent rounded">
-                      <MessageSquare className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <div>
-                        <span className="font-medium">Teacher Remarks:</span>
-                        <p className="text-muted-foreground">{task.submission.teacher_remarks}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewDetails(task)}
-                      className="flex-1"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                    {task.can_submit && !task.is_submitted && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleSubmitClick(task)}
-                        className="flex-1"
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Submit
-                      </Button>
-                    )}
-                    {task.is_submitted && task.submission?.file_path && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadSubmission(task.submission)}
-                        className="flex-1"
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">#</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Title</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Batch</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Subject</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Due Date</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tasks.map((task, index) => (
+                    <tr key={task.id} className="border-b border-border hover:bg-accent/50 transition-colors">
+                      <td className="p-4 text-sm text-muted-foreground">{index + 1}</td>
+                      <td className="p-4">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{task.title || 'Untitled Task'}</p>
+                          {task.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                              {task.description}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4 text-sm text-muted-foreground">
+                        {task.batch?.title || 'N/A'}
+                      </td>
+                      <td className="p-4 text-sm text-muted-foreground">
+                        {task.subject?.title || 'N/A'}
+                      </td>
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <span className={`text-sm ${isOverdue(task.due_date) && !task.is_submitted ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                            {formatDate(task.due_date)}
+                          </span>
+                          {task.can_submit && task.due_date && (
+                            <CountdownTimer dueDate={task.due_date} />
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {getStatusBadge(task)}
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-2">
+                          {(task.task_file_url || (task.attachment_files && task.attachment_files.length > 0)) && (
+                            <Tooltip content="Download Task File">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (task.task_file_url) {
+                                    window.open(task.task_file_url, '_blank');
+                                  } else if (task.attachment_files && task.attachment_files.length > 0 && task.attachment_files[0].file_url) {
+                                    window.open(task.attachment_files[0].file_url, '_blank');
+                                  }
+                                }}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                          )}
+                          <Tooltip content="View Details">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleViewDetails(task)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
+                          {task.can_submit && (
+                            <Tooltip content={task.is_submitted ? "Update Submission" : "Submit Task"}>
+                              <Button
+                                size="sm"
+                                onClick={() => handleSubmitClick(task)}
+                                variant={task.is_submitted ? "outline" : "default"}
+                              >
+                                <Upload className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                          )}
+                          {task.is_submitted && (task.submission?.answer_file || task.submission?.file_path) && (
+                            <Tooltip content="Download My Submission">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadSubmission(task.submission)}
+                                className="border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Submit Task Dialog */}
@@ -333,7 +475,7 @@ const StudentTasks = () => {
           setSelectedFile(null);
           setRemarks('');
         }}
-        title="Submit Task"
+        title={selectedTask?.is_submitted ? "Update Submission" : "Submit Task"}
         size="lg"
       >
         {selectedTask && (
@@ -365,18 +507,6 @@ const StudentTasks = () => {
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="remarks">Remarks (Optional)</Label>
-              <textarea
-                id="remarks"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add any additional remarks..."
-                maxLength={1000}
-              />
-            </div>
-
             <div className="flex justify-end gap-2 pt-4">
               <Button
                 variant="outline"
@@ -396,12 +526,12 @@ const StudentTasks = () => {
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting...
+                    {selectedTask?.is_submitted ? "Updating..." : "Submitting..."}
                   </>
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
-                    Submit Task
+                    {selectedTask?.is_submitted ? "Update Submission" : "Submit Task"}
                   </>
                 )}
               </Button>
@@ -410,12 +540,11 @@ const StudentTasks = () => {
         )}
       </Dialog>
 
-      {/* Task Details Dialog */}
-      <Dialog
+      {/* Task Details Drawer */}
+      <Drawer
         isOpen={showDetailsDialog}
         onClose={() => setShowDetailsDialog(false)}
         title="Task Details"
-        size="xl"
       >
         {selectedTask && (
           <div className="space-y-4">
@@ -455,6 +584,51 @@ const StudentTasks = () => {
               )}
             </div>
 
+            {/* Task File (from tasks.file_path) */}
+            {selectedTask.task_file_url && (
+              <div className="pt-4 border-t border-border">
+                <Label className="text-muted-foreground mb-2 block">Task File</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    if (selectedTask.task_file_url) {
+                      window.open(selectedTask.task_file_url, '_blank');
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {selectedTask.file_path?.split('/').pop() || 'Download Task File'}
+                </Button>
+              </div>
+            )}
+
+            {/* Task Attachment Files (from files table) */}
+            {selectedTask.attachment_files && selectedTask.attachment_files.length > 0 && (
+              <div className="pt-4 border-t border-border">
+                <Label className="text-muted-foreground mb-2 block">Task Attachments</Label>
+                <div className="space-y-2">
+                  {selectedTask.attachment_files.map((file, idx) => (
+                    <Button
+                      key={idx}
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        if (file.file_url) {
+                          window.open(file.file_url, '_blank');
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      {file.name || file.file_path?.split('/').pop() || `Attachment ${idx + 1}`}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Submission Details */}
             {selectedTask.is_submitted && selectedTask.submission && (
               <div className="pt-4 border-t border-border space-y-4">
@@ -470,6 +644,14 @@ const StudentTasks = () => {
                       <p className="text-muted-foreground whitespace-pre-wrap">{selectedTask.submission.remarks}</p>
                     </div>
                   )}
+                  {selectedTask.submission.instructor_comments && (
+                    <div>
+                      <Label className="text-muted-foreground">Instructor Comments</Label>
+                      <p className="text-muted-foreground whitespace-pre-wrap bg-accent p-3 rounded">
+                        {selectedTask.submission.instructor_comments}
+                      </p>
+                    </div>
+                  )}
                   {selectedTask.submission.teacher_remarks && (
                     <div>
                       <Label className="text-muted-foreground">Teacher Remarks</Label>
@@ -478,13 +660,19 @@ const StudentTasks = () => {
                       </p>
                     </div>
                   )}
+                  {selectedTask.submission.obtained_marks !== null && selectedTask.submission.obtained_marks !== undefined && (
+                    <div>
+                      <Label className="text-muted-foreground">Marks</Label>
+                      <p className="font-medium text-lg">{selectedTask.submission.obtained_marks}</p>
+                    </div>
+                  )}
                   {selectedTask.submission.marks !== null && selectedTask.submission.marks !== undefined && (
                     <div>
                       <Label className="text-muted-foreground">Marks</Label>
                       <p className="font-medium text-lg">{selectedTask.submission.marks}</p>
                     </div>
                   )}
-                  {selectedTask.submission.file_path && (
+                  {(selectedTask.submission.answer_file || selectedTask.submission.file_path) && (
                     <div>
                       <Label className="text-muted-foreground">Submitted File</Label>
                       <Button
@@ -504,13 +692,13 @@ const StudentTasks = () => {
 
             {/* Action Buttons */}
             <div className="flex justify-end gap-2 pt-4 border-t border-border">
-              {selectedTask.can_submit && !selectedTask.is_submitted && (
+              {selectedTask.can_submit && (
                 <Button onClick={() => {
                   setShowDetailsDialog(false);
                   handleSubmitClick(selectedTask);
                 }}>
                   <Upload className="h-4 w-4 mr-2" />
-                  Submit Task
+                  {selectedTask.is_submitted ? "Update Submission" : "Submit Task"}
                 </Button>
               )}
               <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
@@ -519,7 +707,7 @@ const StudentTasks = () => {
             </div>
           </div>
         )}
-      </Dialog>
+      </Drawer>
     </div>
   );
 };
