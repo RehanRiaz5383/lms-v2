@@ -82,6 +82,10 @@ export const API_ENDPOINTS = {
       submit: '/student/tasks/:id/submit',
       submissions: '/student/tasks/submissions',
     },
+    vouchers: {
+      list: '/student/vouchers',
+      submitPayment: '/student/vouchers/:id/submit-payment',
+    },
   },
   
   // Profile Management
@@ -106,6 +110,7 @@ export const API_ENDPOINTS = {
     create: '/scheduled-jobs',
     update: '/scheduled-jobs/:id',
     delete: '/scheduled-jobs/:id',
+    logs: '/scheduled-jobs/:id/logs',
   },
   
   // User Management (Admin only)
@@ -124,6 +129,18 @@ export const API_ENDPOINTS = {
     availableBatches: '/users/:id/available-batches',
     assignRoles: '/users/:id/assign-roles',
     availableRoles: '/users/:id/available-roles',
+    impersonate: '/users/:id/impersonate',
+    updateFee: '/users/:id/fee',
+    vouchers: '/users/:id/vouchers',
+    createVoucher: '/users/:id/vouchers',
+  },
+  
+  // Vouchers Management
+  vouchers: {
+    generate: '/vouchers/generate',
+    approve: '/vouchers/:id/approve',
+    reject: '/vouchers/:id/reject',
+    delete: '/vouchers/:id',
   },
   
   // Batches Management
@@ -169,6 +186,7 @@ export const API_ENDPOINTS = {
     delete: '/tasks/:id',
     getSubmissions: '/tasks/:id/submissions',
     gradeSubmission: '/tasks/:taskId/submissions/:submissionId/grade',
+    uploadStudentSubmission: '/tasks/:taskId/upload-student-submission',
   },
   
   // SMTP Settings (Admin only)

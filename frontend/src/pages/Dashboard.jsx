@@ -26,6 +26,7 @@ import {
   Target,
   PlayCircle,
   AlertCircle,
+  Wallet,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS } from '../config/api';
@@ -361,40 +362,52 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          {/* Attendance Card */}
+          {/* Pending Payments Card */}
           <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Attendance
+                Pending Payments
               </CardTitle>
               <div className="bg-orange-500/10 p-2 rounded-lg">
-                <Calendar className="h-4 w-4 text-orange-500" />
+                <Wallet className="h-4 w-4 text-orange-500" />
               </div>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground mb-1">
-                {stats.attendance?.attendance_rate || 0}%
+                {stats.vouchers?.pending_count || 0}
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-muted-foreground">
-                  {stats.attendance?.present_days || 0} present
-                </p>
-                <p className="text-xs text-red-500">
-                  {stats.attendance?.absent_days || 0} absent
+                  Pending vouchers
                 </p>
               </div>
-              <div className="mt-2 w-full bg-muted rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    (stats.attendance?.attendance_rate || 0) >= 80 ? 'bg-green-500' :
-                    (stats.attendance?.attendance_rate || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${stats.attendance?.attendance_rate || 0}%` }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Total: {stats.attendance?.total_days || 0} days
-              </p>
+              {stats.vouchers?.upcoming_voucher && (
+                <div className="mb-2 p-2 bg-muted/50 rounded-md border border-border/50">
+                  <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Upcoming Payment:
+                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium">
+                      PKR {parseFloat(stats.vouchers.upcoming_voucher.fee_amount).toFixed(2)}
+                    </span>
+                  </div>
+                  <TaskCountdownTimer dueDate={stats.vouchers.upcoming_voucher.due_date} />
+                  <p className="text-xs text-muted-foreground mt-1 opacity-50">
+                    Due: {new Date(stats.vouchers.upcoming_voucher.due_date).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+              {!stats.vouchers?.upcoming_voucher && stats.vouchers?.pending_count > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  No upcoming payments
+                </p>
+              )}
+              {stats.vouchers?.pending_count === 0 && (
+                <p className="text-xs text-green-600 mt-2">
+                  All payments up to date
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

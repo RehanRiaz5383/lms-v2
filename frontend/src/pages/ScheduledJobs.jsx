@@ -17,7 +17,12 @@ import {
   Pause,
   Calendar,
   Settings,
+  FileText,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from 'lucide-react';
+import { Drawer } from '../components/ui/drawer';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 
@@ -36,6 +41,21 @@ const ScheduledJobs = () => {
     schedule_config: null,
     enabled: true,
     metadata: null,
+  });
+  const [showLogsDrawer, setShowLogsDrawer] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsPagination, setLogsPagination] = useState({
+    current_page: 1,
+    last_page: 1,
+    per_page: 15,
+    total: 0,
+  });
+  const [logsFilters, setLogsFilters] = useState({
+    date_from: '',
+    date_to: '',
+    status: '',
   });
 
   useEffect(() => {
@@ -144,6 +164,78 @@ const ScheduledJobs = () => {
     return labels[type] || type;
   };
 
+  const handleViewLogs = async (job) => {
+    setSelectedJob(job);
+    setShowLogsDrawer(true);
+    setLogsFilters({ date_from: '', date_to: '', status: '' });
+    setLogsPagination({ current_page: 1, last_page: 1, per_page: 15, total: 0 });
+    await loadJobLogs(job.id, 1);
+  };
+
+  const loadJobLogs = async (jobId, page = 1) => {
+    try {
+      setLoadingLogs(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        per_page: '15',
+      });
+      
+      if (logsFilters.date_from) {
+        params.append('date_from', logsFilters.date_from);
+      }
+      if (logsFilters.date_to) {
+        params.append('date_to', logsFilters.date_to);
+      }
+      if (logsFilters.status) {
+        params.append('status', logsFilters.status);
+      }
+
+      const endpoint = buildEndpoint(API_ENDPOINTS.scheduledJobs.logs, { id: jobId });
+      const response = await apiService.get(`${endpoint}?${params.toString()}`);
+      
+      setLogs(response.data.data.logs || []);
+      setLogsPagination(response.data.data.pagination || {
+        current_page: 1,
+        last_page: 1,
+        per_page: 15,
+        total: 0,
+      });
+    } catch (err) {
+      showError('Failed to load job logs');
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  const handleLogsFilterChange = (field, value) => {
+    setLogsFilters({ ...logsFilters, [field]: value });
+  };
+
+  const applyLogsFilters = async () => {
+    if (selectedJob) {
+      await loadJobLogs(selectedJob.id, 1);
+    }
+  };
+
+  const handleLogsPageChange = async (page) => {
+    if (selectedJob) {
+      await loadJobLogs(selectedJob.id, page);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'success':
+        return 'bg-green-100 text-green-800';
+      case 'failed':
+        return 'bg-red-100 text-red-800';
+      case 'running':
+        return 'bg-blue-100 text-blue-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -206,6 +298,15 @@ const ScheduledJobs = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Tooltip content="View Logs">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleViewLogs(job)}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                      </Tooltip>
                       <Tooltip content={job.enabled ? 'Disable' : 'Enable'}>
                         <Button
                           variant="ghost"
@@ -335,6 +436,162 @@ const ScheduledJobs = () => {
           </div>
         </form>
       </Dialog>
+
+      {/* Job Logs Drawer */}
+      <Drawer
+        isOpen={showLogsDrawer}
+        onClose={() => setShowLogsDrawer(false)}
+        title={selectedJob ? `Job Logs: ${selectedJob.name}` : 'Job Logs'}
+        size="80%"
+      >
+        {selectedJob && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Filters</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="date_from">From Date</Label>
+                    <Input
+                      id="date_from"
+                      type="date"
+                      value={logsFilters.date_from}
+                      onChange={(e) => handleLogsFilterChange('date_from', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="date_to">To Date</Label>
+                    <Input
+                      id="date_to"
+                      type="date"
+                      value={logsFilters.date_to}
+                      onChange={(e) => handleLogsFilterChange('date_to', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="status">Status</Label>
+                    <select
+                      id="status"
+                      value={logsFilters.status}
+                      onChange={(e) => handleLogsFilterChange('status', e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">All</option>
+                      <option value="success">Success</option>
+                      <option value="failed">Failed</option>
+                      <option value="running">Running</option>
+                    </select>
+                  </div>
+                </div>
+                <Button onClick={applyLogsFilters} className="w-full">
+                  Apply Filters
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Logs List */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  Execution Logs ({logsPagination.total})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingLogs ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : logs.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">No logs found</p>
+                ) : (
+                  <div className="space-y-4">
+                    {logs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-4 border rounded-lg space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(log.status)}`}>
+                              {log.status.toUpperCase()}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(log.started_at).toLocaleString()}
+                            </span>
+                          </div>
+                          {log.execution_time_ms && (
+                            <span className="text-xs text-muted-foreground">
+                              {log.execution_time_ms}ms
+                            </span>
+                          )}
+                        </div>
+                        {log.message && (
+                          <p className="text-sm text-foreground">{log.message}</p>
+                        )}
+                        {log.error && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+                            <strong>Error:</strong> {log.error}
+                          </div>
+                        )}
+                        {log.output && log.status === 'failed' && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-muted-foreground cursor-pointer">
+                              View Details
+                            </summary>
+                            <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40">
+                              {log.output}
+                            </pre>
+                          </details>
+                        )}
+                        {log.completed_at && (
+                          <p className="text-xs text-muted-foreground">
+                            Completed: {new Date(log.completed_at).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {logsPagination.last_page > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {logsPagination.from || 0} to {logsPagination.to || 0} of {logsPagination.total} logs
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleLogsPageChange(logsPagination.current_page - 1)}
+                        disabled={logsPagination.current_page === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Page {logsPagination.current_page} of {logsPagination.last_page}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleLogsPageChange(logsPagination.current_page + 1)}
+                        disabled={logsPagination.current_page === logsPagination.last_page}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 };

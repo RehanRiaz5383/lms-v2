@@ -8,7 +8,23 @@ const api = axios.create(API_CONFIG);
 // Request interceptor - Add auth token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = storage.getToken();
+    // Check sessionStorage first if in iframe (for impersonation), otherwise localStorage
+    let token = null;
+    if (window.self !== window.top) {
+      // We're in an iframe - check sessionStorage first
+      try {
+        const sessionToken = sessionStorage.getItem('auth_token');
+        if (sessionToken) {
+          token = JSON.parse(sessionToken);
+        }
+      } catch (err) {
+        console.error('Error reading token from sessionStorage:', err);
+      }
+    }
+    // Fallback to localStorage if not in iframe or sessionStorage doesn't have token
+    if (!token) {
+      token = storage.getToken();
+    }
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

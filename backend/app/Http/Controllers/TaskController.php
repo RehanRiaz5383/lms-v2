@@ -740,6 +740,155 @@ class TaskController extends ApiController
     }
 
     /**
+     * Upload task submission for a student (Admin/Teacher only).
+     * This allows admins to upload task files on behalf of students, even after expiry date.
+     *
+     * @param Request $request
+     * @param int $taskId
+     * @return JsonResponse
+     */
+    public function uploadStudentSubmission(Request $request, int $taskId): JsonResponse
+    {
+        try {
+            $task = Task::find($taskId);
+
+            if (!$task) {
+                return $this->notFound('Task not found');
+            }
+
+            // Validate request
+            $validator = Validator::make($request->all(), [
+                'student_id' => 'required|integer|exists:users,id',
+                'file' => 'required|file|max:10240', // 10MB max
+            ]);
+
+            if ($validator->fails()) {
+                return $this->validationError($validator->errors()->toArray());
+            }
+
+            $studentId = $request->input('student_id');
+            $file = $request->file('file');
+
+            // Verify student exists and is in the same batch as the task
+            $student = DB::table('users')->where('id', $studentId)->first();
+            if (!$student) {
+                return $this->notFound('Student not found');
+            }
+
+            // Check if student is in the task's batch
+            if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id') && $task->batch_id) {
+                $isInBatch = DB::table('user_batches')
+                    ->where(function($query) use ($studentId) {
+                        if (DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id')) {
+                            $query->where('user_id', $studentId);
+                        } else if (DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id')) {
+                            $query->where('student_id', $studentId);
+                        }
+                    })
+                    ->where('batch_id', $task->batch_id)
+                    ->exists();
+
+                if (!$isInBatch) {
+                    return $this->error('Student is not in the task\'s batch', 'Invalid student', 400);
+                }
+            }
+
+            // Handle file upload - store in submitted_tasks folder
+            $fileName = time() . '_' . $studentId . '_' . $file->getClientOriginalName();
+            $filePath = $file->storeAs('submitted_tasks', $fileName, 'public');
+
+            // Check if submission already exists
+            $submission = SubmittedTask::where('task_id', $taskId)
+                ->where('student_id', $studentId)
+                ->first();
+
+            // Check which column exists for file storage
+            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+            $fileColumn = $hasAnswerFileColumn ? 'answer_file' : ($hasFilePathColumn ? 'file_path' : null);
+
+            if ($submission) {
+                // Update existing submission
+                // Delete old file if exists
+                $oldFilePath = $hasAnswerFileColumn ? $submission->answer_file : ($hasFilePathColumn ? $submission->file_path : null);
+                if ($oldFilePath && Storage::disk('public')->exists($oldFilePath)) {
+                    Storage::disk('public')->delete($oldFilePath);
+                }
+
+                // Update the correct column
+                if ($hasAnswerFileColumn) {
+                    $submission->answer_file = $filePath;
+                } else if ($hasFilePathColumn) {
+                    $submission->file_path = $filePath;
+                }
+                
+                // Only set remarks if column exists
+                $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
+                if ($hasRemarksColumn && $request->has('remarks')) {
+                    $submission->remarks = $request->input('remarks');
+                }
+                
+                // Only set submitted_at if column exists
+                $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
+                if ($hasSubmittedAtColumn) {
+                    $submission->submitted_at = now();
+                }
+                
+                // Only set status if column exists
+                $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
+                if ($hasStatusColumn) {
+                    $submission->status = 'submitted';
+                }
+                
+                $submission->save();
+            } else {
+                // Create new submission
+                $submissionData = [
+                    'task_id' => $taskId,
+                    'student_id' => $studentId,
+                ];
+                
+                // Use answer_file if it exists, otherwise file_path
+                if ($hasAnswerFileColumn) {
+                    $submissionData['answer_file'] = $filePath;
+                } else if ($hasFilePathColumn) {
+                    $submissionData['file_path'] = $filePath;
+                }
+                
+                // Only include remarks if column exists
+                $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
+                if ($hasRemarksColumn && $request->has('remarks')) {
+                    $submissionData['remarks'] = $request->input('remarks');
+                }
+                
+                // Only include submitted_at if column exists
+                $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
+                if ($hasSubmittedAtColumn) {
+                    $submissionData['submitted_at'] = now();
+                }
+                
+                // Only include status if column exists
+                $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
+                if ($hasStatusColumn) {
+                    $submissionData['status'] = 'submitted';
+                }
+                
+                $submission = SubmittedTask::create($submissionData);
+            }
+
+            $submission->load('task');
+
+            return $this->success($submission, 'Task submission uploaded successfully for student');
+        } catch (\Exception $e) {
+            \Log::error('Error uploading student submission: ' . $e->getMessage(), [
+                'exception' => $e,
+                'task_id' => $taskId,
+            ]);
+            return $this->error($e->getMessage(), 'Failed to upload task submission', 500);
+        }
+    }
+
+    /**
      * Create notification for grade awarded/updated.
      *
      * @param SubmittedTask $submission

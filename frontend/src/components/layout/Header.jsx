@@ -4,7 +4,7 @@ import { logout } from '../../store/slices/authSlice';
 import { fetchProfile } from '../../store/slices/profileSlice';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { Menu, Moon, Sun, LogOut, User, BarChart3 } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, User, BarChart3, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
 import NotificationDropdown from '../notifications/NotificationDropdown';
@@ -93,6 +93,19 @@ const Header = ({ onMenuClick }) => {
             title="Performance Report"
           >
             <BarChart3 className="h-5 w-5" />
+          </Button>
+        )}
+
+        {/* Account Book (Students only) */}
+        {isStudent() && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/dashboard/account-book')}
+            aria-label="Account Book"
+            title="Account Book"
+          >
+            <BookOpen className="h-5 w-5" />
           </Button>
         )}
 

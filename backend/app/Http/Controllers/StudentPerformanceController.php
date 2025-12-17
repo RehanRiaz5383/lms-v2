@@ -484,7 +484,7 @@ class StudentPerformanceController extends ApiController
             // Get student picture URL
             $pictureUrl = null;
             if ($student->picture) {
-                $pictureUrl = asset('storage/' . $student->picture);
+                $pictureUrl = url('/load-storage/' . $student->picture);
             }
 
             $report = [

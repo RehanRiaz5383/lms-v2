@@ -67,7 +67,23 @@ class ScheduledJob extends Model
                 if ($this->schedule_config) {
                     $interval = $this->schedule_config['interval'] ?? 1;
                     $unit = $this->schedule_config['unit'] ?? 'day';
-                    $this->next_run_at = $now->add($unit, $interval);
+                    $time = $this->schedule_config['time'] ?? null;
+                    
+                    if ($time) {
+                        // Schedule at specific time (e.g., midnight)
+                        $nextRun = $now->copy()->add($unit, $interval);
+                        list($hour, $minute, $second) = explode(':', $time);
+                        $nextRun->setTime((int)$hour, (int)$minute, (int)$second);
+                        
+                        // If the time has passed today, schedule for tomorrow
+                        if ($nextRun->isPast()) {
+                            $nextRun->addDay();
+                        }
+                        
+                        $this->next_run_at = $nextRun;
+                    } else {
+                        $this->next_run_at = $now->add($unit, $interval);
+                    }
                 } else {
                     $this->next_run_at = $now->addDay();
                 }

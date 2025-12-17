@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
-import { restoreSession } from './store/slices/authSlice';
+import { restoreSession, impersonateLogin } from './store/slices/authSlice';
 import { ToastProvider } from './components/ui/toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import BlockedRoute from './components/BlockedRoute';
@@ -21,18 +21,91 @@ import BatchExplore from './pages/BatchExplore';
 import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
 import ScheduledJobs from './pages/ScheduledJobs';
+import AccountBook from './pages/AccountBook';
 import DashboardLayout from './components/layout/DashboardLayout';
 
-function App() {
+// Inner component to handle message listener
+function AppContent() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     // Restore session from localStorage on app load
     store.dispatch(restoreSession());
-  }, []);
+
+    // Listen for impersonation token from parent window
+    const handleMessage = (event) => {
+      // Security: Only accept messages from same origin
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+
+      if (event.data?.type === 'IMPERSONATE_LOGIN' && event.data?.token) {
+        // Use user data from message if available, otherwise fetch from API
+        const loginWithToken = async () => {
+          try {
+            let user = event.data.user;
+            
+            // If user data not provided, fetch it from API
+            if (!user) {
+              const { apiService } = await import('./services/api');
+              const { API_ENDPOINTS } = await import('./config/api');
+              
+              // Set token temporarily to make authenticated request
+              const { storage } = await import('./utils/storage');
+              storage.setToken(event.data.token);
+              
+              // Get user data
+              const response = await apiService.get(API_ENDPOINTS.auth.me);
+              user = response.data?.data;
+            }
+            
+            if (user) {
+              // Dispatch impersonation login
+              store.dispatch(impersonateLogin({
+                token: event.data.token,
+                user: user,
+              }));
+              
+              // Navigate to dashboard
+              navigate('/dashboard');
+            }
+          } catch (error) {
+            console.error('Error during impersonation login:', error);
+          }
+        };
+        
+        loginWithToken();
+      } else if (event.data?.type === 'CLEAR_IMPERSONATION') {
+        // Clear impersonation session when modal closes
+        // Clear both sessionStorage and localStorage to prevent impersonation token from persisting
+        try {
+          sessionStorage.removeItem('auth_token');
+          sessionStorage.removeItem('user_data');
+        } catch (err) {
+          console.error('Error clearing sessionStorage:', err);
+        }
+        const { storage } = require('./utils/storage');
+        storage.clearAuth();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, [navigate]);
+
+  return null;
+}
+
+function App() {
 
   return (
     <Provider store={store}>
       <ToastProvider>
         <BrowserRouter>
+          <AppContent />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route
@@ -112,6 +185,11 @@ function App() {
             <Route path="performance-report" element={
               <BlockedRoute>
                 <StudentPerformanceReportPage />
+              </BlockedRoute>
+            } />
+            <Route path="account-book" element={
+              <BlockedRoute>
+                <AccountBook />
               </BlockedRoute>
             } />
             <Route path="quizzes" element={

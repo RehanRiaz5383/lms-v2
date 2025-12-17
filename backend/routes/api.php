@@ -16,6 +16,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VideoController;
 use App\Http\Controllers\StudentPerformanceController;
 use App\Http\Controllers\ScheduledJobController;
+use App\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -53,6 +54,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/tasks/{id}', [StudentTaskController::class, 'show']);
         Route::post('/tasks/{id}/submit', [StudentTaskController::class, 'submit']);
         Route::get('/tasks/submissions', [StudentTaskController::class, 'submissions']);
+        Route::get('/vouchers', [VoucherController::class, 'getMyVouchers']);
+        Route::post('/vouchers/{id}/submit-payment', [VoucherController::class, 'submitPayment']);
     });
 
     // Profile routes (all authenticated users)
@@ -76,6 +79,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}/available-batches', [UserController::class, 'getAvailableBatches']);
         Route::post('/{id}/assign-roles', [UserController::class, 'assignRoles']);
         Route::get('/{id}/available-roles', [UserController::class, 'getAvailableRoles']);
+        Route::post('/{id}/impersonate', [UserController::class, 'impersonate']);
+        Route::put('/{id}/fee', [VoucherController::class, 'updateStudentFee']);
+        Route::get('/{id}/vouchers', [VoucherController::class, 'getStudentVouchers']);
+        Route::post('/{id}/vouchers', [VoucherController::class, 'createVoucher']);
     });
 
     // Performance Report - accessible by students (own report) and admins (any report)
@@ -87,6 +94,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [ScheduledJobController::class, 'store']);
         Route::put('/{id}', [ScheduledJobController::class, 'update']);
         Route::delete('/{id}', [ScheduledJobController::class, 'destroy']);
+        Route::get('/{id}/logs', [ScheduledJobController::class, 'getJobLogs']);
+    });
+
+    // Vouchers Management
+    Route::middleware('admin')->prefix('vouchers')->group(function () {
+        Route::post('/generate', [VoucherController::class, 'generateVouchers']); // Test endpoint for manual voucher generation
+        Route::post('/{id}/approve', [VoucherController::class, 'approveVoucher']);
+        Route::post('/{id}/reject', [VoucherController::class, 'rejectVoucher']);
+        Route::delete('/{id}', [VoucherController::class, 'deleteVoucher']);
     });
 
     // Student update routes (for CR/Teacher - limited access)
@@ -139,6 +155,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [TaskController::class, 'destroy']);
         Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
         Route::post('/{taskId}/submissions/{submissionId}/grade', [TaskController::class, 'gradeSubmission']);
+        Route::post('/{taskId}/upload-student-submission', [TaskController::class, 'uploadStudentSubmission']);
     });
 
     // Notifications

@@ -14,7 +14,7 @@ import { Label } from '../components/ui/label';
 import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
-import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 const BatchExplore = () => {
@@ -42,10 +42,13 @@ const BatchExplore = () => {
   const [showEditTaskDrawer, setShowEditTaskDrawer] = useState(false);
   const [showSubmissionsDialog, setShowSubmissionsDialog] = useState(false);
   const [showGradeDialog, setShowGradeDialog] = useState(false);
+  const [showUploadSubmissionDrawer, setShowUploadSubmissionDrawer] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const [studentFiles, setStudentFiles] = useState({}); // { studentId: File }
+  const [uploadingForStudent, setUploadingForStudent] = useState(null);
   const [showStudents, setShowStudents] = useState(false);
   const [showStudentEditDrawer, setShowStudentEditDrawer] = useState(false);
   const [showBlockDialog, setShowBlockDialog] = useState(false);
@@ -325,6 +328,58 @@ const BatchExplore = () => {
       setSubmissions(response.data.data || []);
     } catch (err) {
       showError(err.response?.data?.message || 'Failed to grade submission');
+    }
+  };
+
+  const handleUploadStudentSubmission = async (task) => {
+    setSelectedTask(task);
+    setShowUploadSubmissionDrawer(true);
+    setStudentFiles({});
+    // Load students if not already loaded
+    if (students.length === 0) {
+      await loadStudents();
+    }
+  };
+
+  const handleStudentFileChange = (studentId, file) => {
+    setStudentFiles(prev => ({
+      ...prev,
+      [studentId]: file,
+    }));
+  };
+
+  const handleUploadSubmissionForStudent = async (studentId) => {
+    const file = studentFiles[studentId];
+    if (!file) {
+      showError('Please select a file to upload');
+      return;
+    }
+
+    try {
+      setUploadingForStudent(studentId);
+      const formData = new FormData();
+      formData.append('student_id', studentId);
+      formData.append('file', file);
+
+      const endpoint = API_ENDPOINTS.tasks.uploadStudentSubmission.replace(':taskId', selectedTask.id);
+      await apiService.post(endpoint, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      success(`Task submission uploaded successfully for ${students.find(s => s.id === studentId)?.name || 'student'}`);
+      
+      // Remove file from state
+      setStudentFiles(prev => {
+        const newFiles = { ...prev };
+        delete newFiles[studentId];
+        return newFiles;
+      });
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to upload submission');
+    } finally {
+      setUploadingForStudent(null);
     }
   };
 
@@ -1135,6 +1190,14 @@ const BatchExplore = () => {
                           >
                             <Eye className="h-4 w-4 mr-2" />
                             View Submissions
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUploadStudentSubmission(task)}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Upload Student Submission
                           </Button>
                           <Button
                             variant="outline"
@@ -2152,6 +2215,121 @@ const BatchExplore = () => {
           </form>
         )}
       </Dialog>
+
+      {/* Upload Student Submission Drawer */}
+      <Drawer
+        isOpen={showUploadSubmissionDrawer}
+        onClose={() => {
+          setShowUploadSubmissionDrawer(false);
+          setSelectedTask(null);
+          setStudentFiles({});
+          setUploadingForStudent(null);
+        }}
+        title={selectedTask ? `Upload Submission - ${selectedTask.title}` : 'Upload Student Submission'}
+        size="lg"
+      >
+        {selectedTask && (
+          <div className="space-y-4">
+            <div className="mb-4 p-3 bg-muted rounded-lg">
+              <p className="text-sm text-muted-foreground">
+                Upload task files on behalf of students. This is useful when the expiry date has passed and students request admin assistance.
+              </p>
+            </div>
+
+            {loadingStudents ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : students.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No students found in this batch</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {students
+                  .filter(student => {
+                    // Filter by search term if provided
+                    if (studentSearch) {
+                      const searchLower = studentSearch.toLowerCase();
+                      return (
+                        student.name?.toLowerCase().includes(searchLower) ||
+                        student.email?.toLowerCase().includes(searchLower) ||
+                        student.first_name?.toLowerCase().includes(searchLower) ||
+                        student.last_name?.toLowerCase().includes(searchLower)
+                      );
+                    }
+                    // Filter by block status
+                    if (studentBlockFilter !== null && studentBlockFilter !== undefined) {
+                      return Number(student.block) === studentBlockFilter;
+                    }
+                    return true;
+                  })
+                  .map((student) => (
+                    <div
+                      key={student.id}
+                      className="p-4 border border-border rounded-lg space-y-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {student.picture_url && (
+                            <img
+                              src={normalizeStorageUrl(student.picture_url)}
+                              alt={student.name}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                          )}
+                          <div>
+                            <p className="font-medium text-foreground">
+                              {student.name || `${student.first_name || ''} ${student.last_name || ''}`.trim() || student.email}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{student.email}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="*/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              handleStudentFileChange(student.id, file);
+                            }
+                          }}
+                          className="flex-1"
+                          disabled={uploadingForStudent === student.id}
+                        />
+                        <Button
+                          onClick={() => handleUploadSubmissionForStudent(student.id)}
+                          disabled={!studentFiles[student.id] || uploadingForStudent === student.id}
+                          size="sm"
+                        >
+                          {uploadingForStudent === student.id ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      {studentFiles[student.id] && (
+                        <p className="text-xs text-muted-foreground">
+                          Selected: {studentFiles[student.id].name}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 };

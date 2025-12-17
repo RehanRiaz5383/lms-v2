@@ -46,7 +46,7 @@ class AuthController extends ApiController
         // Load user type and roles relationships
         $user->load('userType', 'roles');
 
-        // Dispatch event for all user types
+        // Dispatch event for all user types (only once)
         event(new StudentLogin($user));
 
         // Add picture URL if available
@@ -88,7 +88,7 @@ class AuthController extends ApiController
         $user = $request->user();
         $user->load('roles');
         
-        // Dispatch event for all user types
+        // Dispatch event for all user types (only once)
         event(new StudentLogout($user));
 
         // Revoke the current access token

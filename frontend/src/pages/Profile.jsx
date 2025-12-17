@@ -489,7 +489,7 @@ const Profile = () => {
                     disabled={isUploading}
                   />
                   <p className="text-xs text-muted-foreground">
-                    JPG, PNG or GIF. Max size 2MB
+                    JPG, PNG, GIF or WebP. Max size 2MB
                   </p>
                 </div>
                 {isUploading && (

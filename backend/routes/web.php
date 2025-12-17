@@ -359,11 +359,26 @@ Route::get('/upgrade-db', function () {
 
             // Run ScheduledJobSeeder if scheduled_jobs table exists
             if (\Schema::hasTable('scheduled_jobs')) {
-                $taskReminderJobExists = \DB::table('scheduled_jobs')
-                    ->where('job_class', 'TaskReminderJob')
-                    ->exists();
+                // Check for all expected jobs
+                $expectedJobs = [
+                    'TaskReminderJob',
+                    'VoucherGenerationJob',
+                    'VoucherOverdueNotificationJob',
+                    'VoucherAutoBlockJob',
+                ];
                 
-                if (!$taskReminderJobExists) {
+                $missingJobs = [];
+                foreach ($expectedJobs as $jobClass) {
+                    $exists = \DB::table('scheduled_jobs')
+                        ->where('job_class', $jobClass)
+                        ->exists();
+                    if (!$exists) {
+                        $missingJobs[] = $jobClass;
+                    }
+                }
+                
+                // Run seeder if any jobs are missing (firstOrCreate will only create missing ones)
+                if (!empty($missingJobs)) {
                     \Artisan::call('db:seed', [
                         '--class' => 'ScheduledJobSeeder',
                         '--force' => true,
@@ -371,7 +386,7 @@ Route::get('/upgrade-db', function () {
                     $seederResults[] = [
                         'seeder' => 'ScheduledJobSeeder',
                         'success' => true,
-                        'message' => 'Task Reminder job added',
+                        'message' => 'Missing scheduled jobs added: ' . implode(', ', $missingJobs),
                     ];
                 }
             }

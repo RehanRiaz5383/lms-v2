@@ -3,7 +3,7 @@ import { X, Download, Printer, Loader2, User, Mail, Phone, Calendar } from 'luci
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { apiService } from '../../services/api';
-import { API_ENDPOINTS } from '../../config/api';
+import { API_ENDPOINTS, normalizeStorageUrl } from '../../config/api';
 import { useToast } from '../ui/toast';
 
 const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = false }) => {
@@ -24,7 +24,12 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
       const response = await apiService.get(
         API_ENDPOINTS.users.performanceReport.replace(':id', student.id)
       );
-      setReport(response.data.data);
+      const reportData = response.data.data;
+      // Normalize picture URL to ensure it uses /load-storage/ instead of /storage/
+      if (reportData?.student?.picture_url) {
+        reportData.student.picture_url = normalizeStorageUrl(reportData.student.picture_url);
+      }
+      setReport(reportData);
     } catch (err) {
       showError('Failed to load performance report');
       if (onClose) {

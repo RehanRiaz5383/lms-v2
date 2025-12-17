@@ -215,7 +215,7 @@ class UserController extends ApiController
             
             // Only validate picture if it's being uploaded
             if ($request->hasFile('picture')) {
-                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif|max:2048'; // 2MB max
+                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048'; // 2MB max
             }
             
             $validated = $request->validate($validationRules);
@@ -368,7 +368,7 @@ class UserController extends ApiController
             
             // Only validate picture if it's being uploaded
             if ($request->hasFile('picture')) {
-                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif|max:2048'; // 2MB max
+                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048'; // 2MB max
             }
             
             $validated = $request->validate($validationRules);
@@ -787,6 +787,61 @@ class UserController extends ApiController
             'roles' => $roles,
             'assigned_ids' => $assignedRoleIds,
         ], 'Roles retrieved successfully');
+    }
+
+    /**
+     * Generate an impersonation token for a user (admin only).
+     * This allows admins to login as another user without knowing their password.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function impersonate(Request $request, int $id): JsonResponse
+    {
+        $targetUser = User::find($id);
+
+        if (!$targetUser) {
+            return $this->notFound('User not found');
+        }
+
+        // Check if user is blocked
+        if ($targetUser->block == 1) {
+            return $this->error('Cannot impersonate a blocked user', 403);
+        }
+
+        // Load user type and roles relationships
+        $targetUser->load('userType', 'roles');
+
+        // Create an impersonation token (marked with 'impersonate' prefix)
+        $token = $targetUser->createToken('impersonate-token')->plainTextToken;
+
+        // Add picture URL if available
+        $pictureUrl = null;
+        if ($targetUser->picture) {
+            $pictureUrl = url('/load-storage/' . $targetUser->picture);
+        }
+
+        return $this->success([
+            'user' => [
+                'id' => $targetUser->id,
+                'name' => $targetUser->name,
+                'email' => $targetUser->email,
+                'user_type' => $targetUser->user_type,
+                'user_type_title' => $targetUser->userType?->title ?? null,
+                'picture' => $targetUser->picture,
+                'picture_url' => $pictureUrl,
+                'block' => $targetUser->block ?? 0,
+                'block_reason' => $targetUser->block_reason,
+                'roles' => $targetUser->roles->map(function($role) {
+                    return [
+                        'id' => $role->id,
+                        'title' => $role->title,
+                    ];
+                }),
+            ],
+            'token' => $token,
+        ], 'Impersonation token generated successfully');
     }
 }
 

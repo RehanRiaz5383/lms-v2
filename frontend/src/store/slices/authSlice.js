@@ -75,8 +75,26 @@ const authSlice = createSlice({
       state.error = null;
     },
     restoreSession: (state) => {
-      const token = storage.getToken();
-      const user = storage.getUser();
+      // Check sessionStorage first if in iframe (for impersonation), otherwise localStorage
+      let token, user;
+      if (window.self !== window.top) {
+        // We're in an iframe - check sessionStorage first
+        try {
+          const sessionToken = sessionStorage.getItem('auth_token');
+          const sessionUser = sessionStorage.getItem('user_data');
+          if (sessionToken && sessionUser) {
+            token = JSON.parse(sessionToken);
+            user = JSON.parse(sessionUser);
+          }
+        } catch (err) {
+          console.error('Error reading from sessionStorage:', err);
+        }
+      }
+      // Fallback to localStorage if not in iframe or sessionStorage doesn't have data
+      if (!token || !user) {
+        token = storage.getToken();
+        user = storage.getUser();
+      }
       // Normalize picture_url if present (in case old data is in localStorage)
       if (user?.picture_url) {
         user.picture_url = normalizeStorageUrl(user.picture_url);
@@ -128,6 +146,38 @@ const authSlice = createSlice({
       }
       if (action.payload) {
         storage.setUser(state.user);
+      }
+    },
+    impersonateLogin: (state, action) => {
+      // Handle impersonation login with token and user data
+      const { token, user } = action.payload;
+      if (token && user) {
+        // Normalize picture_url if present
+        if (user.picture_url) {
+          user.picture_url = normalizeStorageUrl(user.picture_url);
+        }
+        state.token = token;
+        state.user = user;
+        state.isAuthenticated = true;
+        state.error = null;
+        // Store in sessionStorage if in iframe (impersonation), otherwise localStorage
+        // This prevents impersonation token from overwriting admin's localStorage
+        if (window.self !== window.top) {
+          // We're in an iframe - use sessionStorage for impersonation
+          try {
+            sessionStorage.setItem('auth_token', JSON.stringify(token));
+            sessionStorage.setItem('user_data', JSON.stringify(user));
+          } catch (err) {
+            console.error('Error storing in sessionStorage:', err);
+            // Fallback to localStorage if sessionStorage fails
+            storage.setToken(token);
+            storage.setUser(user);
+          }
+        } else {
+          // Not in iframe - use localStorage normally
+          storage.setToken(token);
+          storage.setUser(user);
+        }
       }
     },
   },
@@ -195,6 +245,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, restoreSession, clearAuth, updateUserPicture, setUser } = authSlice.actions;
+export const { clearError, restoreSession, clearAuth, updateUserPicture, setUser, impersonateLogin } = authSlice.actions;
 export default authSlice.reducer;
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use App\Models\Voucher;
 
 class StudentDashboardController extends ApiController
 {
@@ -259,6 +260,36 @@ class StudentDashboardController extends ApiController
                 ->count();
         }
 
+        // Vouchers Statistics
+        $pendingVouchersCount = 0;
+        $upcomingVoucher = null;
+        
+        try {
+            if (DB::getSchemaBuilder()->hasTable('vouchers')) {
+                // Count pending vouchers
+                $pendingVouchersCount = Voucher::where('student_id', $userId)
+                    ->where('status', 'pending')
+                    ->count();
+
+                // Get upcoming voucher (pending voucher with nearest due date)
+                $upcomingVoucherQuery = Voucher::where('student_id', $userId)
+                    ->where('status', 'pending')
+                    ->where('due_date', '>=', now()->format('Y-m-d'))
+                    ->orderBy('due_date', 'asc')
+                    ->first();
+
+                if ($upcomingVoucherQuery) {
+                    $upcomingVoucher = [
+                        'id' => $upcomingVoucherQuery->id,
+                        'fee_amount' => $upcomingVoucherQuery->fee_amount,
+                        'due_date' => $upcomingVoucherQuery->due_date,
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            // Table might not exist
+        }
+
         // Recent Activity
         $recentTasks = collect([]);
         $recentQuizzes = collect([]);
@@ -372,6 +403,10 @@ class StudentDashboardController extends ApiController
             ],
             'videos' => [
                 'total' => $totalVideos,
+            ],
+            'vouchers' => [
+                'pending_count' => $pendingVouchersCount,
+                'upcoming_voucher' => $upcomingVoucher,
             ],
             'performance' => [
                 'overall_average' => $overallAverage,

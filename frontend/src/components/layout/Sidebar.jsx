@@ -31,6 +31,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
   const [expandedMenus, setExpandedMenus] = useState([]); // Start with all collapsed
   const [pendingTasksCount, setPendingTasksCount] = useState(0);
+  const [pendingVouchersCount, setPendingVouchersCount] = useState(0);
 
   // Get user roles - prioritize user_roles table, use user_type only for backward compatibility
   const getUserRoles = () => {
@@ -300,6 +301,27 @@ const Sidebar = ({ isOpen, onClose }) => {
     }
   }, [hasStudentRole]);
 
+  // Fetch pending vouchers count for students
+  useEffect(() => {
+    if (hasStudentRole) {
+      const fetchPendingVouchersCount = async () => {
+        try {
+          const response = await apiService.get(API_ENDPOINTS.student.vouchers.list);
+          const vouchers = response.data.data || [];
+          const pendingCount = vouchers.filter(v => v.status === 'pending').length;
+          setPendingVouchersCount(pendingCount);
+        } catch (err) {
+          // Silently fail - don't show error for badge count
+          setPendingVouchersCount(0);
+        }
+      };
+      fetchPendingVouchersCount();
+      // Refresh count every 30 seconds
+      const interval = setInterval(fetchPendingVouchersCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [hasStudentRole]);
+
   const menuGroups = buildMenuItems();
   
   // Helper to render menu items (avoid duplicates like Dashboard)
@@ -375,7 +397,15 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       // Handle regular menu items
       const isActive = location.pathname === item.path;
-      const showBadge = item.path === '/dashboard/tasks' && hasStudentRole && pendingTasksCount > 0;
+      
+      // Get badge count for specific items
+      let badgeCount = null;
+      if (item.path === '/dashboard/tasks' && hasStudentRole && pendingTasksCount > 0) {
+        badgeCount = pendingTasksCount;
+      } else if (item.path === '/dashboard/account-book' && hasStudentRole && pendingVouchersCount > 0) {
+        badgeCount = pendingVouchersCount;
+      }
+      const showBadge = badgeCount !== null && badgeCount > 0;
 
       return (
         <Link
@@ -393,7 +423,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           <span className="flex-1">{item.title}</span>
           {showBadge && (
             <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-semibold text-white bg-red-500 rounded-full">
-              {pendingTasksCount > 99 ? '99+' : pendingTasksCount}
+              {badgeCount > 99 ? '99+' : badgeCount}
             </span>
           )}
         </Link>

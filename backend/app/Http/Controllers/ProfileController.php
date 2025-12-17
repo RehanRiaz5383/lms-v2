@@ -80,7 +80,7 @@ class ProfileController extends ApiController
             
             // Only validate picture if it's being uploaded
             if ($request->hasFile('picture')) {
-                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif|max:2048'; // 2MB max
+                $validationRules['picture'] = 'required|image|mimes:jpeg,png,jpg,gif,webp|max:2048'; // 2MB max
             }
             
             $validated = $request->validate($validationRules);

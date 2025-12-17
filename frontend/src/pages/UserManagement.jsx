@@ -26,6 +26,9 @@ import { DateRangePicker } from '../components/ui/date-range-picker';
 import { Select } from '../components/ui/select';
 import { cn } from '../utils/cn';
 import StudentPerformanceReport from '../components/reports/StudentPerformanceReport';
+import ImpersonateModal from '../components/ImpersonateModal';
+import { apiService } from '../services/api';
+import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 import {
   Plus,
   Search,
@@ -37,6 +40,11 @@ import {
   Layers,
   UserCog,
   FileText,
+  LogIn,
+  DollarSign,
+  Check,
+  X,
+  Eye,
 } from 'lucide-react';
 import { debounce } from '../utils/debounce';
 
@@ -66,7 +74,20 @@ const UserManagement = () => {
   const [showPerformanceReport, setShowPerformanceReport] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedUsers, setSelectedUsers] = useState([]);
+  const [showImpersonateModal, setShowImpersonateModal] = useState(false);
+  const [userToImpersonate, setUserToImpersonate] = useState(null);
   const [selectAll, setSelectAll] = useState(false);
+  const [showSetFeeDrawer, setShowSetFeeDrawer] = useState(false);
+  const [studentForFee, setStudentForFee] = useState(null);
+  const [feeAmount, setFeeAmount] = useState('');
+  const [promiseDate, setPromiseDate] = useState('');
+  const [vouchers, setVouchers] = useState([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [savingFee, setSavingFee] = useState(false);
+  const [manualVoucherAmount, setManualVoucherAmount] = useState('');
+  const [manualVoucherDescription, setManualVoucherDescription] = useState('');
+  const [manualVoucherDueDate, setManualVoucherDueDate] = useState('');
+  const [creatingVoucher, setCreatingVoucher] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -489,6 +510,120 @@ const UserManagement = () => {
     setShowPerformanceReport(true);
   };
 
+  const handleImpersonate = (user) => {
+    setUserToImpersonate(user);
+    setShowImpersonateModal(true);
+  };
+
+  const handleSetFee = async (user) => {
+    setStudentForFee(user);
+    setFeeAmount(user.fees || '');
+    setPromiseDate(user.expected_fee_promise_date || '');
+    setShowSetFeeDrawer(true);
+    await loadVouchers(user.id);
+  };
+
+  const loadVouchers = async (studentId) => {
+    setLoadingVouchers(true);
+    try {
+      const response = await apiService.get(
+        API_ENDPOINTS.users.vouchers.replace(':id', studentId)
+      );
+      setVouchers(response.data.data || []);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to load vouchers');
+    } finally {
+      setLoadingVouchers(false);
+    }
+  };
+
+  const handleSaveFee = async () => {
+    if (!studentForFee) return;
+    
+    if (!feeAmount || !promiseDate) {
+      showError('Please fill in all fields');
+      return;
+    }
+
+    setSavingFee(true);
+    try {
+      await apiService.put(
+        API_ENDPOINTS.users.updateFee.replace(':id', studentForFee.id),
+        {
+          fee_amount: parseFloat(feeAmount),
+          promise_date: parseInt(promiseDate),
+        }
+      );
+      success('Fee updated successfully');
+      dispatch(fetchUsers(filters));
+      await loadVouchers(studentForFee.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to update fee');
+    } finally {
+      setSavingFee(false);
+    }
+  };
+
+  const handleDeleteVoucher = async (voucherId) => {
+    if (!confirm('Are you sure you want to delete this voucher? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.delete, { id: voucherId });
+      await apiService.delete(endpoint);
+      success('Voucher deleted successfully');
+      // Refresh vouchers list
+      if (studentForFee) {
+        handleSetFee(studentForFee);
+      }
+    } catch (error) {
+      showError(error.response?.data?.message || 'Failed to delete voucher');
+    }
+  };
+
+  const handleApproveVoucher = async (voucherId) => {
+    try {
+      await apiService.post(
+        API_ENDPOINTS.vouchers.approve.replace(':id', voucherId)
+      );
+      success('Voucher approved successfully');
+      await loadVouchers(studentForFee.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to approve voucher');
+    }
+  };
+
+  const handleCreateVoucher = async () => {
+    if (!studentForFee) return;
+    
+    if (!manualVoucherAmount || !manualVoucherDueDate) {
+      showError('Please fill in amount and due date');
+      return;
+    }
+
+    setCreatingVoucher(true);
+    try {
+      await apiService.post(
+        API_ENDPOINTS.users.createVoucher.replace(':id', studentForFee.id),
+        {
+          fee_amount: parseFloat(manualVoucherAmount),
+          description: manualVoucherDescription || 'Fee Voucher',
+          due_date: manualVoucherDueDate,
+        }
+      );
+      success('Voucher created successfully');
+      setManualVoucherAmount('');
+      setManualVoucherDescription('');
+      setManualVoucherDueDate('');
+      await loadVouchers(studentForFee.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to create voucher');
+    } finally {
+      setCreatingVoucher(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -719,6 +854,30 @@ const UserManagement = () => {
                                     onClick={() => handleViewPerformanceReport(user)}
                                   >
                                     <FileText className="h-4 w-4" />
+                                  </Button>
+                                </Tooltip>
+                              )}
+                              {/* Show Set Fee button only for students */}
+                              {isStudent && (
+                                <Tooltip content="Set Fee">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleSetFee(user)}
+                                  >
+                                    <DollarSign className="h-4 w-4" />
+                                  </Button>
+                                </Tooltip>
+                              )}
+                              {/* Login as User button - available for all users except current user */}
+                              {user.id !== currentUser?.id && (
+                                <Tooltip content="Login as User">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleImpersonate(user)}
+                                  >
+                                    <LogIn className="h-4 w-4" />
                                   </Button>
                                 </Tooltip>
                               )}
@@ -1105,6 +1264,253 @@ const UserManagement = () => {
           }}
         />
       )}
+
+      {/* Impersonate Modal */}
+      {showImpersonateModal && userToImpersonate && (
+        <ImpersonateModal
+          isOpen={showImpersonateModal}
+          onClose={() => {
+            setShowImpersonateModal(false);
+            setUserToImpersonate(null);
+          }}
+          userId={userToImpersonate.id}
+          userName={userToImpersonate.name}
+        />
+      )}
+
+      {/* Set Fee Drawer */}
+      <Drawer
+        isOpen={showSetFeeDrawer}
+        onClose={() => {
+          setShowSetFeeDrawer(false);
+          setStudentForFee(null);
+          setFeeAmount('');
+          setPromiseDate('');
+          setVouchers([]);
+          setManualVoucherAmount('');
+          setManualVoucherDescription('');
+          setManualVoucherDueDate('');
+        }}
+        title={`Set Fee - ${studentForFee?.name || ''}`}
+        size="50%"
+      >
+        <div className="space-y-6">
+          {/* Fee Form */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Fee Configuration</CardTitle>
+              <CardDescription>Set fee amount and promise date for this student</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="feeAmount">Fee Amount *</Label>
+                <Input
+                  id="feeAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={feeAmount}
+                  onChange={(e) => setFeeAmount(e.target.value)}
+                  placeholder="Enter fee amount"
+                />
+              </div>
+              <div>
+                <Label htmlFor="promiseDate">Promise Date (Day of Month) *</Label>
+                <Input
+                  id="promiseDate"
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={promiseDate}
+                  onChange={(e) => setPromiseDate(e.target.value)}
+                  placeholder="Enter day of month (1-31)"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  The day of the month when the student promises to pay (e.g., 17 for 17th of every month)
+                </p>
+              </div>
+              <Button
+                onClick={handleSaveFee}
+                disabled={savingFee || !feeAmount || !promiseDate}
+                className="w-full"
+              >
+                {savingFee ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Manual Voucher Generation */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Generate Voucher</CardTitle>
+              <CardDescription>Manually create a voucher for fines or additional transactions</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="manualVoucherAmount">Amount (PKR) *</Label>
+                <Input
+                  id="manualVoucherAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={manualVoucherAmount}
+                  onChange={(e) => setManualVoucherAmount(e.target.value)}
+                  placeholder="Enter amount"
+                />
+              </div>
+              <div>
+                <Label htmlFor="manualVoucherDescription">Description</Label>
+                <Input
+                  id="manualVoucherDescription"
+                  type="text"
+                  value={manualVoucherDescription}
+                  onChange={(e) => setManualVoucherDescription(e.target.value)}
+                  placeholder="Fee Voucher (default)"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave empty to use default "Fee Voucher"
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="manualVoucherDueDate">Due Date *</Label>
+                <Input
+                  id="manualVoucherDueDate"
+                  type="date"
+                  value={manualVoucherDueDate}
+                  onChange={(e) => setManualVoucherDueDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+              <Button
+                onClick={handleCreateVoucher}
+                disabled={creatingVoucher || !manualVoucherAmount || !manualVoucherDueDate}
+                className="w-full"
+                variant="outline"
+              >
+                {creatingVoucher ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Generate Voucher
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Vouchers Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Vouchers</CardTitle>
+              <CardDescription>Generated vouchers for this student</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingVouchers ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+              ) : vouchers.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No vouchers found</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2">Description</th>
+                        <th className="text-left p-2">Due Date</th>
+                        <th className="text-left p-2">Amount</th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-left p-2">Submitted</th>
+                        <th className="text-left p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vouchers.map((voucher) => (
+                        <tr key={voucher.id} className="border-b">
+                          <td className="p-2">
+                            <span className="text-sm font-medium">{voucher.description || 'Fee Voucher'}</span>
+                          </td>
+                          <td className="p-2">
+                            {new Date(voucher.due_date).toLocaleDateString()}
+                          </td>
+                          <td className="p-2">PKR {parseFloat(voucher.fee_amount).toFixed(2)}</td>
+                          <td className="p-2">
+                            <span
+                              className={cn(
+                                'px-2 py-1 rounded text-xs',
+                                voucher.status === 'approved'
+                                  ? 'bg-green-100 text-green-800'
+                                  : voucher.status === 'submitted'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : voucher.status === 'rejected'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              )}
+                            >
+                              {voucher.status.charAt(0).toUpperCase() + voucher.status.slice(1)}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            {voucher.submission_file ? (
+                              <a
+                                href={voucher.submission_file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" />
+                                View File
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">Not submitted</span>
+                            )}
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center gap-2">
+                              {voucher.status === 'submitted' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleApproveVoucher(voucher.id)}
+                                >
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Approve
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteVoucher(voucher.id)}
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </Drawer>
     </div>
   );
 };
