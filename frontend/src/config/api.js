@@ -111,6 +111,7 @@ export const API_ENDPOINTS = {
     update: '/scheduled-jobs/:id',
     delete: '/scheduled-jobs/:id',
     logs: '/scheduled-jobs/:id/logs',
+    clearLogs: '/scheduled-jobs/:id/logs',
   },
   
   // User Management (Admin only)
@@ -133,13 +134,16 @@ export const API_ENDPOINTS = {
     updateFee: '/users/:id/fee',
     vouchers: '/users/:id/vouchers',
     createVoucher: '/users/:id/vouchers',
+    sendNotification: '/users/:id/send-notification',
   },
   
   // Vouchers Management
   vouchers: {
+    list: '/vouchers',
     generate: '/vouchers/generate',
     approve: '/vouchers/:id/approve',
     reject: '/vouchers/:id/reject',
+    notify: '/vouchers/:id/notify',
     delete: '/vouchers/:id',
   },
   

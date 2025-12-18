@@ -8,6 +8,7 @@ use App\Events\UserUpdated;
 use App\Models\User;
 use App\Models\UserType;
 use App\Models\Batch;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +77,10 @@ class UserController extends ApiController
             }
             $user->setAttribute('roles_titles', $rolesTitles);
             $user->setAttribute('roles_display', implode(', ', $rolesTitles));
+            // Set picture_url if picture exists
+            if ($user->picture) {
+                $user->setAttribute('picture_url', url('/load-storage/' . $user->picture));
+            }
             return $user;
         });
 
@@ -842,6 +847,52 @@ class UserController extends ApiController
             ],
             'token' => $token,
         ], 'Impersonation token generated successfully');
+    }
+
+    /**
+     * Send a notification to a specific user (admin only).
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function sendNotification(Request $request, int $id): JsonResponse
+    {
+        try {
+            $targetUser = User::find($id);
+
+            if (!$targetUser) {
+                return $this->notFound('User not found');
+            }
+
+            $validated = $request->validate([
+                'title' => 'required|string|max:255',
+                'message' => 'required|string|max:5000',
+            ]);
+
+            // Use the generic notification creation method
+            $created = Notification::createNotification(
+                $targetUser->id,
+                'admin_notification',
+                $validated['title'],
+                $validated['message'],
+                [
+                    'sent_by' => auth()->id(),
+                    'sent_at' => now()->toDateTimeString(),
+                ]
+            );
+
+            if (!$created) {
+                return $this->error('Failed to create notification', 'Notification error', 500);
+            }
+
+            return $this->success(null, 'Notification sent successfully');
+        } catch (ValidationException $e) {
+            return $this->validationError($e->errors(), 'Validation failed');
+        } catch (\Exception $e) {
+            \Log::error('Failed to send notification: ' . $e->getMessage());
+            return $this->error($e->getMessage(), 'Failed to send notification', 500);
+        }
     }
 }
 

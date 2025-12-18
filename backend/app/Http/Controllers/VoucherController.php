@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Voucher;
 use App\Models\User;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -221,9 +222,10 @@ class VoucherController extends ApiController
                 return $this->notFound('Voucher not found');
             }
 
-            // Check if voucher is submitted
-            if ($voucher->status !== 'submitted') {
-                return $this->error('Voucher must be submitted before approval', 'Invalid status', 400);
+            // Allow approval for both 'submitted' and 'pending' vouchers
+            // Admin can approve even if student hasn't uploaded payment proof (face-to-face payment)
+            if (!in_array($voucher->status, ['submitted', 'pending'])) {
+                return $this->error('Voucher must be pending or submitted before approval', 'Invalid status', 400);
             }
 
             $voucher->status = 'approved';
@@ -235,6 +237,26 @@ class VoucherController extends ApiController
             }
             
             $voucher->save();
+
+            // Send notification to student about voucher approval
+            if ($voucher->student) {
+                $dueDate = Carbon::parse($voucher->due_date)->format('M d, Y');
+                $description = $voucher->description ?? 'Fee Voucher';
+                $amount = number_format($voucher->fee_amount, 2);
+                
+                Notification::createNotification(
+                    $voucher->student->id,
+                    'voucher_approved',
+                    'Voucher Approved',
+                    "Your {$description} (PKR {$amount}) with due date {$dueDate} has been approved. Thank you for your payment.",
+                    [
+                        'voucher_id' => $voucher->id,
+                        'fee_amount' => $voucher->fee_amount,
+                        'description' => $voucher->description,
+                        'due_date' => $voucher->due_date,
+                    ]
+                );
+            }
 
             return $this->success($voucher, 'Voucher approved successfully');
         } catch (\Exception $e) {
@@ -576,6 +598,200 @@ class VoucherController extends ApiController
                 'has_notifiable_id_column' => $hasNotifiableIdColumn ?? false,
                 'trace' => $e->getTraceAsString(),
             ]);
+        }
+    }
+
+    /**
+     * Get all vouchers with filters (Admin only).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAllVouchers(Request $request): JsonResponse
+    {
+        try {
+            $query = Voucher::with(['student', 'approver'])
+                ->orderBy('due_date', 'asc'); // Order by most upcoming first
+
+            // Status filter
+            if ($request->has('status') && !empty($request->get('status'))) {
+                $status = $request->get('status');
+                
+                if ($status === 'paid') {
+                    // Paid means approved
+                    $query->where('status', 'approved');
+                } elseif ($status === 'overdue') {
+                    // Overdue means pending and due_date has passed
+                    $query->where('status', 'pending')
+                        ->whereDate('due_date', '<', now());
+                } else {
+                    // pending, submitted, rejected, etc.
+                    $query->where('status', $status);
+                }
+            } else {
+                // Default: show pending vouchers ordered by most upcoming
+                $query->where('status', 'pending')
+                    ->orderBy('due_date', 'asc');
+            }
+
+            // Search by student name or email
+            if ($request->has('search') && !empty($request->get('search'))) {
+                $search = $request->get('search');
+                $query->whereHas('student', function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+
+            // Pagination
+            $perPage = $request->get('per_page', 15);
+            $vouchers = $query->paginate($perPage);
+
+            // Add file URL if submission_file exists
+            $vouchers->getCollection()->transform(function ($voucher) {
+                if ($voucher->submission_file) {
+                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                }
+                return $voucher;
+            });
+
+            return $this->success([
+                'vouchers' => $vouchers->items(),
+                'pagination' => [
+                    'current_page' => $vouchers->currentPage(),
+                    'last_page' => $vouchers->lastPage(),
+                    'per_page' => $vouchers->perPage(),
+                    'total' => $vouchers->total(),
+                    'from' => $vouchers->firstItem(),
+                    'to' => $vouchers->lastItem(),
+                ],
+            ], 'Vouchers retrieved successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to retrieve vouchers', 500);
+        }
+    }
+
+    /**
+     * Send payment clearance notification to student (Admin only).
+     *
+     * @param Request $request
+     * @param int $voucherId
+     * @return JsonResponse
+     */
+    public function notifyPaymentClearance(Request $request, int $voucherId): JsonResponse
+    {
+        try {
+            $voucher = Voucher::with('student')->find($voucherId);
+
+            if (!$voucher) {
+                return $this->notFound('Voucher not found');
+            }
+
+            if (!$voucher->student) {
+                return $this->error('Student not found for this voucher', 'Invalid voucher', 400);
+            }
+
+            // Create notification using the same pattern as other notifications
+            $this->createPaymentClearanceNotification($voucher->student->id, $voucher);
+
+            return $this->success(null, 'Payment clearance notification sent successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to send payment clearance notification: ' . $e->getMessage());
+            return $this->error($e->getMessage(), 'Failed to send notification', 500);
+        }
+    }
+
+    /**
+     * Create UI notification for payment clearance.
+     */
+    private function createPaymentClearanceNotification(int $studentId, Voucher $voucher): void
+    {
+        try {
+            $dueDate = Carbon::parse($voucher->due_date)->format('M d, Y');
+            $description = $voucher->description ?? 'Fee Voucher';
+            $amount = number_format($voucher->fee_amount, 2);
+
+            // Check which column structure exists (same pattern as other notifications)
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasTypeColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'type');
+            $hasTitleColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'title');
+            $hasMessageColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'message');
+            $hasDataColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'data');
+            $hasReadColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read');
+
+            $notificationData = [];
+
+            // If both columns exist, set both (some servers require notifiable_id/type even when user_id exists)
+            if ($hasUserIdColumn && $hasNotifiableIdColumn) {
+                $notificationData['user_id'] = $studentId;
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            } else if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            if ($hasTypeColumn) {
+                $notificationData['type'] = 'payment_clearance';
+            }
+
+            if ($hasTitleColumn) {
+                $notificationData['title'] = 'Payment Cleared';
+            }
+
+            if ($hasMessageColumn) {
+                $notificationData['message'] = "Your {$description} (PKR {$amount}) with due date {$dueDate} has been cleared. Thank you for your payment.";
+            }
+
+            if ($hasDataColumn) {
+                $notificationData['data'] = json_encode([
+                    'voucher_id' => $voucher->id,
+                    'fee_amount' => $voucher->fee_amount,
+                    'description' => $voucher->description,
+                    'due_date' => $voucher->due_date,
+                ]);
+            }
+
+            if ($hasReadColumn) {
+                $notificationData['read'] = false;
+            }
+
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            // Ensure we have required fields before inserting
+            if (empty($notificationData)) {
+                Log::warning('Notification data is empty, cannot insert', [
+                    'student_id' => $studentId,
+                    'voucher_id' => $voucher->id ?? null,
+                ]);
+                return;
+            }
+
+            Log::info('Attempting to insert payment clearance notification', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
+                'notification_data_keys' => array_keys($notificationData),
+            ]);
+
+            $inserted = DB::table('notifications')->insert($notificationData);
+            
+            Log::info('Payment clearance notification created successfully', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
+                'inserted' => $inserted,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to create payment clearance notification', [
+                'error_message' => $e->getMessage(),
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e; // Re-throw to be caught by outer catch
         }
     }
 

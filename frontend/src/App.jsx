@@ -22,6 +22,7 @@ import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
 import ScheduledJobs from './pages/ScheduledJobs';
 import AccountBook from './pages/AccountBook';
+import FeeVouchers from './pages/FeeVouchers';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 // Inner component to handle message listener
@@ -161,6 +162,11 @@ function App() {
                 <ScheduledJobs />
               </BlockedRoute>
             } />
+            <Route path="fee-vouchers" element={
+              <BlockedRoute>
+                <FeeVouchers />
+              </BlockedRoute>
+            } />
             <Route path="profile" element={
               <BlockedRoute>
                 <Profile />
@@ -195,11 +201,6 @@ function App() {
             <Route path="quizzes" element={
               <BlockedRoute>
                 <div className="p-6"><h1 className="text-2xl font-bold">My Quizes</h1><p className="text-muted-foreground mt-2">Coming soon...</p></div>
-              </BlockedRoute>
-            } />
-            <Route path="account-book" element={
-              <BlockedRoute>
-                <div className="p-6"><h1 className="text-2xl font-bold">Account Book</h1><p className="text-muted-foreground mt-2">Coming soon...</p></div>
               </BlockedRoute>
             } />
             {/* Add more dashboard routes here */}

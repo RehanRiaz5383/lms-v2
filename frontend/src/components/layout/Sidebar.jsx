@@ -24,6 +24,7 @@ import {
   HelpCircle,
   Wallet,
   Clock,
+  DollarSign,
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -169,6 +170,19 @@ const Sidebar = ({ isOpen, onClose }) => {
       title: 'Documents',
       icon: FileText,
       path: '/dashboard/documents',
+    },
+    // Accounts menu with submenu (Admin only)
+    {
+      title: 'Accounts',
+      icon: DollarSign,
+      key: 'accounts',
+      submenu: [
+        {
+          title: 'Fee Vouchers',
+          icon: Wallet,
+          path: '/dashboard/fee-vouchers',
+        },
+      ],
     },
     // Settings menu with submenu (Admin only)
     {

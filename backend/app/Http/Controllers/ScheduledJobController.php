@@ -17,6 +17,12 @@ use Carbon\Carbon;
 class ScheduledJobController extends ApiController
 {
     /**
+     * Current job log reference for use in job execution methods
+     * @var JobLog|null
+     */
+    private $currentJobLog = null;
+
+    /**
      * Execute scheduled jobs (called by cron)
      * This endpoint should be called periodically (e.g., every hour or every 5 minutes)
      */
@@ -867,6 +873,33 @@ class ScheduledJobController extends ApiController
         } catch (\Exception $e) {
             Log::error('Failed to retrieve job logs: ' . $e->getMessage());
             return $this->error($e->getMessage(), 'Failed to retrieve job logs', 500);
+        }
+    }
+
+    /**
+     * Clear job logs for a specific scheduled job
+     *
+     * @param Request $request
+     * @param int $jobId
+     * @return JsonResponse
+     */
+    public function clearJobLogs(Request $request, int $jobId): JsonResponse
+    {
+        try {
+            $job = ScheduledJob::find($jobId);
+            if (!$job) {
+                return $this->notFound('Scheduled job not found');
+            }
+
+            // Delete all logs for this job
+            $deletedCount = JobLog::where('scheduled_job_id', $jobId)->delete();
+
+            return $this->success([
+                'deleted_count' => $deletedCount,
+            ], "Successfully cleared {$deletedCount} log(s) for job: {$job->name}");
+        } catch (\Exception $e) {
+            Log::error('Failed to clear job logs: ' . $e->getMessage());
+            return $this->error($e->getMessage(), 'Failed to clear job logs', 500);
         }
     }
 }

@@ -28,7 +28,7 @@ import { cn } from '../utils/cn';
 import StudentPerformanceReport from '../components/reports/StudentPerformanceReport';
 import ImpersonateModal from '../components/ImpersonateModal';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS, buildEndpoint } from '../config/api';
+import { API_ENDPOINTS, buildEndpoint, getStorageUrl } from '../config/api';
 import {
   Plus,
   Search,
@@ -45,6 +45,8 @@ import {
   Check,
   X,
   Eye,
+  Bell,
+  User,
 } from 'lucide-react';
 import { debounce } from '../utils/debounce';
 
@@ -88,6 +90,11 @@ const UserManagement = () => {
   const [manualVoucherDescription, setManualVoucherDescription] = useState('');
   const [manualVoucherDueDate, setManualVoucherDueDate] = useState('');
   const [creatingVoucher, setCreatingVoucher] = useState(false);
+  const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
+  const [userToNotify, setUserToNotify] = useState(null);
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationDescription, setNotificationDescription] = useState('');
+  const [sendingNotification, setSendingNotification] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -624,6 +631,45 @@ const UserManagement = () => {
     }
   };
 
+  const handleSendNotification = (user) => {
+    setUserToNotify(user);
+    setNotificationTitle('');
+    setNotificationDescription('');
+    setShowNotificationDrawer(true);
+  };
+
+  const handleSendNotificationSubmit = async () => {
+    if (!userToNotify) return;
+
+    if (!notificationTitle.trim()) {
+      showError('Please enter a notification title');
+      return;
+    }
+
+    if (!notificationDescription.trim()) {
+      showError('Please enter a notification description');
+      return;
+    }
+
+    setSendingNotification(true);
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.users.sendNotification, { id: userToNotify.id });
+      await apiService.post(endpoint, {
+        title: notificationTitle,
+        message: notificationDescription,
+      });
+      success('Notification sent successfully');
+      setShowNotificationDrawer(false);
+      setUserToNotify(null);
+      setNotificationTitle('');
+      setNotificationDescription('');
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to send notification');
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -754,10 +800,10 @@ const UserManagement = () => {
                           className="h-4 w-4 rounded border-input cursor-pointer"
                         />
                       </th>
+                      <th className="text-left p-4">Picture</th>
                       <th className="text-left p-4">Name</th>
                       <th className="text-left p-4">Email</th>
                       <th className="text-left p-4">User Type</th>
-                      <th className="text-left p-4">Status</th>
                       <th className="text-left p-4">Actions</th>
                     </tr>
                   </thead>
@@ -800,17 +846,31 @@ const UserManagement = () => {
                               className="h-4 w-4 rounded border-input cursor-pointer"
                             />
                           </td>
+                          <td className="p-4">
+                            {user.picture || user.picture_url ? (
+                              <img
+                                src={user.picture_url || getStorageUrl(user.picture)}
+                                alt={user.name}
+                                className="w-10 h-10 rounded-full object-cover"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={cn(
+                                "w-10 h-10 rounded-full bg-muted flex items-center justify-center",
+                                (user.picture || user.picture_url) && "hidden"
+                              )}
+                            >
+                              <User className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          </td>
                           <td className="p-4">{user.name}</td>
                           <td className="p-4">{user.email}</td>
                           <td className="p-4">
                             {user.roles_display || (user.roles_titles && user.roles_titles.join(', ')) || user.user_type_title || 'N/A'}
-                          </td>
-                          <td className="p-4">
-                            {Number(user.block) === 1 ? (
-                              <span className="text-destructive">Blocked</span>
-                            ) : (
-                              <span className="text-green-600">Active</span>
-                            )}
                           </td>
                           <td className="p-4">
                             <div className="flex gap-2">
@@ -869,6 +929,16 @@ const UserManagement = () => {
                                   </Button>
                                 </Tooltip>
                               )}
+                              {/* Send Notification button */}
+                              <Tooltip content="Send Notification">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleSendNotification(user)}
+                                >
+                                  <Bell className="h-4 w-4" />
+                                </Button>
+                              </Tooltip>
                               {/* Login as User button - available for all users except current user */}
                               {user.id !== currentUser?.id && (
                                 <Tooltip content="Login as User">
@@ -1481,7 +1551,7 @@ const UserManagement = () => {
                           </td>
                           <td className="p-2">
                             <div className="flex items-center gap-2">
-                              {voucher.status === 'submitted' && (
+                              {(voucher.status === 'submitted' || voucher.status === 'pending') && (
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1507,6 +1577,71 @@ const UserManagement = () => {
                   </table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </div>
+      </Drawer>
+
+      {/* Send Notification Drawer */}
+      <Drawer
+        isOpen={showNotificationDrawer}
+        onClose={() => {
+          setShowNotificationDrawer(false);
+          setUserToNotify(null);
+          setNotificationTitle('');
+          setNotificationDescription('');
+        }}
+        title={`Send Notification - ${userToNotify?.name || ''}`}
+        size="40%"
+      >
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Details</CardTitle>
+              <CardDescription>
+                Send a notification to {userToNotify?.name || 'this user'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="notificationTitle">Title *</Label>
+                <Input
+                  id="notificationTitle"
+                  type="text"
+                  value={notificationTitle}
+                  onChange={(e) => setNotificationTitle(e.target.value)}
+                  placeholder="Enter notification title"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="notificationDescription">Description *</Label>
+                <textarea
+                  id="notificationDescription"
+                  value={notificationDescription}
+                  onChange={(e) => setNotificationDescription(e.target.value)}
+                  placeholder="Enter notification description"
+                  className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+              <Button
+                onClick={handleSendNotificationSubmit}
+                disabled={sendingNotification || !notificationTitle.trim() || !notificationDescription.trim()}
+                className="w-full"
+              >
+                {sendingNotification ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Bell className="mr-2 h-4 w-4" />
+                    Send Notification
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
         </div>

@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Trash,
 } from 'lucide-react';
 import { Drawer } from '../components/ui/drawer';
 import { apiService } from '../services/api';
@@ -220,6 +221,25 @@ const ScheduledJobs = () => {
   const handleLogsPageChange = async (page) => {
     if (selectedJob) {
       await loadJobLogs(selectedJob.id, page);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!selectedJob) return;
+    
+    if (!window.confirm(`Are you sure you want to clear all logs for "${selectedJob.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.scheduledJobs.clearLogs, { id: selectedJob.id });
+      await apiService.delete(endpoint);
+      success('Job logs cleared successfully');
+      // Reload logs (should be empty now)
+      await loadJobLogs(selectedJob.id, 1);
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || 'Failed to clear logs';
+      showError(errorMessage);
     }
   };
 
@@ -495,9 +515,22 @@ const ScheduledJobs = () => {
             {/* Logs List */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">
-                  Execution Logs ({logsPagination.total})
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">
+                    Execution Logs ({logsPagination.total})
+                  </CardTitle>
+                  {logsPagination.total > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearLogs}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash className="mr-2 h-4 w-4" />
+                      Clear Logs
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {loadingLogs ? (

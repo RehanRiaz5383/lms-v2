@@ -83,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/fee', [VoucherController::class, 'updateStudentFee']);
         Route::get('/{id}/vouchers', [VoucherController::class, 'getStudentVouchers']);
         Route::post('/{id}/vouchers', [VoucherController::class, 'createVoucher']);
+        Route::post('/{id}/send-notification', [UserController::class, 'sendNotification']);
     });
 
     // Performance Report - accessible by students (own report) and admins (any report)
@@ -95,13 +96,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}', [ScheduledJobController::class, 'update']);
         Route::delete('/{id}', [ScheduledJobController::class, 'destroy']);
         Route::get('/{id}/logs', [ScheduledJobController::class, 'getJobLogs']);
+        Route::delete('/{id}/logs', [ScheduledJobController::class, 'clearJobLogs']);
     });
 
     // Vouchers Management
     Route::middleware('admin')->prefix('vouchers')->group(function () {
+        Route::get('/', [VoucherController::class, 'getAllVouchers']); // Get all vouchers with filters
         Route::post('/generate', [VoucherController::class, 'generateVouchers']); // Test endpoint for manual voucher generation
         Route::post('/{id}/approve', [VoucherController::class, 'approveVoucher']);
         Route::post('/{id}/reject', [VoucherController::class, 'rejectVoucher']);
+        Route::post('/{id}/notify', [VoucherController::class, 'notifyPaymentClearance']); // Send payment clearance notification
         Route::delete('/{id}', [VoucherController::class, 'deleteVoucher']);
     });
 
