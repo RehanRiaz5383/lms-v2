@@ -17,6 +17,7 @@ import {
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 import { cn } from '../utils/cn';
+import { formatCurrency } from '../utils/currency';
 
 const FeeVouchers = () => {
   const { success, error: showError } = useToast();
@@ -240,7 +241,7 @@ const FeeVouchers = () => {
                         </td>
                         <td className="p-4">
                           <span className="font-medium">
-                            PKR {parseFloat(voucher.fee_amount).toFixed(2)}
+                            {formatCurrency(voucher.fee_amount)}
                           </span>
                         </td>
                         <td className="p-4">

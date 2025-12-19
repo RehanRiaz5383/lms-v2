@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Voucher;
 use App\Models\User;
 use App\Models\Notification;
+use App\Models\NotificationSetting;
+use App\Models\SmtpSetting;
+use App\Jobs\SendNotificationEmail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -198,6 +201,9 @@ class VoucherController extends ApiController
             $voucher->status = 'submitted';
             $voucher->submitted_at = now();
             $voucher->save();
+
+            // Send notification to admins if enabled
+            $this->sendPaymentProofSubmissionNotification($voucher);
 
             return $this->success($voucher, 'Payment proof submitted successfully');
         } catch (\Exception $e) {
@@ -827,6 +833,119 @@ class VoucherController extends ApiController
         } catch (\Exception $e) {
             Log::error("Failed to delete voucher {$voucherId}: " . $e->getMessage());
             return $this->error($e->getMessage(), 'Failed to delete voucher', 500);
+        }
+    }
+
+    /**
+     * Get income report (approved vouchers) with date filters (Admin only).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getIncomeReport(Request $request): JsonResponse
+    {
+        try {
+            $query = Voucher::where('status', 'approved')
+                ->with(['student', 'approver'])
+                ->orderBy('approved_at', 'desc');
+
+            // Date range filters
+            if ($request->has('date_from') && !empty($request->get('date_from'))) {
+                $query->whereDate('approved_at', '>=', $request->get('date_from'));
+            }
+            if ($request->has('date_to') && !empty($request->get('date_to'))) {
+                $query->whereDate('approved_at', '<=', $request->get('date_to'));
+            }
+
+            $vouchers = $query->get();
+
+            // Calculate total amount
+            $totalAmount = $vouchers->sum('fee_amount');
+
+            // Format vouchers with additional data
+            $vouchers->transform(function ($voucher) {
+                if ($voucher->submission_file) {
+                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                }
+                return $voucher;
+            });
+
+            return $this->success([
+                'vouchers' => $vouchers,
+                'total_amount' => (float) $totalAmount,
+                'count' => $vouchers->count(),
+            ], 'Income report retrieved successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to retrieve income report', 500);
+        }
+    }
+
+    /**
+     * Send payment proof submission notification to admins.
+     *
+     * @param Voucher $voucher
+     * @return void
+     */
+    private function sendPaymentProofSubmissionNotification(Voucher $voucher): void
+    {
+        try {
+            // Check if notification is enabled
+            $settings = NotificationSetting::first();
+            if (!$settings || !$settings->notify_on_payment_proof_submission) {
+                return;
+            }
+
+            // Get active SMTP settings
+            $smtpSettings = SmtpSetting::where('is_active', true)->first();
+            if (!$smtpSettings) {
+                Log::warning('Cannot send payment proof submission notification: No active SMTP settings');
+                return;
+            }
+
+            // Get admin users to notify
+            $admins = User::where(function($query) {
+                $query->where('user_type', 1)
+                      ->orWhereHas('roles', function($q) {
+                          $q->where('user_types.id', 1);
+                      });
+            })->get();
+
+            // Load student relationship
+            $voucher->load('student');
+
+            foreach ($admins as $admin) {
+                $subject = 'Payment Proof Submitted';
+                $message = "A student has submitted payment proof for a voucher:\n\n";
+                $message .= "Student Name: {$voucher->student->name}\n";
+                $message .= "Student Email: {$voucher->student->email}\n";
+                $message .= "Voucher #: {$voucher->id}\n";
+                $message .= "Amount: " . number_format($voucher->fee_amount, 2) . "\n";
+                $message .= "Due Date: " . ($voucher->due_date ? Carbon::parse($voucher->due_date)->format('Y-m-d') : 'N/A') . "\n";
+                $message .= "Submitted At: " . now()->format('Y-m-d H:i:s') . "\n";
+
+                // Send email notification
+                SendNotificationEmail::dispatch($admin->email, $subject, $message, $smtpSettings);
+
+                // Create in-app notification for admin
+                $admin->sendCrmNotification(
+                    'payment_proof_submitted',
+                    'Payment Proof Submitted',
+                    "{$voucher->student->name} has submitted payment proof for Voucher #{$voucher->id} (Amount: " . number_format($voucher->fee_amount, 2) . ")",
+                    [
+                        'voucher_id' => $voucher->id,
+                        'student_id' => $voucher->student_id,
+                        'student_name' => $voucher->student->name,
+                        'student_email' => $voucher->student->email,
+                        'amount' => $voucher->fee_amount,
+                        'due_date' => $voucher->due_date,
+                    ]
+                );
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to send payment proof submission notification: ' . $e->getMessage(), [
+                'voucher_id' => $voucher->id,
+                'exception' => $e,
+            ]);
         }
     }
 }

@@ -58,6 +58,7 @@ export const API_ENDPOINTS = {
   // Authentication
   auth: {
     login: '/login',
+    signup: '/signup',
     logout: '/logout',
     me: '/me',
     refresh: '/refresh', // If you implement token refresh
@@ -66,6 +67,7 @@ export const API_ENDPOINTS = {
   // Dashboard
   dashboard: {
     stats: '/dashboard/stats',
+    trendingSignupReasons: '/dashboard/trending-signup-reasons',
   },
   
   // Student
@@ -141,10 +143,26 @@ export const API_ENDPOINTS = {
   vouchers: {
     list: '/vouchers',
     generate: '/vouchers/generate',
+    incomeReport: '/vouchers/income-report',
     approve: '/vouchers/:id/approve',
     reject: '/vouchers/:id/reject',
     notify: '/vouchers/:id/notify',
     delete: '/vouchers/:id',
+  },
+  
+  // Expense Management
+  expenses: {
+    list: '/expenses',
+    create: '/expenses',
+    update: '/expenses/:id',
+    delete: '/expenses/:id',
+    incomeExpenseReport: '/expenses/income-expense-report',
+    heads: {
+      list: '/expenses/heads',
+      create: '/expenses/heads',
+      update: '/expenses/heads/:id',
+      delete: '/expenses/heads/:id',
+    },
   },
   
   // Batches Management
@@ -204,6 +222,13 @@ export const API_ENDPOINTS = {
   notificationSettings: {
     get: '/notification-settings',
     update: '/notification-settings',
+  },
+  
+  // Cloudflare Turnstile
+  turnstile: {
+    getSettings: '/turnstile-settings',
+    getAdminSettings: '/turnstile-settings/admin',
+    updateSettings: '/turnstile-settings',
   },
 };
 

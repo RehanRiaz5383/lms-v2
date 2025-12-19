@@ -24,6 +24,8 @@ class NotificationSettingsController extends ApiController
                     'block_student_registration' => false,
                     'user_update' => false,
                     'user_login_logout' => false,
+                    'notify_on_new_signup' => false,
+                    'notify_on_payment_proof_submission' => false,
                 ], 'Notification settings retrieved successfully');
             }
 
@@ -44,6 +46,8 @@ class NotificationSettingsController extends ApiController
                 'block_student_registration' => 'boolean',
                 'user_update' => 'boolean',
                 'user_login_logout' => 'boolean',
+                'notify_on_new_signup' => 'boolean',
+                'notify_on_payment_proof_submission' => 'boolean',
             ]);
 
             if ($validator->fails()) {
@@ -57,6 +61,8 @@ class NotificationSettingsController extends ApiController
                 'block_student_registration',
                 'user_update',
                 'user_login_logout',
+                'notify_on_new_signup',
+                'notify_on_payment_proof_submission',
             ]);
 
             if ($settings) {

@@ -7,6 +7,7 @@ use App\Events\StudentLogout;
 use App\Jobs\SendLoginLogoutEmailPhpMailer;
 use App\Models\NotificationSetting;
 use App\Models\SmtpSetting;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 
@@ -89,6 +90,23 @@ class SendUserLoginLogoutNotification
                 'job_id' => $jobId,
                 'action' => $action,
             ]);
+
+            // Create in-app notification for the user
+            $actionTitle = $action === 'login' ? 'Account Login' : 'Account Logout';
+            $actionMessage = $action === 'login' 
+                ? "You logged in to your account at {$dateTime}" . ($ipAddress ? " from IP: {$ipAddress}" : '')
+                : "You logged out of your account at {$dateTime}";
+            
+            $user->sendCrmNotification(
+                $action === 'login' ? 'account_login' : 'account_logout',
+                $actionTitle,
+                $actionMessage,
+                [
+                    'action' => $action,
+                    'date_time' => $dateTime,
+                    'ip_address' => $ipAddress,
+                ]
+            );
         } catch (\Exception $e) {
             Log::error("Failed to send {$action} email to user {$user->id}: " . $e->getMessage(), [
                 'exception' => get_class($e),

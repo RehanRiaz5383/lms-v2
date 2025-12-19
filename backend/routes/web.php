@@ -390,6 +390,34 @@ Route::get('/upgrade-db', function () {
                     ];
                 }
             }
+
+            // Update notification_settings table if new columns are missing
+            if (\Schema::hasTable('notification_settings')) {
+                $hasNotifyOnNewSignup = \Schema::hasColumn('notification_settings', 'notify_on_new_signup');
+                $hasNotifyOnPaymentProof = \Schema::hasColumn('notification_settings', 'notify_on_payment_proof_submission');
+                
+                if (!$hasNotifyOnNewSignup || !$hasNotifyOnPaymentProof) {
+                    try {
+                        if (!$hasNotifyOnNewSignup) {
+                            \DB::statement('ALTER TABLE notification_settings ADD COLUMN notify_on_new_signup BOOLEAN DEFAULT FALSE');
+                        }
+                        if (!$hasNotifyOnPaymentProof) {
+                            \DB::statement('ALTER TABLE notification_settings ADD COLUMN notify_on_payment_proof_submission BOOLEAN DEFAULT FALSE');
+                        }
+                        $seederResults[] = [
+                            'seeder' => 'NotificationSettingsMigration',
+                            'success' => true,
+                            'message' => 'Added new notification settings columns',
+                        ];
+                    } catch (\Exception $e) {
+                        $seederResults[] = [
+                            'seeder' => 'NotificationSettingsMigration',
+                            'success' => false,
+                            'message' => 'Failed to add notification settings columns: ' . $e->getMessage(),
+                        ];
+                    }
+                }
+            }
             
             $results['seeders'] = [
                 'success' => true,

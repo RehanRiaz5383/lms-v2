@@ -20,6 +20,8 @@ const NotificationSettings = () => {
     block_student_registration: false,
     user_update: false,
     user_login_logout: false,
+    notify_on_new_signup: false,
+    notify_on_payment_proof_submission: false,
   });
 
   useEffect(() => {
@@ -33,6 +35,8 @@ const NotificationSettings = () => {
         block_student_registration: settings.block_student_registration ?? false,
         user_update: settings.user_update ?? false,
         user_login_logout: settings.user_login_logout ?? false,
+        notify_on_new_signup: settings.notify_on_new_signup ?? false,
+        notify_on_payment_proof_submission: settings.notify_on_payment_proof_submission ?? false,
       });
     }
   }, [settings]);
@@ -83,12 +87,22 @@ const NotificationSettings = () => {
       label: 'User Login and Logout Notification',
       description: 'Receive email notifications when users login or logout',
     },
+    {
+      key: 'notify_on_new_signup',
+      label: 'Notify on New Signup',
+      description: 'Receive email notifications when a new student signs up',
+    },
+    {
+      key: 'notify_on_payment_proof_submission',
+      label: 'Notify on Payment Proof Submission',
+      description: 'Receive email notifications when a student submits payment proof for a voucher',
+    },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Notification Settings</h1>
+        <h1 className="text-3xl font-bold">Email Notifications</h1>
         <p className="text-muted-foreground mt-2">
           Configure which notifications you want to receive via email
         </p>

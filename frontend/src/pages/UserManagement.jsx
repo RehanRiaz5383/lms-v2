@@ -25,6 +25,7 @@ import { Tooltip } from '../components/ui/tooltip';
 import { DateRangePicker } from '../components/ui/date-range-picker';
 import { Select } from '../components/ui/select';
 import { cn } from '../utils/cn';
+import { formatCurrency } from '../utils/currency';
 import StudentPerformanceReport from '../components/reports/StudentPerformanceReport';
 import ImpersonateModal from '../components/ImpersonateModal';
 import { apiService } from '../services/api';
@@ -1517,7 +1518,7 @@ const UserManagement = () => {
                           <td className="p-2">
                             {new Date(voucher.due_date).toLocaleDateString()}
                           </td>
-                          <td className="p-2">PKR {parseFloat(voucher.fee_amount).toFixed(2)}</td>
+                          <td className="p-2">{formatCurrency(voucher.fee_amount)}</td>
                           <td className="p-2">
                             <span
                               className={cn(

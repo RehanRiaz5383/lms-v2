@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import { login, clearError } from '../store/slices/authSlice';
 import { Button } from '../components/ui/button';
@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Mail, Lock, Loader2, Quote } from 'lucide-react';
 import quotes from '../data/quotes.json';
+import logo from '../assets/icons/logo.png';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -80,6 +81,15 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
+      {/* Logo */}
+      <div className="mb-8">
+        <img 
+          src={logo} 
+          alt="LMS Logo" 
+          className="h-24 w-auto object-contain"
+        />
+      </div>
+      
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center">
@@ -158,6 +168,13 @@ const Login = () => {
               )}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-sm">
+            <span className="text-muted-foreground">Don't have an account? </span>
+            <Link to="/signup" className="text-primary hover:underline">
+              Sign up
+            </Link>
+          </div>
         </CardContent>
       </Card>
 

@@ -6,6 +6,7 @@ use App\Events\UserUpdated;
 use App\Jobs\SendNotificationEmail;
 use App\Models\NotificationSetting;
 use App\Models\SmtpSetting;
+use App\Models\User;
 
 class SendUserUpdateNotification
 {
@@ -46,7 +47,18 @@ class SendUserUpdateNotification
         $message .= "\nUpdate Date: " . now()->format('Y-m-d H:i:s') . "\n";
         $message .= "\nIf you did not make these changes, please contact support immediately.\n";
 
+        // Send email notification
         SendNotificationEmail::dispatch($event->user->email, $subject, $message, $smtpSettings);
+
+        // Create in-app notification for the user
+        $event->user->sendCrmNotification(
+            'account_updated',
+            'Account Information Updated',
+            "Your account information has been updated" . (!empty($event->changes) ? ". Changes: " . implode(', ', array_keys($event->changes)) : ''),
+            [
+                'changes' => $event->changes ?? [],
+            ]
+        );
     }
 }
 

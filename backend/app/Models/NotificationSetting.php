@@ -16,6 +16,8 @@ class NotificationSetting extends Model
         'block_student_registration',
         'user_update',
         'user_login_logout',
+        'notify_on_new_signup',
+        'notify_on_payment_proof_submission',
     ];
 
     protected $casts = [
@@ -23,6 +25,8 @@ class NotificationSetting extends Model
         'block_student_registration' => 'boolean',
         'user_update' => 'boolean',
         'user_login_logout' => 'boolean',
+        'notify_on_new_signup' => 'boolean',
+        'notify_on_payment_proof_submission' => 'boolean',
     ];
 }
 

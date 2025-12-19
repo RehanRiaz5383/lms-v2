@@ -17,6 +17,8 @@ use App\Http\Controllers\VideoController;
 use App\Http\Controllers\StudentPerformanceController;
 use App\Http\Controllers\ScheduledJobController;
 use App\Http\Controllers\VoucherController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\CloudflareTurnstileController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -32,6 +34,8 @@ use Illuminate\Support\Facades\Route;
 
 // Public routes
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/signup', [AuthController::class, 'signup']);
+Route::get('/turnstile-settings', [CloudflareTurnstileController::class, 'getSettings']); // Public endpoint to get site key
 // Public video creation route for testing (excluded from auth)
 Route::post('/videos', [VideoController::class, 'store']);
 
@@ -43,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
+    Route::get('/dashboard/trending-signup-reasons', [DashboardController::class, 'getTrendingSignupReasons']);
 
     // Student routes
     Route::prefix('student')->group(function () {
@@ -102,6 +107,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Vouchers Management
     Route::middleware('admin')->prefix('vouchers')->group(function () {
         Route::get('/', [VoucherController::class, 'getAllVouchers']); // Get all vouchers with filters
+        Route::get('/income-report', [VoucherController::class, 'getIncomeReport']); // Income report (approved vouchers)
         Route::post('/generate', [VoucherController::class, 'generateVouchers']); // Test endpoint for manual voucher generation
         Route::post('/{id}/approve', [VoucherController::class, 'approveVoucher']);
         Route::post('/{id}/reject', [VoucherController::class, 'rejectVoucher']);
@@ -182,6 +188,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->prefix('notification-settings')->group(function () {
         Route::get('/', [NotificationSettingsController::class, 'index']);
         Route::put('/', [NotificationSettingsController::class, 'update']);
+    });
+
+    // Expense Management (Admin only)
+    Route::middleware('admin')->prefix('expenses')->group(function () {
+        // Expense Heads
+        Route::get('/heads', [ExpenseController::class, 'getExpenseHeads']);
+        Route::post('/heads', [ExpenseController::class, 'createExpenseHead']);
+        Route::put('/heads/{id}', [ExpenseController::class, 'updateExpenseHead']);
+        Route::delete('/heads/{id}', [ExpenseController::class, 'deleteExpenseHead']);
+        
+        // Expenses
+        Route::get('/', [ExpenseController::class, 'getExpenses']);
+        Route::post('/', [ExpenseController::class, 'createExpense']);
+        Route::put('/{id}', [ExpenseController::class, 'updateExpense']);
+        Route::delete('/{id}', [ExpenseController::class, 'deleteExpense']);
+        
+        // Income and Expense Report
+        Route::get('/income-expense-report', [ExpenseController::class, 'getIncomeExpenseReport']);
+    });
+
+    // Cloudflare Turnstile Settings (Admin only)
+    Route::middleware('admin')->prefix('turnstile-settings')->group(function () {
+        Route::get('/admin', [CloudflareTurnstileController::class, 'getSettings']);
+        Route::put('/', [CloudflareTurnstileController::class, 'updateSettings']);
     });
 });
 

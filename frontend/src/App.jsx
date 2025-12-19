@@ -23,6 +23,11 @@ import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
 import ScheduledJobs from './pages/ScheduledJobs';
 import AccountBook from './pages/AccountBook';
 import FeeVouchers from './pages/FeeVouchers';
+import IncomeReport from './pages/IncomeReport';
+import ExpenseManagement from './pages/ExpenseManagement';
+import IncomeExpenseReport from './pages/IncomeExpenseReport';
+import Signup from './pages/Signup';
+import InternalIntegrations from './pages/InternalIntegrations';
 import DashboardLayout from './components/layout/DashboardLayout';
 
 // Inner component to handle message listener
@@ -109,6 +114,7 @@ function App() {
           <AppContent />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route
               path="/dashboard"
               element={
@@ -162,9 +168,29 @@ function App() {
                 <ScheduledJobs />
               </BlockedRoute>
             } />
+            <Route path="integrations/internal" element={
+              <BlockedRoute>
+                <InternalIntegrations />
+              </BlockedRoute>
+            } />
             <Route path="fee-vouchers" element={
               <BlockedRoute>
                 <FeeVouchers />
+              </BlockedRoute>
+            } />
+            <Route path="reports/income" element={
+              <BlockedRoute>
+                <IncomeReport />
+              </BlockedRoute>
+            } />
+            <Route path="expenses" element={
+              <BlockedRoute>
+                <ExpenseManagement />
+              </BlockedRoute>
+            } />
+            <Route path="income-expense-report" element={
+              <BlockedRoute>
+                <IncomeExpenseReport />
               </BlockedRoute>
             } />
             <Route path="profile" element={

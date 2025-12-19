@@ -27,11 +27,15 @@ import {
   PlayCircle,
   AlertCircle,
   Wallet,
+  BarChart3,
+  ChevronDown,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS } from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/toast';
+import { formatCurrency } from '../utils/currency';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 // Countdown timer component for nearest task
 const TaskCountdownTimer = ({ dueDate }) => {
@@ -137,6 +141,10 @@ const Dashboard = () => {
   const { error: showError } = useToast();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trendingData, setTrendingData] = useState([]);
+  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [trendingFilter, setTrendingFilter] = useState('all_time');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   // Check if user is student
   const isStudent = user?.roles?.some(role => role.title?.toLowerCase() === 'student') || 
@@ -147,8 +155,32 @@ const Dashboard = () => {
       loadStudentDashboardStats();
     } else {
       loadDashboardStats();
+      loadTrendingSignupReasons();
     }
   }, [isStudent]);
+
+  useEffect(() => {
+    if (!isStudent) {
+      loadTrendingSignupReasons();
+    }
+  }, [trendingFilter]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilterDropdown && !event.target.closest('.filter-dropdown-container')) {
+        setShowFilterDropdown(false);
+      }
+    };
+
+    if (showFilterDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilterDropdown]);
 
   const loadDashboardStats = async () => {
     try {
@@ -158,6 +190,21 @@ const Dashboard = () => {
       showError('Failed to load dashboard statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTrendingSignupReasons = async () => {
+    try {
+      setLoadingTrending(true);
+      const response = await apiService.get(API_ENDPOINTS.dashboard.trendingSignupReasons, {
+        params: { filter: trendingFilter },
+      });
+      setTrendingData(response.data.data?.trending || []);
+    } catch (err) {
+      console.error('Failed to load trending signup reasons:', err);
+      showError('Failed to load trending signup reasons');
+    } finally {
+      setLoadingTrending(false);
     }
   };
 
@@ -389,7 +436,7 @@ const Dashboard = () => {
                   </p>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium">
-                      PKR {parseFloat(stats.vouchers.upcoming_voucher.fee_amount).toFixed(2)}
+                      {formatCurrency(stats.vouchers.upcoming_voucher.fee_amount)}
                     </span>
                   </div>
                   <TaskCountdownTimer dueDate={stats.vouchers.upcoming_voucher.due_date} />
@@ -665,12 +712,6 @@ const Dashboard = () => {
     },
   ];
 
-  const quickActions = [
-    { label: 'Manage Users', icon: Users, link: '/dashboard/users', color: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Manage Batches', icon: GraduationCap, link: '/dashboard/batches', color: 'bg-purple-500/10 text-purple-500' },
-    { label: 'Manage Subjects', icon: BookOpen, link: '/dashboard/subjects', color: 'bg-green-500/10 text-green-500' },
-    { label: 'Manage Videos', icon: Video, link: '/dashboard/videos', color: 'bg-orange-500/10 text-orange-500' },
-  ];
 
   return (
     <div className="space-y-6">
@@ -817,31 +858,107 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Trending Signup Reasons */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Trending Signup Reasons
+                </CardTitle>
+                <CardDescription>Most common sources where students heard about us</CardDescription>
+              </div>
+              <div className="relative filter-dropdown-container">
+                <button
+                  onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm border border-input rounded-md hover:bg-accent transition-colors"
+                >
+                  <span>
+                    {trendingFilter === 'today' ? 'Today' :
+                     trendingFilter === 'yesterday' ? 'Yesterday' :
+                     trendingFilter === 'last_15_days' ? 'Last 15 Days' :
+                     trendingFilter === 'this_month' ? 'This Month' :
+                     trendingFilter === 'last_month' ? 'Last Month' :
+                     'Beginning of Time'}
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+                {showFilterDropdown && (
+                  <div className="absolute right-0 mt-1 w-56 bg-card border border-border rounded-md shadow-lg z-10">
+                    <div className="py-1">
+                      {[
+                        { value: 'today', label: 'Today' },
+                        { value: 'yesterday', label: 'Yesterday' },
+                        { value: 'last_15_days', label: 'Last 15 Days' },
+                        { value: 'this_month', label: 'This Month' },
+                        { value: 'last_month', label: 'Last Month' },
+                        { value: 'all_time', label: 'Beginning of Time' },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setTrendingFilter(option.value);
+                            setShowFilterDropdown(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors ${
+                            trendingFilter === option.value ? 'bg-accent font-medium' : ''
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {quickActions.map((action) => {
-                const ActionIcon = action.icon;
-                return (
-                  <button
-                    key={action.label}
-                    onClick={() => navigate(action.link)}
-                    className="w-full flex items-center gap-3 px-4 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                  >
-                    <div className={action.color + ' p-2 rounded-lg'}>
-                      <ActionIcon className="h-4 w-4" />
-                    </div>
-                    <span className="text-sm font-medium flex-1">{action.label}</span>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                );
-              })}
-            </div>
+            {loadingTrending ? (
+              <div className="flex items-center justify-center h-64">
+                <Activity className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : trendingData.length === 0 ? (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <p>No signup data available for the selected period</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={trendingData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="keyword"
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                    className="text-xs"
+                    tick={{ fill: 'currentColor' }}
+                  />
+                  <YAxis
+                    tick={{ fill: 'currentColor' }}
+                    className="text-xs"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '6px',
+                    }}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="count"
+                    fill="hsl(var(--primary))"
+                    radius={[4, 4, 0, 0]}
+                    name="Signups"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>

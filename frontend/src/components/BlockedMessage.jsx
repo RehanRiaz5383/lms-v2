@@ -34,7 +34,7 @@ const BlockedMessage = () => {
                   Your account status is blocked
                 </p>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  You have limited access to the system. You can only view the Dashboard and Account Book pages.
+                  You have limited access to the system. You can only view the Account Book page.
                 </p>
               </div>
             </div>

@@ -17,7 +17,7 @@ class SendStudentRegistrationNotification
     {
         // Check if notification is enabled
         $settings = NotificationSetting::first();
-        if (!$settings || !$settings->new_student_registration) {
+        if (!$settings || !$settings->notify_on_new_signup) {
             return;
         }
 
@@ -43,7 +43,20 @@ class SendStudentRegistrationNotification
             $message .= "Email: {$event->student->email}\n";
             $message .= "Registration Date: " . now()->format('Y-m-d H:i:s') . "\n";
 
+            // Send email notification
             SendNotificationEmail::dispatch($admin->email, $subject, $message, $smtpSettings);
+
+            // Create in-app notification for admin
+            $admin->sendCrmNotification(
+                'new_signup',
+                'New Student Registration',
+                "A new student has registered: {$event->student->name} ({$event->student->email})",
+                [
+                    'student_id' => $event->student->id,
+                    'student_name' => $event->student->name,
+                    'student_email' => $event->student->email,
+                ]
+            );
         }
     }
 }

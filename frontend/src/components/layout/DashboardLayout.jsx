@@ -9,7 +9,7 @@ const DashboardLayout = () => {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:pl-64">
+      <div className="lg:pl-16">
         <Header onMenuClick={() => setSidebarOpen(true)} />
         <main className="p-4 lg:p-6">
           <Outlet />

@@ -46,7 +46,21 @@ class SendStudentBlockedNotification
             }
             $message .= "Blocked Date: " . now()->format('Y-m-d H:i:s') . "\n";
 
+            // Send email notification
             SendNotificationEmail::dispatch($admin->email, $subject, $message, $smtpSettings);
+
+            // Create in-app notification for admin
+            $admin->sendCrmNotification(
+                'student_blocked',
+                'Student Blocked',
+                "Student {$event->student->name} has been blocked" . ($event->blockReason ? ": {$event->blockReason}" : ''),
+                [
+                    'student_id' => $event->student->id,
+                    'student_name' => $event->student->name,
+                    'student_email' => $event->student->email,
+                    'block_reason' => $event->blockReason,
+                ]
+            );
         }
     }
 }

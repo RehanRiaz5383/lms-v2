@@ -617,6 +617,16 @@ class UserController extends ApiController
         $user->roles_titles = $rolesTitles;
         $user->roles_display = implode(', ', $rolesTitles);
 
+        // Send in-app notification to the user about account activation
+        $user->sendCrmNotification(
+            'account_activated',
+            'Account Activated Successfully',
+            'Your account has been activated successfully. Enjoy your learning journey!',
+            [
+                'activated_at' => now()->toDateTimeString(),
+            ]
+        );
+
         return $this->success($user, 'User unblocked successfully');
     }
 

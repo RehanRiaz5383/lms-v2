@@ -22,6 +22,7 @@ import { apiService } from '../services/api';
 import { API_ENDPOINTS } from '../config/api';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../utils/cn';
+import { formatCurrency } from '../utils/currency';
 
 const AccountBook = () => {
   const { user } = useAppSelector((state) => state.auth);
@@ -188,7 +189,7 @@ const AccountBook = () => {
               <div>
                 <p className="text-sm text-muted-foreground">Total Amount</p>
                 <p className="text-2xl font-bold">
-                  PKR {vouchers.reduce((sum, v) => sum + parseFloat(v.fee_amount || 0), 0).toFixed(2)}
+                  {formatCurrency(vouchers.reduce((sum, v) => sum + parseFloat(v.fee_amount || 0), 0))}
                 </p>
               </div>
               <DollarSign className="h-8 w-8 text-purple-500" />
@@ -244,7 +245,7 @@ const AccountBook = () => {
                       </td>
                       <td className="p-4">
                         <span className="font-semibold text-lg">
-                          PKR {parseFloat(voucher.fee_amount).toFixed(2)}
+                          {formatCurrency(voucher.fee_amount)}
                         </span>
                       </td>
                       <td className="p-4">
@@ -328,7 +329,7 @@ const AccountBook = () => {
             <div className="bg-muted p-4 rounded-lg">
               <p className="text-sm text-muted-foreground">Voucher Details</p>
               <p className="font-semibold">
-                Amount: PKR {parseFloat(selectedVoucher.fee_amount).toFixed(2)}
+                Amount: {formatCurrency(selectedVoucher.fee_amount)}
               </p>
               <p className="text-sm text-muted-foreground">
                 Due Date: {new Date(selectedVoucher.due_date).toLocaleDateString()}

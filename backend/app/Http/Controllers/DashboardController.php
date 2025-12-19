@@ -148,4 +148,95 @@ class DashboardController extends ApiController
 
         return $this->success($stats, 'Dashboard statistics retrieved successfully');
     }
+
+    /**
+     * Get trending signup reasons.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return JsonResponse
+     */
+    public function getTrendingSignupReasons(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $filter = $request->input('filter', 'all_time');
+        
+        $query = User::whereNotNull('source')
+            ->where('source', '!=', '')
+            ->where('user_type', 2); // Only students
+
+        // Apply date filter
+        $now = now();
+        switch ($filter) {
+            case 'today':
+                $query->whereDate('created_at', $now->toDateString());
+                break;
+            case 'yesterday':
+                $query->whereDate('created_at', $now->copy()->subDay()->toDateString());
+                break;
+            case 'last_15_days':
+                $query->where('created_at', '>=', $now->copy()->subDays(15)->startOfDay());
+                break;
+            case 'this_month':
+                $query->whereMonth('created_at', $now->month)
+                    ->whereYear('created_at', $now->year);
+                break;
+            case 'last_month':
+                $query->whereMonth('created_at', $now->copy()->subMonth()->month)
+                    ->whereYear('created_at', $now->copy()->subMonth()->year);
+                break;
+            case 'all_time':
+            default:
+                // No date filter
+                break;
+        }
+
+        // Get all sources and count them
+        $sources = $query->get()->pluck('source');
+        
+        // Process sources - split by common delimiters and normalize
+        $sourceCounts = [];
+        foreach ($sources as $source) {
+            if (empty($source)) continue;
+            
+            // Normalize: trim, lowercase, and split by common delimiters
+            $normalized = strtolower(trim($source));
+            
+            // Split by common delimiters (comma, semicolon, pipe, slash, backslash, hyphen, underscore)
+            // Use # as delimiter to avoid conflicts with forward slash in the pattern
+            // In PHP double-quoted string: \\\\ becomes \\ in regex, which matches a literal backslash
+            $keywords = preg_split('#[,;|/\\\\\-_]+#', $normalized);
+            
+            foreach ($keywords as $keyword) {
+                $keyword = trim($keyword);
+                if (!empty($keyword) && strlen($keyword) > 1) {
+                    // Further normalize: remove extra spaces
+                    $keyword = preg_replace('/\s+/', ' ', $keyword);
+                    if (!isset($sourceCounts[$keyword])) {
+                        $sourceCounts[$keyword] = 0;
+                    }
+                    $sourceCounts[$keyword]++;
+                }
+            }
+        }
+
+        // Sort by count descending
+        arsort($sourceCounts);
+
+        // Format for response (limit to top 5)
+        $trending = [];
+        $count = 0;
+        foreach ($sourceCounts as $keyword => $keywordCount) {
+            if ($count >= 5) break;
+            $trending[] = [
+                'keyword' => ucwords($keyword),
+                'count' => $keywordCount,
+            ];
+            $count++;
+        }
+
+        return $this->success([
+            'trending' => $trending,
+            'filter' => $filter,
+            'total' => count($trending),
+        ], 'Trending signup reasons retrieved successfully');
+    }
 }
