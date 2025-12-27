@@ -20,6 +20,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\CloudflareTurnstileController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\PushNotificationController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -197,10 +198,19 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/test', [SmtpSettingsController::class, 'test']);
     });
 
-    // Notification Settings (Admin only)
-    Route::middleware('admin')->prefix('notification-settings')->group(function () {
+    // Notification Settings (available to all authenticated users)
+    Route::prefix('notification-settings')->group(function () {
         Route::get('/', [NotificationSettingsController::class, 'index']);
         Route::put('/', [NotificationSettingsController::class, 'update']);
+    });
+
+    // Push Notifications (available to all authenticated users)
+    Route::prefix('push-notifications')->group(function () {
+        Route::get('/vapid-public-key', [PushNotificationController::class, 'getVapidPublicKey']);
+        Route::post('/subscribe', [PushNotificationController::class, 'subscribe']);
+        Route::post('/unsubscribe', [PushNotificationController::class, 'unsubscribe']);
+        Route::post('/test', [PushNotificationController::class, 'sendTest']); // Test push notification
+        Route::get('/subscription-details', [PushNotificationController::class, 'getSubscriptionDetails']); // Debug endpoint
     });
 
     // Expense Management (Admin only)

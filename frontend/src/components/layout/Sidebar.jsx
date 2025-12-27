@@ -214,6 +214,19 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: Wallet,
       path: '/dashboard/account-book',
     },
+    // Settings menu with submenu (Student)
+    {
+      title: 'Settings',
+      icon: Settings,
+      key: 'student-settings',
+      submenu: [
+        {
+          title: 'Notifications',
+          icon: Bell,
+          path: '/dashboard/settings/notifications',
+        },
+      ],
+    },
   ];
 
   // Admin menu items

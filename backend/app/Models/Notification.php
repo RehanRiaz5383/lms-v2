@@ -141,6 +141,21 @@ class Notification extends Model
                 'notification_id' => $isUuidId ? ($notificationData['id'] ?? null) : (\DB::getPdo()->lastInsertId() ?? null),
             ]);
 
+            // Send push notification if notification was created successfully
+            if ($inserted) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $notificationUrl = $data['url'] ?? '/dashboard/notifications/' . ($isUuidId ? ($notificationData['id'] ?? null) : (\DB::getPdo()->lastInsertId() ?? null));
+                    $pushService->sendToUser($userId, $title, $message, $data, $notificationUrl);
+                } catch (\Exception $e) {
+                    // Log error but don't fail notification creation
+                    \Log::warning('Failed to send push notification', [
+                        'user_id' => $userId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             return $inserted;
         } catch (\Exception $e) {
             \Log::error('Failed to create notification', [

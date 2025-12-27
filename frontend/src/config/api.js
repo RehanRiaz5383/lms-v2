@@ -236,6 +236,16 @@ export const API_ENDPOINTS = {
     update: '/notification-settings',
   },
   
+  // Push Notifications
+  pushNotifications: {
+    subscribe: '/push-notifications/subscribe',
+    unsubscribe: '/push-notifications/unsubscribe',
+    getVapidKey: '/push-notifications/vapid-public-key',
+    test: '/push-notifications/test',
+    getUserPreferences: '/push-notifications/preferences',
+    updateUserPreferences: '/push-notifications/preferences',
+  },
+  
   // Cloudflare Turnstile
   turnstile: {
     getSettings: '/turnstile-settings',

@@ -116,6 +116,21 @@ trait SendsNotifications
                 'notification_id' => $notificationId,
             ]);
 
+            // Send push notification if notification was created successfully
+            if ($inserted) {
+                try {
+                    $pushService = app(\App\Services\PushNotificationService::class);
+                    $notificationUrl = ($data['url'] ?? null) ?: '/dashboard/notifications/' . ($notificationId ?? '');
+                    $pushService->sendToUser($this->id, $title, $message, $data, $notificationUrl);
+                } catch (\Exception $e) {
+                    // Log error but don't fail notification creation
+                    Log::warning('Failed to send push notification', [
+                        'user_id' => $this->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             return $notificationId ?: true;
         } catch (\Exception $e) {
             // Log error with full details for debugging

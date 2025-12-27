@@ -8,12 +8,17 @@ import {
 import { useToast } from '../components/ui/toast';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Loader2, Bell } from 'lucide-react';
+import { Loader2, Bell, Send } from 'lucide-react';
+import PushNotificationManager from '../components/PushNotificationManager';
+import { apiService } from '../services/api';
+import { API_ENDPOINTS } from '../config/api';
 
 const NotificationSettings = () => {
   const dispatch = useAppDispatch();
-  const { settings, loading, error } = useAppSelector((state) => state.notificationSettings);
-  const { success, showError } = useToast();
+  const { settings, loading, error: notificationError } = useAppSelector((state) => state.notificationSettings);
+  const { user } = useAppSelector((state) => state.auth);
+  const { success, error: showError } = useToast();
+  const [testingPush, setTestingPush] = useState(false);
 
   const [formData, setFormData] = useState({
     new_student_registration: false,
@@ -42,11 +47,11 @@ const NotificationSettings = () => {
   }, [settings]);
 
   useEffect(() => {
-    if (error) {
-      showError(error);
+    if (notificationError) {
+      showError(typeof notificationError === 'string' ? notificationError : 'An error occurred');
       dispatch(clearError());
     }
-  }, [error, showError, dispatch]);
+  }, [notificationError, dispatch, showError]);
 
   const handleToggle = (field) => {
     setFormData((prev) => ({
@@ -63,6 +68,28 @@ const NotificationSettings = () => {
     } catch (err) {
       const errorMessage = typeof err === 'string' ? err : 'Failed to save notification settings';
       showError(errorMessage);
+    }
+  };
+
+  // Check if user is admin
+  const isAdmin = () => {
+    if (!user) return false;
+    if (user.roles && Array.isArray(user.roles)) {
+      return user.roles.some(role => role.title?.toLowerCase() === 'admin');
+    }
+    return user.user_type === 1 || user.user_type_title?.toLowerCase() === 'admin';
+  };
+
+  const handleTestPushNotification = async () => {
+    setTestingPush(true);
+    try {
+      const response = await apiService.post(API_ENDPOINTS.pushNotifications.test);
+      success(response.data.message || 'Test push notification sent successfully! Check your device.');
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to send test push notification';
+      showError(errorMessage);
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -102,10 +129,50 @@ const NotificationSettings = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Email Notifications</h1>
+        <h1 className="text-3xl font-bold">Notification Settings</h1>
         <p className="text-muted-foreground mt-2">
-          Configure which notifications you want to receive via email
+          Configure your notification preferences for email and push notifications
         </p>
+      </div>
+
+      {/* Push Notifications Section */}
+      <div className="space-y-4">
+        <PushNotificationManager />
+        
+        {/* Test Push Notification Button (Admin Only) */}
+        {isAdmin() && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Send className="h-5 w-5" />
+                Test Push Notification
+              </CardTitle>
+              <CardDescription>
+                Send a test push notification to yourself to verify that push notifications are working correctly.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleTestPushNotification}
+                disabled={testingPush}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                {testingPush ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Test Push Notification
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>
@@ -115,7 +182,7 @@ const NotificationSettings = () => {
             Email Notifications
           </CardTitle>
           <CardDescription>
-            Toggle notifications on or off. When enabled, admins will receive email notifications for the selected events.
+            Toggle email notifications on or off. When enabled, you will receive email notifications for the selected events.
           </CardDescription>
         </CardHeader>
         <CardContent>

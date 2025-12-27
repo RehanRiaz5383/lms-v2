@@ -269,15 +269,72 @@ Route::match(['get', 'post'], '/process-queue', function (Request $request) {
 })->name('process-queue');
 
 /**
- * Database Upgrade Endpoint - Run migrations and seeders
+ * Check VAPID key generation capabilities
  * 
- * This endpoint runs all pending migrations and seeders (if not already in DB).
- * No high-end security, just a simple GET URL.
- * 
- * Usage: GET /upgrade-db
- * 
- * IMPORTANT: This is a simple endpoint without authentication.
- * Consider adding basic security in production if needed.
+ * Usage: GET /check-vapid-capabilities
+ */
+Route::get('/check-vapid-capabilities', function () {
+    $capabilities = [
+        'openssl_available' => function_exists('openssl_pkey_new') && function_exists('openssl_pkey_export'),
+        'openssl_ec_supported' => false,
+        'minishlink_available' => class_exists(\Minishlink\WebPush\VAPID::class),
+        'jwkfactory_available' => class_exists(\Jose\Component\KeyManagement\JWKFactory::class),
+        'php_version' => PHP_VERSION,
+        'openssl_version' => defined('OPENSSL_VERSION_TEXT') ? OPENSSL_VERSION_TEXT : (function_exists('openssl_version_text') ? openssl_version_text() : 'N/A'),
+    ];
+    
+    // Test if OpenSSL EC is actually supported
+    if ($capabilities['openssl_available']) {
+        try {
+            $testConfig = [
+                'curve_name' => 'prime256v1',
+                'private_key_type' => OPENSSL_KEYTYPE_EC,
+            ];
+            $testKey = @openssl_pkey_new($testConfig);
+            $capabilities['openssl_ec_supported'] = ($testKey !== false);
+            if ($testKey) {
+                @openssl_free_key($testKey);
+            }
+        } catch (\Exception $e) {
+            $capabilities['openssl_ec_error'] = $e->getMessage();
+        }
+    }
+    
+    // Try to generate keys using the helper
+    $canGenerate = \App\Helpers\VapidKeyGenerator::isAvailable();
+    $availableMethods = \App\Helpers\VapidKeyGenerator::getAvailableMethods();
+    
+    $capabilities['can_generate'] = $canGenerate;
+    $capabilities['available_methods'] = $availableMethods;
+    
+    // Try actual generation
+    if ($canGenerate) {
+        try {
+            $testKeys = \App\Helpers\VapidKeyGenerator::generate();
+            $capabilities['test_generation'] = [
+                'success' => ($testKeys !== null),
+                'has_public_key' => isset($testKeys['publicKey']),
+                'has_private_key' => isset($testKeys['privateKey']),
+                'method_used' => $testKeys['method'] ?? null,
+            ];
+        } catch (\Exception $e) {
+            $capabilities['test_generation'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+    
+    return response()->json([
+        'capabilities' => $capabilities,
+        'recommendation' => $canGenerate 
+            ? 'VAPID key generation should work on this server'
+            : 'VAPID key generation is not available. Use manual generation methods.',
+    ], 200);
+});
+
+/**
+ * Check notifications table structure
  */
 Route::get('/check-notifications-table', function () {
     try {
@@ -297,6 +354,17 @@ Route::get('/check-notifications-table', function () {
     }
 });
 
+/**
+ * Database Upgrade Endpoint - Run migrations and seeders
+ * 
+ * This endpoint runs all pending migrations and seeders (if not already in DB).
+ * No high-end security, just a simple GET URL.
+ * 
+ * Usage: GET /upgrade-db
+ * 
+ * IMPORTANT: This is a simple endpoint without authentication.
+ * Consider adding basic security in production if needed.
+ */
 Route::get('/upgrade-db', function () {
     try {
         $results = [
@@ -428,6 +496,92 @@ Route::get('/upgrade-db', function () {
             $results['seeders'] = [
                 'success' => false,
                 'error' => $e->getMessage(),
+            ];
+        }
+
+        // Generate VAPID keys for push notifications if not already set
+        $results['vapid_keys'] = null;
+        try {
+            $vapidPublicKey = env('VAPID_PUBLIC_KEY');
+            $vapidPrivateKey = env('VAPID_PRIVATE_KEY');
+            
+            if (empty($vapidPublicKey) || empty($vapidPrivateKey)) {
+                // Use the VapidKeyGenerator helper
+                $generatedKeys = \App\Helpers\VapidKeyGenerator::generate();
+                $availableMethods = \App\Helpers\VapidKeyGenerator::getAvailableMethods();
+                $isAvailable = \App\Helpers\VapidKeyGenerator::isAvailable();
+                
+                if ($generatedKeys && isset($generatedKeys['publicKey']) && isset($generatedKeys['privateKey'])) {
+                    $results['vapid_keys'] = [
+                        'success' => true,
+                        'generated' => true,
+                        'message' => 'VAPID keys generated successfully using ' . ($generatedKeys['method'] ?? 'unknown method') . '. Add these to your .env file:',
+                        'public_key' => $generatedKeys['publicKey'],
+                        'private_key' => $generatedKeys['privateKey'],
+                        'method_used' => $generatedKeys['method'] ?? 'unknown',
+                        'instructions' => [
+                            '1. Open your .env file',
+                            '2. Add the following lines:',
+                            'VAPID_PUBLIC_KEY=' . $generatedKeys['publicKey'],
+                            'VAPID_PRIVATE_KEY=' . $generatedKeys['privateKey'],
+                            '3. Save the file and restart your application server',
+                            '4. After restarting, push notifications will be enabled'
+                        ],
+                        'env_lines' => [
+                            'VAPID_PUBLIC_KEY=' . $generatedKeys['publicKey'],
+                            'VAPID_PRIVATE_KEY=' . $generatedKeys['privateKey'],
+                        ]
+                    ];
+                } else {
+                    $results['vapid_keys'] = [
+                        'success' => false,
+                        'generated' => false,
+                        'message' => 'VAPID keys not configured. Automatic generation is not available on this server.',
+                        'available_methods' => $availableMethods,
+                        'is_available' => $isAvailable,
+                        'instructions' => [
+                            'Automatic VAPID key generation is not available. Use one of these methods:',
+                            '',
+                            'Method 1 - Node.js (Recommended):',
+                            '  npm install -g web-push',
+                            '  web-push generate-vapid-keys',
+                            '',
+                            'Method 2 - Online Generator:',
+                            '  Visit: https://web-push-codelab.glitch.me/',
+                            '  Generate keys and copy them',
+                            '',
+                            'Method 3 - PHP Script (if you have shell access):',
+                            '  cd backend',
+                            '  php generate-vapid-keys.php',
+                            '',
+                            'After generating, add to .env:',
+                            '  VAPID_PUBLIC_KEY=your_public_key_here',
+                            '  VAPID_PRIVATE_KEY=your_private_key_here',
+                            '',
+                            'Then restart your application server.'
+                        ],
+                        'php_info' => [
+                            'openssl_available' => function_exists('openssl_pkey_new'),
+                            'minishlink_available' => class_exists(\Minishlink\WebPush\VAPID::class),
+                            'jwkfactory_available' => class_exists(\Jose\Component\KeyManagement\JWKFactory::class),
+                        ]
+                    ];
+                }
+            } else {
+                $results['vapid_keys'] = [
+                    'success' => true,
+                    'generated' => false,
+                    'message' => 'VAPID keys are already configured in .env',
+                    'public_key_set' => !empty($vapidPublicKey),
+                    'private_key_set' => !empty($vapidPrivateKey),
+                ];
+            }
+        } catch (\Exception $e) {
+            $results['vapid_keys'] = [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'message' => 'Error checking VAPID keys configuration',
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null,
             ];
         }
 
