@@ -5,7 +5,7 @@ import { fetchBatch } from '../store/slices/batchesSlice';
 import { createVideo } from '../store/slices/videosSlice';
 import { useAppSelector } from '../hooks/redux';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS, buildEndpoint, getStorageUrl, normalizeStorageUrl, APP_BASE_URL } from '../config/api';
+import { API_ENDPOINTS, buildEndpoint, getStorageUrl, normalizeStorageUrl, APP_BASE_URL, normalizeUrl } from '../config/api';
 import { useToast } from '../components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -14,7 +14,7 @@ import { Label } from '../components/ui/label';
 import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
-import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 const BatchExplore = () => {
@@ -30,16 +30,21 @@ const BatchExplore = () => {
   const [expandedSubjects, setExpandedSubjects] = useState(new Set());
   const [videos, setVideos] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [quizzes, setQuizzes] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [draggedVideo, setDraggedVideo] = useState(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
+  const [showQuizzes, setShowQuizzes] = useState(false);
   const [showCreateTaskDrawer, setShowCreateTaskDrawer] = useState(false);
   const [showEditTaskDrawer, setShowEditTaskDrawer] = useState(false);
+  const [showCreateQuizDrawer, setShowCreateQuizDrawer] = useState(false);
+  const [showAssignMarksDrawer, setShowAssignMarksDrawer] = useState(false);
   const [showSubmissionsDialog, setShowSubmissionsDialog] = useState(false);
   const [showGradeDialog, setShowGradeDialog] = useState(false);
   const [showUploadSubmissionDrawer, setShowUploadSubmissionDrawer] = useState(false);
@@ -91,9 +96,19 @@ const BatchExplore = () => {
     description: '',
     due_date: '',
     user_id: '', // Optional: specific student
+    marks: '', // Task marks/total marks
   });
   const [taskFile, setTaskFile] = useState(null);
   const taskFileInputRef = useRef(null);
+  const [quizFormData, setQuizFormData] = useState({
+    title: '',
+    quiz_date: '',
+    description: '',
+    total_marks: '',
+  });
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [quizStudents, setQuizStudents] = useState([]);
+  const [quizMarks, setQuizMarks] = useState({}); // { studentId: { obtained_marks, total_marks, remarks } }
   const [gradeFormData, setGradeFormData] = useState({
     obtained_marks: '',
     instructor_comments: '',
@@ -215,6 +230,7 @@ const BatchExplore = () => {
       description: '',
       due_date: '',
       user_id: '',
+      marks: '',
     });
     setTaskFile(null);
     setEditingTask(null);
@@ -235,6 +251,7 @@ const BatchExplore = () => {
       description: task.description || '',
       due_date: formattedDueDate,
       user_id: task.user_id || '',
+      marks: task.marks || task.total_marks || '',
     });
     setTaskFile(null);
     setShowEditTaskDrawer(true);
@@ -259,6 +276,9 @@ const BatchExplore = () => {
       }
       if (taskFormData.user_id) {
         formData.append('user_id', taskFormData.user_id);
+      }
+      if (taskFormData.marks) {
+        formData.append('marks', taskFormData.marks);
       }
       if (taskFile) {
         formData.append('task_file', taskFile);
@@ -394,6 +414,135 @@ const BatchExplore = () => {
       await loadTasks(selectedSubject.id);
     } catch (err) {
       showError('Failed to delete task');
+    }
+  };
+
+  // Quiz handlers
+  const handleQuizzesClick = async (subject, e) => {
+    if (e) e.stopPropagation();
+    setSelectedSubject(subject);
+    setShowStudents(false);
+    setShowTasks(false);
+    setShowQuizzes(true);
+    await loadQuizzes(subject?.id);
+  };
+
+  const handleBatchQuizzesClick = async () => {
+    setSelectedSubject(null);
+    setShowStudents(false);
+    setShowTasks(false);
+    setShowQuizzes(true);
+    await loadQuizzes(null); // null means batch-level quiz
+  };
+
+  const loadQuizzes = async (subjectId) => {
+    setLoadingQuizzes(true);
+    try {
+      const params = {
+        batch_id: id,
+      };
+      if (subjectId !== null && subjectId !== undefined) {
+        params.subject_id = subjectId;
+      } else {
+        params.subject_id = 'null'; // For batch-level quizzes
+      }
+      const response = await apiService.get(API_ENDPOINTS.quizzes.list, { params });
+      setQuizzes(response.data.data || []);
+    } catch (err) {
+      showError('Failed to load quizzes');
+    } finally {
+      setLoadingQuizzes(false);
+    }
+  };
+
+  const handleCreateQuiz = () => {
+    setQuizFormData({
+      title: '',
+      quiz_date: new Date().toISOString().split('T')[0], // Default to today
+      description: '',
+      total_marks: '',
+    });
+    setSelectedQuiz(null);
+    setShowCreateQuizDrawer(true);
+  };
+
+  const handleQuizSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = {
+        title: quizFormData.title,
+        batch_id: id,
+        subject_id: selectedSubject?.id || null,
+        quiz_date: quizFormData.quiz_date,
+        description: quizFormData.description || null,
+        total_marks: quizFormData.total_marks || null,
+      };
+      await apiService.post(API_ENDPOINTS.quizzes.create, data);
+      success('Quiz created successfully');
+      setShowCreateQuizDrawer(false);
+      await loadQuizzes(selectedSubject?.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to create quiz');
+    }
+  };
+
+  const handleDeleteQuiz = async (quizId) => {
+    if (!window.confirm('Are you sure you want to delete this quiz? All marks will also be deleted.')) {
+      return;
+    }
+    try {
+      const endpoint = API_ENDPOINTS.quizzes.delete.replace(':id', quizId);
+      await apiService.delete(endpoint);
+      success('Quiz deleted successfully');
+      await loadQuizzes(selectedSubject?.id);
+    } catch (err) {
+      showError('Failed to delete quiz');
+    }
+  };
+
+  const handleAssignMarks = async (quiz) => {
+    setSelectedQuiz(quiz);
+    try {
+      const endpoint = API_ENDPOINTS.quizzes.getStudents.replace(':id', quiz.id);
+      const response = await apiService.get(endpoint);
+      const data = response.data.data;
+      setQuizStudents(data.students || []);
+      
+      // Initialize marks state with existing marks
+      const marksState = {};
+      data.students?.forEach(student => {
+        marksState[student.id] = {
+          obtained_marks: student.obtained_marks || '',
+          total_marks: student.total_marks || quiz.total_marks || '',
+          remarks: student.remarks || '',
+        };
+      });
+      setQuizMarks(marksState);
+      setShowAssignMarksDrawer(true);
+    } catch (err) {
+      showError('Failed to load students for quiz');
+    }
+  };
+
+  const handleMarksSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const marks = Object.entries(quizMarks).map(([studentId, markData]) => ({
+        student_id: parseInt(studentId),
+        obtained_marks: parseFloat(markData.obtained_marks) || 0,
+        total_marks: markData.total_marks ? parseFloat(markData.total_marks) : null,
+        remarks: markData.remarks || null,
+      }));
+
+      const endpoint = API_ENDPOINTS.quizzes.assignMarks.replace(':id', selectedQuiz.id);
+      await apiService.post(endpoint, { marks });
+      success('Marks assigned successfully');
+      setShowAssignMarksDrawer(false);
+      setSelectedQuiz(null);
+      setQuizMarks({});
+      await loadQuizzes(selectedSubject?.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to assign marks');
     }
   };
 
@@ -866,6 +1015,20 @@ const BatchExplore = () => {
                           Tasks
                         </button>
                       )}
+                      {hasTaskAccess && (
+                        <button
+                          onClick={(e) => handleQuizzesClick(subject, e)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                            selectedSubject?.id === subject.id && showQuizzes
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-accent/50 text-muted-foreground"
+                          )}
+                        >
+                          <FileQuestion className="h-4 w-4" />
+                          Quiz
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -875,7 +1038,7 @@ const BatchExplore = () => {
           
           {/* Students Section */}
           {hasEditAccess && (
-            <div className="mt-6 pt-6 border-t border-border">
+            <div className="mt-6 pt-6 border-t border-border space-y-1">
               <button
                 onClick={handleStudentsClick}
                 className={cn(
@@ -888,6 +1051,20 @@ const BatchExplore = () => {
                 <Users className="h-4 w-4" />
                 Students
               </button>
+              {hasTaskAccess && (
+                <button
+                  onClick={handleBatchQuizzesClick}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                    showQuizzes && !selectedSubject
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-accent/50 text-foreground"
+                  )}
+                >
+                  <FileQuestion className="h-4 w-4" />
+                  Quiz
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1062,6 +1239,110 @@ const BatchExplore = () => {
                 )}
               </CardContent>
             </Card>
+          ) : (selectedSubject && showQuizzes) || (!selectedSubject && showQuizzes) ? (
+            /* Quizzes Content */
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>
+                    {selectedSubject ? `Quizzes - ${selectedSubject.title}` : 'Batch Quizzes'}
+                  </CardTitle>
+                  {hasTaskAccess && (
+                    <Button onClick={handleCreateQuiz} size="sm">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Quiz
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingQuizzes ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : quizzes.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileQuestion className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No quizzes found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {quizzes.map((quiz) => (
+                      <div
+                        key={quiz.id}
+                        className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/50"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold text-foreground">
+                              {quiz.title}
+                            </h3>
+                            {quiz.subject && (
+                              <span className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded">
+                                {quiz.subject.title}
+                              </span>
+                            )}
+                            {!quiz.subject && (
+                              <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-0.5 rounded">
+                                Batch Level
+                              </span>
+                            )}
+                          </div>
+                          {quiz.description && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {quiz.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(quiz.quiz_date).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                            {quiz.total_marks && (
+                              <span className="flex items-center gap-1">
+                                <Award className="h-3 w-3" />
+                                Total: {quiz.total_marks} marks
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              {quiz.marks_count || 0} students marked
+                            </span>
+                          </div>
+                        </div>
+                        {hasTaskAccess && (
+                          <div className="flex gap-2">
+                            <Tooltip content="Assign Marks">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAssignMarks(quiz)}
+                              >
+                                <Award className="h-4 w-4 mr-2" />
+                                Assign Marks
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content="Delete Quiz">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteQuiz(quiz.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           ) : selectedSubject && showTasks ? (
             /* Tasks Content */
             <Card>
@@ -1167,7 +1448,9 @@ const BatchExplore = () => {
                                   fileUrl = `${APP_BASE_URL}/load-storage/${cleanPath}`;
                                 }
                                 if (fileUrl) {
-                                  window.open(fileUrl, '_blank');
+                                  // Normalize URL to fix localhost:8000 issues
+                                  const normalizedUrl = normalizeUrl(fileUrl);
+                                  window.open(normalizedUrl, '_blank');
                                 }
                               }}
                             >
@@ -1744,6 +2027,7 @@ const BatchExplore = () => {
             description: '',
             due_date: '',
             user_id: '',
+            marks: '',
           });
           setTaskFile(null);
           if (taskFileInputRef.current) {
@@ -1782,6 +2066,21 @@ const BatchExplore = () => {
               onChange={(e) => setTaskFormData({ ...taskFormData, due_date: e.target.value })}
               required
             />
+          </div>
+          <div>
+            <Label htmlFor="task_marks">Marks (Optional)</Label>
+            <Input
+              id="task_marks"
+              type="number"
+              min="0"
+              step="0.01"
+              value={taskFormData.marks}
+              onChange={(e) => setTaskFormData({ ...taskFormData, marks: e.target.value })}
+              placeholder="Enter total marks for this task"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Total marks for this task (e.g., 100)
+            </p>
           </div>
           <div>
             <Label htmlFor="task_file">Task File (Optional)</Label>
@@ -1846,6 +2145,7 @@ const BatchExplore = () => {
                   description: '',
                   due_date: '',
                   user_id: '',
+                  marks: '',
                 });
                 setTaskFile(null);
                 if (taskFileInputRef.current) {
@@ -1869,6 +2169,7 @@ const BatchExplore = () => {
             description: '',
             due_date: '',
             user_id: '',
+            marks: '',
           });
           setTaskFile(null);
           setEditingTask(null);
@@ -1910,6 +2211,21 @@ const BatchExplore = () => {
             />
           </div>
           <div>
+            <Label htmlFor="edit_task_marks">Marks (Optional)</Label>
+            <Input
+              id="edit_task_marks"
+              type="number"
+              min="0"
+              step="0.01"
+              value={taskFormData.marks}
+              onChange={(e) => setTaskFormData({ ...taskFormData, marks: e.target.value })}
+              placeholder="Enter total marks for this task"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Total marks for this task (e.g., 100)
+            </p>
+          </div>
+          <div>
             <Label htmlFor="edit_task_file">Task File (Optional)</Label>
             <Input
               id="edit_task_file"
@@ -1944,7 +2260,9 @@ const BatchExplore = () => {
                       fileUrl = `${APP_BASE_URL}/load-storage/${cleanPath}`;
                     }
                     if (fileUrl) {
-                      window.open(fileUrl, '_blank');
+                      // Normalize URL to fix localhost:8000 issues
+                      const normalizedUrl = normalizeUrl(fileUrl);
+                      window.open(normalizedUrl, '_blank');
                     }
                   }}
                   className="text-primary hover:underline"
@@ -2024,6 +2342,7 @@ const BatchExplore = () => {
                   description: '',
                   due_date: '',
                   user_id: '',
+                  marks: '',
                 });
                 setTaskFile(null);
                 setEditingTask(null);
@@ -2329,6 +2648,206 @@ const BatchExplore = () => {
             )}
           </div>
         )}
+      </Drawer>
+
+      {/* Create Quiz Drawer */}
+      <Drawer
+        isOpen={showCreateQuizDrawer}
+        onClose={() => {
+          setShowCreateQuizDrawer(false);
+          setQuizFormData({
+            title: '',
+            quiz_date: new Date().toISOString().split('T')[0],
+            description: '',
+            total_marks: '',
+          });
+        }}
+        title="Add Quiz"
+      >
+        <form onSubmit={handleQuizSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="quiz_title">Quiz Title *</Label>
+            <Input
+              id="quiz_title"
+              value={quizFormData.title}
+              onChange={(e) => setQuizFormData({ ...quizFormData, title: e.target.value })}
+              placeholder="Enter quiz title"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="quiz_date">Quiz Date *</Label>
+            <Input
+              id="quiz_date"
+              type="date"
+              value={quizFormData.quiz_date}
+              onChange={(e) => setQuizFormData({ ...quizFormData, quiz_date: e.target.value })}
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              You can set past, current, or future dates
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="quiz_description">Description</Label>
+            <textarea
+              id="quiz_description"
+              value={quizFormData.description}
+              onChange={(e) => setQuizFormData({ ...quizFormData, description: e.target.value })}
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Enter quiz description (optional)"
+            />
+          </div>
+          <div>
+            <Label htmlFor="quiz_total_marks">Total Marks (Optional)</Label>
+            <Input
+              id="quiz_total_marks"
+              type="number"
+              step="0.01"
+              min="0"
+              value={quizFormData.total_marks}
+              onChange={(e) => setQuizFormData({ ...quizFormData, total_marks: e.target.value })}
+              placeholder="Enter total marks"
+            />
+          </div>
+          <div className="flex gap-2 pt-4">
+            <Button type="submit" className="flex-1">
+              Create Quiz
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowCreateQuizDrawer(false);
+                setQuizFormData({
+                  title: '',
+                  quiz_date: new Date().toISOString().split('T')[0],
+                  description: '',
+                  total_marks: '',
+                });
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Assign Marks Drawer */}
+      <Drawer
+        isOpen={showAssignMarksDrawer}
+        onClose={() => {
+          setShowAssignMarksDrawer(false);
+          setSelectedQuiz(null);
+          setQuizStudents([]);
+          setQuizMarks({});
+        }}
+        title={`Assign Marks - ${selectedQuiz?.title || 'Quiz'}`}
+        size="80%"
+      >
+        <form onSubmit={handleMarksSubmit} className="space-y-4">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {quizStudents.map((student) => (
+              <div
+                key={student.id}
+                className="p-4 border border-border rounded-lg space-y-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{student.full_name || student.name || student.email}</h4>
+                    <p className="text-sm text-muted-foreground">{student.email}</p>
+                  </div>
+                  {student.has_mark && (
+                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
+                      Marked
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor={`obtained_marks_${student.id}`}>
+                      Obtained Marks *
+                    </Label>
+                    <Input
+                      id={`obtained_marks_${student.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={quizMarks[student.id]?.obtained_marks || ''}
+                      onChange={(e) => {
+                        setQuizMarks({
+                          ...quizMarks,
+                          [student.id]: {
+                            ...quizMarks[student.id],
+                            obtained_marks: e.target.value,
+                          },
+                        });
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`total_marks_${student.id}`}>
+                      Total Marks
+                    </Label>
+                    <Input
+                      id={`total_marks_${student.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={quizMarks[student.id]?.total_marks || selectedQuiz?.total_marks || ''}
+                      onChange={(e) => {
+                        setQuizMarks({
+                          ...quizMarks,
+                          [student.id]: {
+                            ...quizMarks[student.id],
+                            total_marks: e.target.value,
+                          },
+                        });
+                      }}
+                      placeholder={selectedQuiz?.total_marks ? `Default: ${selectedQuiz.total_marks}` : 'Enter total marks'}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor={`remarks_${student.id}`}>Remarks (Optional)</Label>
+                  <textarea
+                    id={`remarks_${student.id}`}
+                    value={quizMarks[student.id]?.remarks || ''}
+                    onChange={(e) => {
+                      setQuizMarks({
+                        ...quizMarks,
+                        [student.id]: {
+                          ...quizMarks[student.id],
+                          remarks: e.target.value,
+                        },
+                      });
+                    }}
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Enter remarks (optional)"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button type="submit" className="flex-1">
+              Save Marks
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowAssignMarksDrawer(false);
+                setSelectedQuiz(null);
+                setQuizStudents([]);
+                setQuizMarks({});
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
       </Drawer>
     </div>
   );

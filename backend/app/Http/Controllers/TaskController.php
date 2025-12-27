@@ -167,6 +167,8 @@ class TaskController extends ApiController
             $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'status');
             $hasCreatedByColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'created_by');
             $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
+            $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
+            $hasTotalMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'total_marks');
 
             $taskData = [
                 'title' => $request->input('title'),
@@ -202,6 +204,13 @@ class TaskController extends ApiController
             // Only include status if column exists
             if ($hasStatusColumn) {
                 $taskData['status'] = 'active';
+            }
+
+            // Only include marks if column exists (check both marks and total_marks)
+            if ($hasMarksColumn && $request->has('marks') && $request->input('marks') !== '') {
+                $taskData['marks'] = $request->input('marks');
+            } else if ($hasTotalMarksColumn && $request->has('marks') && $request->input('marks') !== '') {
+                $taskData['total_marks'] = $request->input('marks');
             }
 
             $task = Task::create($taskData);
@@ -470,6 +479,8 @@ class TaskController extends ApiController
             $hasDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
             $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
             $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'status');
+            $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
+            $hasTotalMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'total_marks');
             
             $updateData = ['title' => $request->input('title')];
             
@@ -490,6 +501,13 @@ class TaskController extends ApiController
             // Only include status if column exists
             if ($hasStatusColumn && $request->has('status')) {
                 $updateData['status'] = $request->input('status');
+            }
+
+            // Only include marks if column exists (check both marks and total_marks)
+            if ($hasMarksColumn && $request->has('marks')) {
+                $updateData['marks'] = $request->input('marks') !== '' ? $request->input('marks') : null;
+            } else if ($hasTotalMarksColumn && $request->has('marks')) {
+                $updateData['total_marks'] = $request->input('marks') !== '' ? $request->input('marks') : null;
             }
 
             $task->fill($updateData);

@@ -29,6 +29,7 @@ import IncomeExpenseReport from './pages/IncomeExpenseReport';
 import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
 import DashboardLayout from './components/layout/DashboardLayout';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Inner component to handle message listener
 function AppContent() {
@@ -234,6 +235,7 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          <PWAInstallPrompt />
         </BrowserRouter>
       </ToastProvider>
     </Provider>

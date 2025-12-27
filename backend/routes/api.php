@@ -19,6 +19,7 @@ use App\Http\Controllers\ScheduledJobController;
 use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\CloudflareTurnstileController;
+use App\Http\Controllers\QuizController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -166,6 +167,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
         Route::post('/{taskId}/submissions/{submissionId}/grade', [TaskController::class, 'gradeSubmission']);
         Route::post('/{taskId}/upload-student-submission', [TaskController::class, 'uploadStudentSubmission']);
+    });
+
+    // Quizzes Management (Admin, Teacher, CR)
+    Route::prefix('quizzes')->group(function () {
+        Route::get('/', [QuizController::class, 'index']);
+        Route::post('/', [QuizController::class, 'store']);
+        Route::get('/{id}', [QuizController::class, 'show']);
+        Route::put('/{id}', [QuizController::class, 'update']);
+        Route::delete('/{id}', [QuizController::class, 'destroy']);
+        Route::get('/{id}/students', [QuizController::class, 'getStudents']);
+        Route::post('/{id}/assign-marks', [QuizController::class, 'assignMarks']);
+        Route::get('/students/{studentId}/marks', [QuizController::class, 'getStudentMarks']);
     });
 
     // Notifications

@@ -23,7 +23,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS, normalizeStorageUrl, getStorageUrl } from '../config/api';
+import { API_ENDPOINTS, normalizeStorageUrl, getStorageUrl, normalizeUrl } from '../config/api';
 import { useToast } from '../components/ui/toast';
 
 const StudentTasks = () => {
@@ -136,7 +136,9 @@ const StudentTasks = () => {
     const filePath = submission.answer_file || submission.file_path;
     if (filePath) {
       // Use file_url if available (from backend), otherwise construct URL
-      const fileUrl = submission.file_url || normalizeStorageUrl(filePath) || getStorageUrl(filePath);
+      let fileUrl = submission.file_url || normalizeStorageUrl(filePath) || getStorageUrl(filePath);
+      // Normalize URL to fix localhost:8000 issues
+      fileUrl = normalizeUrl(fileUrl);
       window.open(fileUrl, '_blank');
     }
   };
@@ -368,6 +370,7 @@ const StudentTasks = () => {
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Batch</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Subject</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Due Date</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Marks</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -402,6 +405,15 @@ const StudentTasks = () => {
                           )}
                         </div>
                       </td>
+                      <td className="p-4 text-sm text-muted-foreground">
+                        {task.marks || task.total_marks ? (
+                          <span className="font-medium text-foreground">
+                            {task.marks || task.total_marks}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
                       <td className="p-4">
                         {getStatusBadge(task)}
                       </td>
@@ -414,9 +426,11 @@ const StudentTasks = () => {
                                 size="sm"
                                 onClick={() => {
                                   if (task.task_file_url) {
-                                    window.open(task.task_file_url, '_blank');
+                                    const normalizedUrl = normalizeUrl(task.task_file_url);
+                                    window.open(normalizedUrl, '_blank');
                                   } else if (task.attachment_files && task.attachment_files.length > 0 && task.attachment_files[0].file_url) {
-                                    window.open(task.attachment_files[0].file_url, '_blank');
+                                    const normalizedUrl = normalizeUrl(task.attachment_files[0].file_url);
+                                    window.open(normalizedUrl, '_blank');
                                   }
                                 }}
                               >
@@ -576,6 +590,12 @@ const StudentTasks = () => {
                   {getStatusBadge(selectedTask)}
                 </div>
               </div>
+              {(selectedTask.marks || selectedTask.total_marks) && (
+                <div>
+                  <Label className="text-muted-foreground">Total Marks</Label>
+                  <p className="font-medium">{selectedTask.marks || selectedTask.total_marks}</p>
+                </div>
+              )}
               {selectedTask.creator && (
                 <div>
                   <Label className="text-muted-foreground">Created By</Label>
@@ -594,7 +614,8 @@ const StudentTasks = () => {
                   className="w-full justify-start"
                   onClick={() => {
                     if (selectedTask.task_file_url) {
-                      window.open(selectedTask.task_file_url, '_blank');
+                      const normalizedUrl = normalizeUrl(selectedTask.task_file_url);
+                      window.open(normalizedUrl, '_blank');
                     }
                   }}
                 >
@@ -617,7 +638,8 @@ const StudentTasks = () => {
                       className="w-full justify-start"
                       onClick={() => {
                         if (file.file_url) {
-                          window.open(file.file_url, '_blank');
+                          const normalizedUrl = normalizeUrl(file.file_url);
+                          window.open(normalizedUrl, '_blank');
                         }
                       }}
                     >
@@ -662,14 +684,28 @@ const StudentTasks = () => {
                   )}
                   {selectedTask.submission.obtained_marks !== null && selectedTask.submission.obtained_marks !== undefined && (
                     <div>
-                      <Label className="text-muted-foreground">Marks</Label>
-                      <p className="font-medium text-lg">{selectedTask.submission.obtained_marks}</p>
+                      <Label className="text-muted-foreground">Obtained Marks</Label>
+                      <p className="font-medium text-lg">
+                        {selectedTask.submission.obtained_marks}
+                        {(selectedTask.marks || selectedTask.total_marks) && (
+                          <span className="text-sm text-muted-foreground ml-2">
+                            / {selectedTask.marks || selectedTask.total_marks}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   )}
                   {selectedTask.submission.marks !== null && selectedTask.submission.marks !== undefined && (
                     <div>
-                      <Label className="text-muted-foreground">Marks</Label>
-                      <p className="font-medium text-lg">{selectedTask.submission.marks}</p>
+                      <Label className="text-muted-foreground">Obtained Marks</Label>
+                      <p className="font-medium text-lg">
+                        {selectedTask.submission.marks}
+                        {(selectedTask.marks || selectedTask.total_marks) && (
+                          <span className="text-sm text-muted-foreground ml-2">
+                            / {selectedTask.marks || selectedTask.total_marks}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   )}
                   {(selectedTask.submission.answer_file || selectedTask.submission.file_path) && (

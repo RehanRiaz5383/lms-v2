@@ -327,7 +327,7 @@ class StudentPerformanceController extends ApiController
                             
                             $quizDetails[] = [
                                 'id' => $quizId,
-                                'title' => $quiz->description ?? 'Quiz ' . $quizId,
+                                'title' => $quiz->title ?? $quiz->description ?? 'Quiz ' . $quizId,
                                 'quiz_date' => $quiz->quiz_date ?? null,
                                 'total_marks' => $quizTotalMarks,
                                 'obtained_marks' => $obtainedMarks,
@@ -356,7 +356,7 @@ class StudentPerformanceController extends ApiController
                             
                             $quizDetails[] = [
                                 'id' => $quiz->id,
-                                'title' => $quiz->description ?? 'Quiz ' . $quiz->id,
+                                'title' => $quiz->title ?? $quiz->description ?? 'Quiz ' . $quiz->id,
                                 'quiz_date' => $quiz->quiz_date ?? null,
                                 'total_marks' => $quizTotalMarks,
                                 'obtained_marks' => null,

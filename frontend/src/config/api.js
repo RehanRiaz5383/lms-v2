@@ -210,6 +210,18 @@ export const API_ENDPOINTS = {
     gradeSubmission: '/tasks/:taskId/submissions/:submissionId/grade',
     uploadStudentSubmission: '/tasks/:taskId/upload-student-submission',
   },
+
+  // Quizzes Management
+  quizzes: {
+    list: '/quizzes',
+    show: '/quizzes/:id',
+    create: '/quizzes',
+    update: '/quizzes/:id',
+    delete: '/quizzes/:id',
+    getStudents: '/quizzes/:id/students',
+    assignMarks: '/quizzes/:id/assign-marks',
+    getStudentMarks: '/quizzes/students/:studentId/marks',
+  },
   
   // SMTP Settings (Admin only)
   smtpSettings: {
@@ -278,5 +290,27 @@ export const normalizeStorageUrl = (url) => {
   if (!url) return null;
   // Replace /storage/ with /load-storage/ if present
   return url.replace(/\/storage\//g, '/load-storage/');
+};
+
+/**
+ * Normalize any URL that contains localhost:8000 to use the production base URL
+ * This fixes issues where backend sends URLs with localhost even in production
+ * @param {string} url - URL that may contain localhost:8000
+ * @returns {string} Normalized URL with correct base URL
+ */
+export const normalizeUrl = (url) => {
+  if (!url) return null;
+  
+  // If URL contains localhost:8000, replace it with the correct base URL
+  if (url.includes('localhost:8000')) {
+    return url.replace(/https?:\/\/localhost:8000/g, APP_BASE_URL);
+  }
+  
+  // Also handle http://localhost:8000 without https
+  if (url.includes('http://localhost:8000')) {
+    return url.replace(/http:\/\/localhost:8000/g, APP_BASE_URL);
+  }
+  
+  return url;
 };
 
