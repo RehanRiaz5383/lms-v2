@@ -17,6 +17,8 @@ import NotificationSettings from './pages/NotificationSettings';
 import Profile from './pages/Profile';
 import StudentLectureVideos from './pages/StudentLectureVideos';
 import StudentTasks from './pages/StudentTasks';
+import StudentQuizzes from './pages/StudentQuizzes';
+import StudentClassParticipations from './pages/StudentClassParticipations';
 import BatchExplore from './pages/BatchExplore';
 import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
@@ -227,7 +229,12 @@ function App() {
             } />
             <Route path="quizzes" element={
               <BlockedRoute>
-                <div className="p-6"><h1 className="text-2xl font-bold">My Quizes</h1><p className="text-muted-foreground mt-2">Coming soon...</p></div>
+                <StudentQuizzes />
+              </BlockedRoute>
+            } />
+            <Route path="class-participations" element={
+              <BlockedRoute>
+                <StudentClassParticipations />
               </BlockedRoute>
             } />
             {/* Add more dashboard routes here */}

@@ -29,7 +29,12 @@ import {
   BookOpen,
   X,
   ExternalLink,
+  Users,
+  Award,
+  Calendar,
 } from 'lucide-react';
+import { apiService } from '../services/api';
+import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { debounce } from '../utils/debounce';
 
@@ -71,10 +76,29 @@ const BatchManagement = () => {
 
   const [showDrawer, setShowDrawer] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showClassParticipationsDrawer, setShowClassParticipationsDrawer] = useState(false);
   const [editingBatch, setEditingBatch] = useState(null);
   const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [availableSubjects, setAvailableSubjects] = useState([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
+  const [classParticipations, setClassParticipations] = useState([]);
+  const [loadingParticipations, setLoadingParticipations] = useState(false);
+  const [showParticipationForm, setShowParticipationForm] = useState(false);
+  const [editingParticipation, setEditingParticipation] = useState(null);
+  const [participationFormData, setParticipationFormData] = useState({
+    title: '',
+    batch_id: '',
+    subject_id: '',
+    participation_date: '',
+    description: '',
+    total_marks: '',
+  });
+  const [showAssignMarksDialog, setShowAssignMarksDialog] = useState(false);
+  const [participationForMarks, setParticipationForMarks] = useState(null);
+  const [studentsForMarks, setStudentsForMarks] = useState([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
+  const [marksData, setMarksData] = useState({});
+  const [savingMarks, setSavingMarks] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     active: true,
@@ -199,6 +223,139 @@ const BatchManagement = () => {
     dispatch(fetchBatches({ ...filters, page }));
   };
 
+  // Class Participation Handlers
+  const handleManageClassParticipations = async (batch) => {
+    setEditingBatch(batch);
+    setShowClassParticipationsDrawer(true);
+    await loadClassParticipations(batch.id);
+  };
+
+  const loadClassParticipations = async (batchId) => {
+    setLoadingParticipations(true);
+    try {
+      const response = await apiService.get(API_ENDPOINTS.classParticipations.list, {
+        params: { batch_id: batchId },
+      });
+      setClassParticipations(response.data.data || []);
+    } catch (err) {
+      showError('Failed to load class participations');
+    } finally {
+      setLoadingParticipations(false);
+    }
+  };
+
+  const handleCreateParticipation = (batch) => {
+    setEditingParticipation(null);
+    setParticipationFormData({
+      title: '',
+      batch_id: batch.id,
+      subject_id: '',
+      participation_date: '',
+      description: '',
+      total_marks: '',
+    });
+    setShowParticipationForm(true);
+  };
+
+  const handleEditParticipation = (participation) => {
+    setEditingParticipation(participation);
+    setParticipationFormData({
+      title: participation.title || '',
+      batch_id: participation.batch_id,
+      subject_id: participation.subject_id || '',
+      participation_date: participation.participation_date || '',
+      description: participation.description || '',
+      total_marks: participation.total_marks || '',
+    });
+    setShowParticipationForm(true);
+  };
+
+  const handleSubmitParticipation = async (e) => {
+    e.preventDefault();
+    try {
+      const endpoint = editingParticipation
+        ? buildEndpoint(API_ENDPOINTS.classParticipations.update, { id: editingParticipation.id })
+        : API_ENDPOINTS.classParticipations.create;
+      const method = editingParticipation ? 'put' : 'post';
+
+      await apiService[method](endpoint, participationFormData);
+      success(editingParticipation ? 'Class participation updated successfully' : 'Class participation created successfully');
+      setShowParticipationForm(false);
+      if (editingBatch) {
+        await loadClassParticipations(editingBatch.id);
+      }
+    } catch (err) {
+      showError('Failed to save class participation');
+    }
+  };
+
+  const handleDeleteParticipation = async (id) => {
+    if (window.confirm('Are you sure you want to delete this class participation?')) {
+      try {
+        await apiService.delete(buildEndpoint(API_ENDPOINTS.classParticipations.delete, { id }));
+        success('Class participation deleted successfully');
+        if (editingBatch) {
+          await loadClassParticipations(editingBatch.id);
+        }
+      } catch (err) {
+        showError('Failed to delete class participation');
+      }
+    }
+  };
+
+  const handleAssignMarks = async (participation) => {
+    setParticipationForMarks(participation);
+    setLoadingStudents(true);
+    setShowAssignMarksDialog(true);
+    try {
+      const response = await apiService.get(
+        buildEndpoint(API_ENDPOINTS.classParticipations.getStudents, { id: participation.id })
+      );
+      const students = response.data.data?.students || [];
+      setStudentsForMarks(students);
+      // Initialize marks data
+      const initialMarks = {};
+      students.forEach((student) => {
+        initialMarks[student.id] = {
+          obtained_marks: student.obtained_marks || '',
+          total_marks: student.total_marks || participation.total_marks || '',
+          remarks: student.remarks || '',
+        };
+      });
+      setMarksData(initialMarks);
+    } catch (err) {
+      showError('Failed to load students');
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  const handleSaveMarks = async () => {
+    setSavingMarks(true);
+    try {
+      const marks = Object.entries(marksData).map(([studentId, data]) => ({
+        student_id: parseInt(studentId),
+        obtained_marks: parseFloat(data.obtained_marks) || 0,
+        total_marks: parseFloat(data.total_marks) || 0,
+        remarks: data.remarks || '',
+      }));
+
+      await apiService.post(
+        buildEndpoint(API_ENDPOINTS.classParticipations.assignMarks, { id: participationForMarks.id }),
+        { marks }
+      );
+      success('Marks assigned successfully');
+      setShowAssignMarksDialog(false);
+      if (editingBatch) {
+        await loadClassParticipations(editingBatch.id);
+      }
+    } catch (err) {
+      showError('Failed to assign marks');
+    } finally {
+      setSavingMarks(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -315,6 +472,19 @@ const BatchManagement = () => {
                                   <ExternalLink className="h-4 w-4" />
                                 </Button>
                               </Tooltip>
+                              {(hasAdminAccess || isTeacherCR) && (
+                                <>
+                                  <Tooltip content="Manage Class Participations">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleManageClassParticipations(batch)}
+                                    >
+                                      <Users className="h-4 w-4" />
+                                    </Button>
+                                  </Tooltip>
+                                </>
+                              )}
                               {hasAdminAccess && (
                                 <>
                                   <Tooltip content="Edit Batch">
@@ -488,6 +658,298 @@ const BatchManagement = () => {
               Cancel
             </Button>
           </div>
+        </div>
+      </Dialog>
+
+      {/* Class Participations Management Drawer */}
+      <Drawer
+        isOpen={showClassParticipationsDrawer}
+        onClose={() => {
+          setShowClassParticipationsDrawer(false);
+          setEditingBatch(null);
+          setClassParticipations([]);
+        }}
+        title={`Class Participations - ${editingBatch?.title || ''}`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Class Participations</h3>
+            {(hasAdminAccess || isTeacherCR) && (
+              <Button onClick={() => handleCreateParticipation(editingBatch)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Class Participation
+              </Button>
+            )}
+          </div>
+
+          {loadingParticipations ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : classParticipations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No class participations found
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {classParticipations.map((participation) => (
+                <Card key={participation.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold">{participation.title}</h4>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                          {participation.subject && (
+                            <span className="flex items-center gap-1">
+                              <BookOpen className="h-4 w-4" />
+                              {participation.subject.title}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            {participation.participation_date}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Award className="h-4 w-4" />
+                            {participation.total_marks} marks
+                          </span>
+                        </div>
+                        {participation.description && (
+                          <p className="text-sm text-muted-foreground mt-2">{participation.description}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        {(hasAdminAccess || isTeacherCR) && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAssignMarks(participation)}
+                            >
+                              <Award className="h-4 w-4 mr-1" />
+                              Assign Marks
+                            </Button>
+                            {hasAdminAccess && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEditParticipation(participation)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteParticipation(participation.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      {/* Class Participation Form Dialog */}
+      <Dialog
+        isOpen={showParticipationForm}
+        onClose={() => {
+          setShowParticipationForm(false);
+          setEditingParticipation(null);
+        }}
+        title={editingParticipation ? 'Edit Class Participation' : 'Create Class Participation'}
+        size="lg"
+      >
+        <form onSubmit={handleSubmitParticipation} className="space-y-4">
+          <div>
+            <Label>Title *</Label>
+            <Input
+              value={participationFormData.title}
+              onChange={(e) => setParticipationFormData({ ...participationFormData, title: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label>Subject (Leave empty for batch-level)</Label>
+            <select
+              value={participationFormData.subject_id}
+              onChange={(e) => setParticipationFormData({ ...participationFormData, subject_id: e.target.value })}
+              className="w-full px-3 py-2 border border-input bg-background rounded-md"
+            >
+              <option value="">Batch-Level (No Subject)</option>
+              {editingBatch?.subjects?.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label>Participation Date *</Label>
+            <Input
+              type="date"
+              value={participationFormData.participation_date}
+              onChange={(e) => setParticipationFormData({ ...participationFormData, participation_date: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label>Total Marks</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={participationFormData.total_marks}
+              onChange={(e) => setParticipationFormData({ ...participationFormData, total_marks: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Description</Label>
+            <textarea
+              value={participationFormData.description}
+              onChange={(e) => setParticipationFormData({ ...participationFormData, description: e.target.value })}
+              className="w-full px-3 py-2 border border-input bg-background rounded-md"
+              rows="3"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="submit">
+              {editingParticipation ? 'Update' : 'Create'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowParticipationForm(false);
+                setEditingParticipation(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Assign Marks Dialog */}
+      <Dialog
+        isOpen={showAssignMarksDialog}
+        onClose={() => {
+          setShowAssignMarksDialog(false);
+          setParticipationForMarks(null);
+          setMarksData({});
+        }}
+        title={`Assign Marks - ${participationForMarks?.title || ''}`}
+        size="xl"
+      >
+        <div className="space-y-4">
+          {loadingStudents ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              <div className="max-h-[60vh] overflow-y-auto">
+                <table className="w-full">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b">
+                      <th className="text-left p-2">Student</th>
+                      <th className="text-left p-2">Obtained Marks</th>
+                      <th className="text-left p-2">Total Marks</th>
+                      <th className="text-left p-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentsForMarks.map((student) => (
+                      <tr key={student.id} className="border-b">
+                        <td className="p-2">{student.full_name || student.name}</td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={marksData[student.id]?.obtained_marks || ''}
+                            onChange={(e) =>
+                              setMarksData({
+                                ...marksData,
+                                [student.id]: {
+                                  ...marksData[student.id],
+                                  obtained_marks: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-24"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={marksData[student.id]?.total_marks || ''}
+                            onChange={(e) =>
+                              setMarksData({
+                                ...marksData,
+                                [student.id]: {
+                                  ...marksData[student.id],
+                                  total_marks: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-24"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            value={marksData[student.id]?.remarks || ''}
+                            onChange={(e) =>
+                              setMarksData({
+                                ...marksData,
+                                [student.id]: {
+                                  ...marksData[student.id],
+                                  remarks: e.target.value,
+                                },
+                              })
+                            }
+                            placeholder="Remarks"
+                            className="w-full"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button onClick={handleSaveMarks} disabled={savingMarks}>
+                  {savingMarks ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Marks'
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAssignMarksDialog(false);
+                    setParticipationForMarks(null);
+                    setMarksData({});
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Dialog>
     </div>

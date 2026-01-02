@@ -246,6 +246,88 @@ class StudentPerformanceController extends ApiController
                 \Log::error('Error fetching tasks data: ' . $e->getMessage());
             }
 
+            // Class Participations Statistics
+            $classParticipationsData = [
+                'total' => 0,
+                'completed' => 0,
+                'pending' => 0,
+                'completion_rate' => 0,
+                'average_marks' => 0,
+                'total_marks_obtained' => 0,
+                'total_marks_possible' => 0,
+                'participation_details' => [],
+            ];
+
+            try {
+                if (DB::getSchemaBuilder()->hasTable('class_participations')) {
+                    $participationsQuery = DB::table('class_participations');
+                    
+                    if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id') && !empty($userBatchIds)) {
+                        $participationsQuery->whereIn('batch_id', $userBatchIds);
+                    }
+                    
+                    // Get all class participations for this student
+                    $allParticipations = $participationsQuery->get();
+                    $classParticipationsData['total'] = $allParticipations->count();
+                    $participationDetails = [];
+                    
+                    if (DB::getSchemaBuilder()->hasTable('class_participation_marks')) {
+                        $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
+                        $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
+                        
+                        $participationMarksQuery = DB::table('class_participation_marks');
+                        if ($hasStudentIdColumn) {
+                            $participationMarksQuery->where('student_id', $userId);
+                        } else if ($hasUserIdColumn) {
+                            $participationMarksQuery->where('user_id', $userId);
+                        }
+                        
+                        $participationMarks = $participationMarksQuery->get()->keyBy('class_participation_id');
+                        $classParticipationsData['completed'] = $participationMarks->count();
+                        $classParticipationsData['pending'] = max(0, $classParticipationsData['total'] - $classParticipationsData['completed']);
+                        
+                        $totalMarksObtained = 0;
+                        $totalMarksPossible = 0;
+                        
+                        foreach ($allParticipations as $participation) {
+                            $mark = $participationMarks->get($participation->id);
+                            $obtainedMarks = $mark ? (float)($mark->obtained_marks ?? 0) : null;
+                            $totalMarks = (float)($mark->total_marks ?? $participation->total_marks ?? 0);
+                            
+                            if ($obtainedMarks !== null) {
+                                $totalMarksObtained += $obtainedMarks;
+                                $totalMarksPossible += $totalMarks;
+                            }
+                            
+                            $participationDetails[] = [
+                                'id' => $participation->id,
+                                'title' => $participation->title ?? 'Untitled',
+                                'participation_date' => $participation->participation_date,
+                                'total_marks' => $totalMarks,
+                                'obtained_marks' => $obtainedMarks,
+                                'remarks' => $mark->remarks ?? null,
+                                'subject' => null, // Can be loaded if needed
+                                'batch' => null, // Can be loaded if needed
+                            ];
+                        }
+                        
+                        $classParticipationsData['total_marks_obtained'] = $totalMarksObtained;
+                        $classParticipationsData['total_marks_possible'] = $totalMarksPossible;
+                        $classParticipationsData['average_marks'] = $totalMarksPossible > 0 
+                            ? round(($totalMarksObtained / $totalMarksPossible) * 100, 2) 
+                            : 0;
+                        $classParticipationsData['completion_rate'] = $classParticipationsData['total'] > 0 
+                            ? round(($classParticipationsData['completed'] / $classParticipationsData['total']) * 100, 2) 
+                            : 0;
+                    }
+                    
+                    $classParticipationsData['participation_details'] = $participationDetails;
+                }
+            } catch (\Exception $e) {
+                // Silently fail if class_participations table doesn't exist
+                \Log::warning('Error loading class participations: ' . $e->getMessage());
+            }
+
             // Quizzes Statistics
             $quizzesData = [
                 'total' => 0,
@@ -502,6 +584,7 @@ class StudentPerformanceController extends ApiController
                 ],
                 'tasks' => $tasksData,
                 'quizzes' => $quizzesData,
+                'class_participations' => $classParticipationsData,
                 'attendance' => $attendanceData,
                 'overall_performance' => [
                     'percentage' => $overallPercentage,

@@ -84,6 +84,8 @@ export const API_ENDPOINTS = {
       submit: '/student/tasks/:id/submit',
       submissions: '/student/tasks/submissions',
     },
+    quizzes: '/student/quizzes',
+    classParticipations: '/student/class-participations',
     vouchers: {
       list: '/student/vouchers',
       submitPayment: '/student/vouchers/:id/submit-payment',
@@ -222,6 +224,19 @@ export const API_ENDPOINTS = {
     assignMarks: '/quizzes/:id/assign-marks',
     getStudentMarks: '/quizzes/students/:studentId/marks',
   },
+
+  // Class Participations Management
+  classParticipations: {
+    list: '/class-participations',
+    show: '/class-participations/:id',
+    create: '/class-participations',
+    update: '/class-participations/:id',
+    delete: '/class-participations/:id',
+    getStudents: '/class-participations/:id/students',
+    assignMarks: '/class-participations/:id/assign-marks',
+    getStudentMarks: '/class-participations/students/:studentId/marks',
+  },
+
   
   // SMTP Settings (Admin only)
   smtpSettings: {

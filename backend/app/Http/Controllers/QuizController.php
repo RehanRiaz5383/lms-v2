@@ -58,6 +58,107 @@ class QuizController extends ApiController
     }
 
     /**
+     * Get quizzes for the authenticated student (filtered by enrolled batches).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function studentQuizzes(Request $request): JsonResponse
+    {
+        try {
+            $user = auth()->user();
+            $userId = $user->id;
+
+            // Get user's batch IDs
+            $userBatchIds = [];
+            if (DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id')) {
+                $userBatchIds = DB::table('user_batches')
+                    ->where('user_id', $userId)
+                    ->pluck('batch_id')
+                    ->toArray();
+            } else if (DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id')) {
+                $userBatchIds = DB::table('user_batches')
+                    ->where('student_id', $userId)
+                    ->pluck('batch_id')
+                    ->toArray();
+            }
+
+            if (empty($userBatchIds)) {
+                return $this->success([
+                    'quizzes' => [],
+                    'batches' => [],
+                    'subjects' => [],
+                ], 'No quizzes available');
+            }
+
+            $query = Quiz::query();
+
+            // Filter by student's enrolled batches
+            $query->whereIn('batch_id', $userBatchIds);
+
+            // Filter by batch if provided
+            if ($request->has('batch_id') && !empty($request->get('batch_id'))) {
+                $query->where('batch_id', $request->get('batch_id'));
+            }
+
+            // Filter by subject if provided
+            if ($request->has('subject_id') && !empty($request->get('subject_id'))) {
+                $subjectId = $request->input('subject_id');
+                if ($subjectId === 'null' || $subjectId === null) {
+                    // Show only batch-level quizzes (no subject)
+                    $query->whereNull('subject_id');
+                } else {
+                    $query->where('subject_id', $subjectId);
+                }
+            }
+
+            $quizzes = $query->with(['batch', 'subject', 'creator'])
+                ->orderBy('quiz_date', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Attach student's mark for each quiz
+            $quizzes = $quizzes->map(function ($quiz) use ($userId) {
+                $mark = QuizMark::where('quiz_id', $quiz->id)
+                    ->where('student_id', $userId)
+                    ->first();
+                
+                $quiz->has_mark = $mark !== null;
+                $quiz->obtained_marks = $mark ? $mark->obtained_marks : null;
+                $quiz->total_marks = $mark ? ($mark->total_marks ?? $quiz->total_marks) : $quiz->total_marks;
+                $quiz->remarks = $mark ? $mark->remarks : null;
+                $quiz->marks_count = QuizMark::where('quiz_id', $quiz->id)->count();
+                
+                return $quiz;
+            });
+
+            // Get available batches for filter
+            $availableBatches = DB::table('batches')
+                ->whereIn('id', $userBatchIds)
+                ->where('active', true)
+                ->select('id', 'title')
+                ->get();
+
+            // Get available subjects for filter (subjects that have quizzes in user's batches)
+            $availableSubjects = DB::table('subjects')
+                ->join('quizzes', 'subjects.id', '=', 'quizzes.subject_id')
+                ->whereIn('quizzes.batch_id', $userBatchIds)
+                ->where('subjects.active', true)
+                ->distinct()
+                ->select('subjects.id', 'subjects.title')
+                ->get();
+
+            return $this->success([
+                'quizzes' => $quizzes,
+                'batches' => $availableBatches,
+                'subjects' => $availableSubjects,
+            ], 'Quizzes retrieved successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to retrieve quizzes', 500);
+        }
+    }
+
+    /**
      * Create a new quiz.
      *
      * @param Request $request

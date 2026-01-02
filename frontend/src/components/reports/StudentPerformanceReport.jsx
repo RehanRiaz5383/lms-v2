@@ -275,6 +275,123 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
           </CardContent>
         </Card>
 
+        {/* Class Participations Performance */}
+        {reportData.class_participations && (
+          <Card className="print:border-0 print:shadow-none" style={{ pageBreakInside: 'avoid' }}>
+            <CardHeader className="print:pb-2">
+              <CardTitle className="text-xl print:text-lg">Class Participations Performance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
+                <div className="text-center p-4 bg-muted rounded-lg print:p-2">
+                  <p className="text-2xl font-bold text-foreground print:text-xl">
+                    {reportData.class_participations.total}
+                  </p>
+                  <p className="text-sm text-muted-foreground print:text-xs">Total Participations</p>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg print:p-2">
+                  <p className="text-2xl font-bold text-green-600 print:text-xl">
+                    {reportData.class_participations.completed}
+                  </p>
+                  <p className="text-sm text-muted-foreground print:text-xs">Completed</p>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg print:p-2">
+                  <p className="text-2xl font-bold text-yellow-600 print:text-xl">
+                    {reportData.class_participations.pending}
+                  </p>
+                  <p className="text-sm text-muted-foreground print:text-xs">Pending</p>
+                </div>
+                <div className="text-center p-4 bg-muted rounded-lg print:p-2">
+                  <p className="text-2xl font-bold text-foreground print:text-xl">
+                    {reportData.class_participations.completion_rate}%
+                  </p>
+                  <p className="text-sm text-muted-foreground print:text-xs">Completion Rate</p>
+                </div>
+              </div>
+              <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg print:p-2 print:mt-2">
+                <div className="flex items-center justify-between mb-2 print:mb-1">
+                  <p className="text-sm text-muted-foreground print:text-xs">Total Marks</p>
+                  <p className="text-sm font-semibold text-foreground print:text-xs">
+                    {reportData.class_participations.total_marks_obtained} / {reportData.class_participations.total_marks_possible}
+                  </p>
+                </div>
+                {reportData.class_participations.average_marks > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground print:text-xs">Percentage</p>
+                    <p className="text-2xl font-bold text-purple-600 print:text-xl">
+                      {reportData.class_participations.average_marks}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Class Participations Detail Table */}
+        {reportData.class_participations && reportData.class_participations.participation_details && reportData.class_participations.participation_details.length > 0 && (
+          <Card 
+            className="print:border-0 print:shadow-none" 
+            style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
+          >
+            <CardHeader className="print:pb-2">
+              <CardTitle className="text-xl print:text-lg">Class Participations Detail</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse print:text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-border print:border-b">
+                      <th className="text-left p-3 font-semibold text-foreground print:p-2">#</th>
+                      <th className="text-left p-3 font-semibold text-foreground print:p-2">Participation Title</th>
+                      <th className="text-center p-3 font-semibold text-foreground print:p-2">Date</th>
+                      <th className="text-center p-3 font-semibold text-foreground print:p-2">Total Marks</th>
+                      <th className="text-center p-3 font-semibold text-foreground print:p-2">Obtained Marks</th>
+                      <th className="text-center p-3 font-semibold text-foreground print:p-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.class_participations.participation_details.map((participation, index) => (
+                      <tr 
+                        key={participation.id} 
+                        className="border-b border-border print:border-b"
+                        style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}
+                      >
+                        <td className="p-3 text-foreground print:p-2">{index + 1}</td>
+                        <td className="p-3 text-foreground print:p-2">{participation.title}</td>
+                        <td className="p-3 text-center text-foreground print:p-2">
+                          {participation.participation_date ? new Date(participation.participation_date).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="p-3 text-center text-foreground print:p-2">{participation.total_marks}</td>
+                        <td className="p-3 text-center text-foreground print:p-2">
+                          {participation.obtained_marks !== null ? (
+                            <span className={participation.obtained_marks >= participation.total_marks * 0.7 ? 'text-green-600 font-semibold' : 'text-orange-600 font-semibold'}>
+                              {participation.obtained_marks}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-center print:p-2">
+                          {participation.obtained_marks !== null ? (
+                            <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded text-xs font-medium print:bg-transparent print:text-green-700 print:border print:border-green-700">
+                              Completed
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded text-xs font-medium print:bg-transparent print:text-yellow-700 print:border print:border-yellow-700">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Quizzes Detail Table */}
         {reportData.quizzes.quiz_details && reportData.quizzes.quiz_details.length > 0 && (
           <Card 

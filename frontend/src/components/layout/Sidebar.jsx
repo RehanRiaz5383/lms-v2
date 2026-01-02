@@ -210,6 +210,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       path: '/dashboard/quizzes',
     },
     {
+      title: 'Class Participations',
+      icon: Users,
+      path: '/dashboard/class-participations',
+    },
+    {
       title: 'Account Book',
       icon: Wallet,
       path: '/dashboard/account-book',

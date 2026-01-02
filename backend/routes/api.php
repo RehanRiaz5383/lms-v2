@@ -20,6 +20,7 @@ use App\Http\Controllers\VoucherController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\CloudflareTurnstileController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\ClassParticipationController;
 use App\Http\Controllers\PushNotificationController;
 use Illuminate\Support\Facades\Route;
 
@@ -181,6 +182,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/assign-marks', [QuizController::class, 'assignMarks']);
         Route::get('/students/{studentId}/marks', [QuizController::class, 'getStudentMarks']);
     });
+
+    // Student Quizzes (Students only)
+    Route::get('/student/quizzes', [QuizController::class, 'studentQuizzes']);
+
+    // Class Participations Management (Admin, Teacher, CR)
+    Route::prefix('class-participations')->group(function () {
+        Route::get('/', [ClassParticipationController::class, 'index']);
+        Route::post('/', [ClassParticipationController::class, 'store']);
+        Route::get('/{id}', [ClassParticipationController::class, 'show']);
+        Route::put('/{id}', [ClassParticipationController::class, 'update']);
+        Route::delete('/{id}', [ClassParticipationController::class, 'destroy']);
+        Route::get('/{id}/students', [ClassParticipationController::class, 'getStudents']);
+        Route::post('/{id}/assign-marks', [ClassParticipationController::class, 'assignMarks']);
+        Route::get('/students/{studentId}/marks', [ClassParticipationController::class, 'getStudentMarks']);
+    });
+
+    // Student Class Participations (Students only)
+    Route::get('/student/class-participations', [ClassParticipationController::class, 'studentParticipations']);
 
     // Notifications
     Route::prefix('notifications')->group(function () {

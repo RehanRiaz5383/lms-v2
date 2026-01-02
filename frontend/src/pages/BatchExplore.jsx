@@ -14,7 +14,7 @@ import { Label } from '../components/ui/label';
 import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
-import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion, UserCheck } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 const BatchExplore = () => {
@@ -31,20 +31,26 @@ const BatchExplore = () => {
   const [videos, setVideos] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [quizzes, setQuizzes] = useState([]);
+  const [classParticipations, setClassParticipations] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingVideos, setLoadingVideos] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+  const [loadingClassParticipations, setLoadingClassParticipations] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [draggedVideo, setDraggedVideo] = useState(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
   const [showQuizzes, setShowQuizzes] = useState(false);
+  const [showClassParticipations, setShowClassParticipations] = useState(false);
   const [showCreateTaskDrawer, setShowCreateTaskDrawer] = useState(false);
   const [showEditTaskDrawer, setShowEditTaskDrawer] = useState(false);
   const [showCreateQuizDrawer, setShowCreateQuizDrawer] = useState(false);
+  const [showCreateClassParticipationDrawer, setShowCreateClassParticipationDrawer] = useState(false);
+  const [showEditClassParticipationDrawer, setShowEditClassParticipationDrawer] = useState(false);
   const [showAssignMarksDrawer, setShowAssignMarksDrawer] = useState(false);
+  const [showAssignClassParticipationMarksDrawer, setShowAssignClassParticipationMarksDrawer] = useState(false);
   const [showSubmissionsDialog, setShowSubmissionsDialog] = useState(false);
   const [showGradeDialog, setShowGradeDialog] = useState(false);
   const [showUploadSubmissionDrawer, setShowUploadSubmissionDrawer] = useState(false);
@@ -109,6 +115,16 @@ const BatchExplore = () => {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [quizStudents, setQuizStudents] = useState([]);
   const [quizMarks, setQuizMarks] = useState({}); // { studentId: { obtained_marks, total_marks, remarks } }
+  const [selectedClassParticipation, setSelectedClassParticipation] = useState(null);
+  const [editingClassParticipation, setEditingClassParticipation] = useState(null);
+  const [classParticipationStudents, setClassParticipationStudents] = useState([]);
+  const [classParticipationMarks, setClassParticipationMarks] = useState({}); // { studentId: { obtained_marks, total_marks, remarks } }
+  const [classParticipationFormData, setClassParticipationFormData] = useState({
+    title: '',
+    participation_date: '',
+    description: '',
+    total_marks: '',
+  });
   const [gradeFormData, setGradeFormData] = useState({
     obtained_marks: '',
     instructor_comments: '',
@@ -182,6 +198,9 @@ const BatchExplore = () => {
 
   const handleVideosClick = (subject, e) => {
     e.stopPropagation();
+    setShowTasks(false);
+    setShowQuizzes(false);
+    setShowClassParticipations(false);
     setSelectedSubject(subject);
     setShowStudents(false);
     setShowTasks(false);
@@ -192,6 +211,8 @@ const BatchExplore = () => {
     e.stopPropagation();
     setSelectedSubject(subject);
     setShowStudents(false);
+    setShowQuizzes(false);
+    setShowClassParticipations(false);
     setShowTasks(true);
     // Load students for task assignment dropdown
     if (students.length === 0) {
@@ -205,6 +226,8 @@ const BatchExplore = () => {
     setSelectedSubject(null);
     setShowStudents(true);
     setShowTasks(false);
+    setShowQuizzes(false);
+    setShowClassParticipations(false);
     loadStudents();
   };
 
@@ -423,6 +446,7 @@ const BatchExplore = () => {
     setSelectedSubject(subject);
     setShowStudents(false);
     setShowTasks(false);
+    setShowClassParticipations(false);
     setShowQuizzes(true);
     await loadQuizzes(subject?.id);
   };
@@ -541,6 +565,156 @@ const BatchExplore = () => {
       setSelectedQuiz(null);
       setQuizMarks({});
       await loadQuizzes(selectedSubject?.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to assign marks');
+    }
+  };
+
+  // Class Participation handlers
+  const handleClassParticipationsClick = async (subject, e) => {
+    if (e) e.stopPropagation();
+    setSelectedSubject(subject);
+    setShowStudents(false);
+    setShowTasks(false);
+    setShowQuizzes(false);
+    setShowClassParticipations(true);
+    await loadClassParticipations(subject?.id);
+  };
+
+  const handleBatchClassParticipationsClick = async () => {
+    setSelectedSubject(null);
+    setShowStudents(false);
+    setShowTasks(false);
+    setShowQuizzes(false);
+    setShowClassParticipations(true);
+    await loadClassParticipations(null); // null means batch-level
+  };
+
+  const loadClassParticipations = async (subjectId) => {
+    setLoadingClassParticipations(true);
+    try {
+      const params = {
+        batch_id: id,
+      };
+      if (subjectId !== null && subjectId !== undefined) {
+        params.subject_id = subjectId;
+      } else {
+        params.subject_id = 'null'; // For batch-level class participations
+      }
+      const response = await apiService.get(API_ENDPOINTS.classParticipations.list, { params });
+      setClassParticipations(response.data.data || []);
+    } catch (err) {
+      showError('Failed to load class participations');
+    } finally {
+      setLoadingClassParticipations(false);
+    }
+  };
+
+  const handleCreateClassParticipation = () => {
+    setClassParticipationFormData({
+      title: '',
+      participation_date: new Date().toISOString().split('T')[0], // Default to today
+      description: '',
+      total_marks: '',
+    });
+    setEditingClassParticipation(null);
+    setShowCreateClassParticipationDrawer(true);
+  };
+
+  const handleEditClassParticipation = (participation) => {
+    setEditingClassParticipation(participation);
+    setClassParticipationFormData({
+      title: participation.title || '',
+      participation_date: participation.participation_date ? new Date(participation.participation_date).toISOString().split('T')[0] : '',
+      description: participation.description || '',
+      total_marks: participation.total_marks || '',
+    });
+    setShowEditClassParticipationDrawer(true);
+  };
+
+  const handleClassParticipationSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = {
+        title: classParticipationFormData.title,
+        batch_id: id,
+        subject_id: selectedSubject?.id || null,
+        participation_date: classParticipationFormData.participation_date,
+        description: classParticipationFormData.description || null,
+        total_marks: classParticipationFormData.total_marks || null,
+      };
+      
+      if (editingClassParticipation) {
+        const endpoint = buildEndpoint(API_ENDPOINTS.classParticipations.update, { id: editingClassParticipation.id });
+        await apiService.put(endpoint, data);
+        success('Class participation updated successfully');
+        setShowEditClassParticipationDrawer(false);
+      } else {
+        await apiService.post(API_ENDPOINTS.classParticipations.create, data);
+        success('Class participation created successfully');
+        setShowCreateClassParticipationDrawer(false);
+      }
+      await loadClassParticipations(selectedSubject?.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to save class participation');
+    }
+  };
+
+  const handleDeleteClassParticipation = async (participationId) => {
+    if (!window.confirm('Are you sure you want to delete this class participation? All marks will also be deleted.')) {
+      return;
+    }
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.classParticipations.delete, { id: participationId });
+      await apiService.delete(endpoint);
+      success('Class participation deleted successfully');
+      await loadClassParticipations(selectedSubject?.id);
+    } catch (err) {
+      showError('Failed to delete class participation');
+    }
+  };
+
+  const handleAssignClassParticipationMarks = async (participation) => {
+    setSelectedClassParticipation(participation);
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.classParticipations.getStudents, { id: participation.id });
+      const response = await apiService.get(endpoint);
+      const data = response.data.data;
+      setClassParticipationStudents(data.students || []);
+      
+      // Initialize marks state with existing marks
+      const marksState = {};
+      data.students?.forEach(student => {
+        marksState[student.id] = {
+          obtained_marks: student.obtained_marks || '',
+          total_marks: student.total_marks || participation.total_marks || '',
+          remarks: student.remarks || '',
+        };
+      });
+      setClassParticipationMarks(marksState);
+      setShowAssignClassParticipationMarksDrawer(true);
+    } catch (err) {
+      showError('Failed to load students for class participation');
+    }
+  };
+
+  const handleClassParticipationMarksSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const marks = Object.entries(classParticipationMarks).map(([studentId, markData]) => ({
+        student_id: parseInt(studentId),
+        obtained_marks: parseFloat(markData.obtained_marks) || 0,
+        total_marks: markData.total_marks ? parseFloat(markData.total_marks) : null,
+        remarks: markData.remarks || null,
+      }));
+
+      const endpoint = buildEndpoint(API_ENDPOINTS.classParticipations.assignMarks, { id: selectedClassParticipation.id });
+      await apiService.post(endpoint, { marks });
+      success('Marks assigned successfully');
+      setShowAssignClassParticipationMarksDrawer(false);
+      setSelectedClassParticipation(null);
+      setClassParticipationMarks({});
+      await loadClassParticipations(selectedSubject?.id);
     } catch (err) {
       showError(err.response?.data?.message || 'Failed to assign marks');
     }
@@ -1029,6 +1203,20 @@ const BatchExplore = () => {
                           Quiz
                         </button>
                       )}
+                      {hasTaskAccess && (
+                        <button
+                          onClick={(e) => handleClassParticipationsClick(subject, e)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                            selectedSubject?.id === subject.id && showClassParticipations
+                              ? "bg-primary text-primary-foreground"
+                              : "hover:bg-accent/50 text-muted-foreground"
+                          )}
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Class Participation
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1063,6 +1251,20 @@ const BatchExplore = () => {
                 >
                   <FileQuestion className="h-4 w-4" />
                   Quiz
+                </button>
+              )}
+              {hasTaskAccess && (
+                <button
+                  onClick={handleBatchClassParticipationsClick}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                    showClassParticipations && !selectedSubject
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-accent/50 text-foreground"
+                  )}
+                >
+                  <UserCheck className="h-4 w-4" />
+                  Class Participation
                 </button>
               )}
             </div>
@@ -1333,6 +1535,119 @@ const BatchExplore = () => {
                                 onClick={() => handleDeleteQuiz(quiz.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (selectedSubject && showClassParticipations) || (!selectedSubject && showClassParticipations) ? (
+            /* Class Participations Content */
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>
+                    {selectedSubject ? `Class Participations - ${selectedSubject.title}` : 'Batch Class Participations'}
+                  </CardTitle>
+                  {hasTaskAccess && (
+                    <Button onClick={handleCreateClassParticipation} size="sm">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Class Participation
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingClassParticipations ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : classParticipations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <UserCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No class participations found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {classParticipations.map((participation) => (
+                      <div
+                        key={participation.id}
+                        className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/50"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold text-foreground">
+                              {participation.title}
+                            </h3>
+                            {participation.subject && (
+                              <span className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded">
+                                {participation.subject.title}
+                              </span>
+                            )}
+                            {!participation.subject && (
+                              <span className="text-xs bg-purple-500/10 text-purple-500 px-2 py-0.5 rounded">
+                                Batch Level
+                              </span>
+                            )}
+                          </div>
+                          {participation.description && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {participation.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(participation.participation_date).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                            {participation.total_marks && (
+                              <span className="flex items-center gap-1">
+                                <Award className="h-3 w-3" />
+                                Total: {participation.total_marks} marks
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              {participation.marks_count || 0} students marked
+                            </span>
+                          </div>
+                        </div>
+                        {hasTaskAccess && (
+                          <div className="flex gap-2">
+                            <Tooltip content="Assign Marks">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleAssignClassParticipationMarks(participation)}
+                              >
+                                <Award className="h-4 w-4 mr-2" />
+                                Assign Marks
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content="Edit">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditClassParticipation(participation)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content="Delete">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteClassParticipation(participation.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </Tooltip>
                           </div>
@@ -2842,6 +3157,288 @@ const BatchExplore = () => {
                 setSelectedQuiz(null);
                 setQuizStudents([]);
                 setQuizMarks({});
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Create Class Participation Drawer */}
+      <Drawer
+        isOpen={showCreateClassParticipationDrawer}
+        onClose={() => {
+          setShowCreateClassParticipationDrawer(false);
+          setClassParticipationFormData({
+            title: '',
+            participation_date: new Date().toISOString().split('T')[0],
+            description: '',
+            total_marks: '',
+          });
+        }}
+        title="Add Class Participation"
+      >
+        <form onSubmit={handleClassParticipationSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="cp_title">Class Participation Title *</Label>
+            <Input
+              id="cp_title"
+              value={classParticipationFormData.title}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, title: e.target.value })}
+              placeholder="Enter class participation title"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="cp_date">Participation Date *</Label>
+            <Input
+              id="cp_date"
+              type="date"
+              value={classParticipationFormData.participation_date}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, participation_date: e.target.value })}
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              You can set past, current, or future dates
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="cp_description">Description</Label>
+            <textarea
+              id="cp_description"
+              value={classParticipationFormData.description}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, description: e.target.value })}
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Enter class participation description (optional)"
+            />
+          </div>
+          <div>
+            <Label htmlFor="cp_total_marks">Total Marks (Optional)</Label>
+            <Input
+              id="cp_total_marks"
+              type="number"
+              step="0.01"
+              min="0"
+              value={classParticipationFormData.total_marks}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, total_marks: e.target.value })}
+              placeholder="Enter total marks"
+            />
+          </div>
+          <div className="flex gap-2 pt-4">
+            <Button type="submit" className="flex-1">
+              Create Class Participation
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowCreateClassParticipationDrawer(false);
+                setClassParticipationFormData({
+                  title: '',
+                  participation_date: new Date().toISOString().split('T')[0],
+                  description: '',
+                  total_marks: '',
+                });
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Edit Class Participation Drawer */}
+      <Drawer
+        isOpen={showEditClassParticipationDrawer}
+        onClose={() => {
+          setShowEditClassParticipationDrawer(false);
+          setClassParticipationFormData({
+            title: '',
+            participation_date: new Date().toISOString().split('T')[0],
+            description: '',
+            total_marks: '',
+          });
+          setEditingClassParticipation(null);
+        }}
+        title="Edit Class Participation"
+      >
+        <form onSubmit={handleClassParticipationSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="edit_cp_title">Class Participation Title *</Label>
+            <Input
+              id="edit_cp_title"
+              value={classParticipationFormData.title}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, title: e.target.value })}
+              placeholder="Enter class participation title"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_cp_date">Participation Date *</Label>
+            <Input
+              id="edit_cp_date"
+              type="date"
+              value={classParticipationFormData.participation_date}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, participation_date: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_cp_description">Description</Label>
+            <textarea
+              id="edit_cp_description"
+              value={classParticipationFormData.description}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, description: e.target.value })}
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Enter class participation description (optional)"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_cp_total_marks">Total Marks (Optional)</Label>
+            <Input
+              id="edit_cp_total_marks"
+              type="number"
+              step="0.01"
+              min="0"
+              value={classParticipationFormData.total_marks}
+              onChange={(e) => setClassParticipationFormData({ ...classParticipationFormData, total_marks: e.target.value })}
+              placeholder="Enter total marks"
+            />
+          </div>
+          <div className="flex gap-2 pt-4">
+            <Button type="submit" className="flex-1">
+              Update Class Participation
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowEditClassParticipationDrawer(false);
+                setClassParticipationFormData({
+                  title: '',
+                  participation_date: new Date().toISOString().split('T')[0],
+                  description: '',
+                  total_marks: '',
+                });
+                setEditingClassParticipation(null);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Assign Class Participation Marks Drawer */}
+      <Drawer
+        isOpen={showAssignClassParticipationMarksDrawer}
+        onClose={() => {
+          setShowAssignClassParticipationMarksDrawer(false);
+          setSelectedClassParticipation(null);
+          setClassParticipationStudents([]);
+          setClassParticipationMarks({});
+        }}
+        title={`Assign Marks - ${selectedClassParticipation?.title || 'Class Participation'}`}
+        size="80%"
+      >
+        <form onSubmit={handleClassParticipationMarksSubmit} className="space-y-4">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {classParticipationStudents.map((student) => (
+              <div
+                key={student.id}
+                className="p-4 border border-border rounded-lg space-y-3"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{student.full_name || student.name || student.email}</h4>
+                    <p className="text-sm text-muted-foreground">{student.email}</p>
+                  </div>
+                  {student.has_mark && (
+                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
+                      Marked
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor={`cp_obtained_marks_${student.id}`}>
+                      Obtained Marks *
+                    </Label>
+                    <Input
+                      id={`cp_obtained_marks_${student.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={classParticipationMarks[student.id]?.obtained_marks || ''}
+                      onChange={(e) => {
+                        setClassParticipationMarks({
+                          ...classParticipationMarks,
+                          [student.id]: {
+                            ...classParticipationMarks[student.id],
+                            obtained_marks: e.target.value,
+                          },
+                        });
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor={`cp_total_marks_${student.id}`}>
+                      Total Marks
+                    </Label>
+                    <Input
+                      id={`cp_total_marks_${student.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={classParticipationMarks[student.id]?.total_marks || selectedClassParticipation?.total_marks || ''}
+                      onChange={(e) => {
+                        setClassParticipationMarks({
+                          ...classParticipationMarks,
+                          [student.id]: {
+                            ...classParticipationMarks[student.id],
+                            total_marks: e.target.value,
+                          },
+                        });
+                      }}
+                      placeholder={selectedClassParticipation?.total_marks ? `Default: ${selectedClassParticipation.total_marks}` : 'Enter total marks'}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor={`cp_remarks_${student.id}`}>Remarks (Optional)</Label>
+                  <textarea
+                    id={`cp_remarks_${student.id}`}
+                    value={classParticipationMarks[student.id]?.remarks || ''}
+                    onChange={(e) => {
+                      setClassParticipationMarks({
+                        ...classParticipationMarks,
+                        [student.id]: {
+                          ...classParticipationMarks[student.id],
+                          remarks: e.target.value,
+                        },
+                      });
+                    }}
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Enter remarks (optional)"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button type="submit" className="flex-1">
+              Save Marks
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowAssignClassParticipationMarksDrawer(false);
+                setSelectedClassParticipation(null);
+                setClassParticipationStudents([]);
+                setClassParticipationMarks({});
               }}
             >
               Cancel
