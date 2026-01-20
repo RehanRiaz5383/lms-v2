@@ -137,6 +137,208 @@ class AuthController extends ApiController
     }
 
     /**
+     * Get upcoming activities for a student (tasks, quizzes, class participations).
+     *
+     * @param User $user
+     * @return array
+     */
+    private function getUpcomingActivities($user): array
+    {
+        $userId = $user->id;
+        $now = now()->setTimezone('Asia/Karachi');
+        $todayStart = $now->copy()->startOfDay();
+
+        // Get user's batch IDs
+        $userBatchIds = [];
+        if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id')) {
+            $userBatchIds = \Illuminate\Support\Facades\DB::table('user_batches')
+                ->where('user_id', $userId)
+                ->pluck('batch_id')
+                ->toArray();
+        } else if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id')) {
+            $userBatchIds = \Illuminate\Support\Facades\DB::table('user_batches')
+                ->where('student_id', $userId)
+                ->pluck('batch_id')
+                ->toArray();
+        }
+
+        $upcomingTasks = [];
+        $upcomingQuizzes = [];
+        $upcomingCPs = [];
+
+        // Initialize arrays to ensure they're always returned
+        if (empty($userBatchIds)) {
+            return [
+                'tasks' => [],
+                'quizzes' => [],
+                'class_participations' => [],
+            ];
+        }
+
+        try {
+            // Get upcoming tasks
+            if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('tasks')) {
+                $submittedTaskIds = [];
+                if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
+                    $hasStudentIdColumn = \Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'student_id');
+                    if ($hasStudentIdColumn) {
+                        $submittedTaskIds = \Illuminate\Support\Facades\DB::table('submitted_tasks')
+                            ->where('student_id', $userId)
+                            ->pluck('task_id')
+                            ->toArray();
+                    } else if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'user_id')) {
+                        $submittedTaskIds = \Illuminate\Support\Facades\DB::table('submitted_tasks')
+                            ->where('user_id', $userId)
+                            ->pluck('task_id')
+                            ->toArray();
+                    }
+                }
+
+                $tasksQuery = \Illuminate\Support\Facades\DB::table('tasks');
+                
+                if (!empty($userBatchIds)) {
+                    if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
+                        $tasksQuery->whereIn('batch_id', $userBatchIds);
+                    } else if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
+                        $tasksQuery->where('user_id', $userId);
+                    }
+                } else {
+                    if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
+                        $tasksQuery->where('user_id', $userId);
+                    } else {
+                        $tasksQuery->whereRaw('1 = 0'); // No batches, no tasks
+                    }
+                }
+
+                if (!empty($submittedTaskIds)) {
+                    $tasksQuery->whereNotIn('id', $submittedTaskIds);
+                }
+
+                if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date')) {
+                    $tasksQuery->whereRaw("DATE(expiry_date) >= ?", [$todayStart->format('Y-m-d')])
+                               ->orderBy('expiry_date', 'asc')
+                               ->limit(5);
+                }
+
+                $upcomingTasks = $tasksQuery->get()->map(function($task) {
+                    $batch = null;
+                    if ($task->batch_id) {
+                        $batchData = \Illuminate\Support\Facades\DB::table('batches')
+                            ->where('id', $task->batch_id)
+                            ->first();
+                        $batch = $batchData ? ['id' => $task->batch_id, 'title' => $batchData->title ?? null] : null;
+                    }
+                    return [
+                        'id' => $task->id,
+                        'title' => $task->title ?? $task->name ?? 'Untitled Task',
+                        'expiry_date' => $task->expiry_date ?? null,
+                        'batch' => $batch,
+                    ];
+                })->toArray();
+            }
+
+            // Get upcoming quizzes
+            if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('quizzes') && !empty($userBatchIds)) {
+                $quizzesQuery = \Illuminate\Support\Facades\DB::table('quizzes')
+                    ->whereIn('batch_id', $userBatchIds);
+
+                if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('quizzes', 'quiz_date')) {
+                    $quizzesQuery->whereRaw("DATE(quiz_date) >= ?", [$todayStart->format('Y-m-d')])
+                                  ->orderBy('quiz_date', 'asc')
+                                  ->limit(5);
+                }
+
+                // Exclude completed quizzes
+                if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('quiz_marks')) {
+                    $completedQuizIds = \Illuminate\Support\Facades\DB::table('quiz_marks')
+                        ->where('user_id', $userId)
+                        ->pluck('quiz_id')
+                        ->toArray();
+                    if (!empty($completedQuizIds)) {
+                        $quizzesQuery->whereNotIn('id', $completedQuizIds);
+                    }
+                }
+
+                $upcomingQuizzes = $quizzesQuery->get()->map(function($quiz) {
+                    $batch = null;
+                    if ($quiz->batch_id) {
+                        $batchData = \Illuminate\Support\Facades\DB::table('batches')
+                            ->where('id', $quiz->batch_id)
+                            ->first();
+                        $batch = $batchData ? ['id' => $quiz->batch_id, 'title' => $batchData->title ?? null] : null;
+                    }
+                    return [
+                        'id' => $quiz->id,
+                        'title' => $quiz->title ?? $quiz->name ?? 'Untitled Quiz',
+                        'quiz_date' => $quiz->quiz_date ?? null,
+                        'batch' => $batch,
+                    ];
+                })->toArray();
+            }
+
+            // Get upcoming class participations
+            if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('class_participations') && !empty($userBatchIds)) {
+                $cpsQuery = \Illuminate\Support\Facades\DB::table('class_participations')
+                    ->whereIn('batch_id', $userBatchIds);
+
+                // Exclude completed participations first
+                if (\Illuminate\Support\Facades\DB::getSchemaBuilder()->hasTable('class_participation_marks')) {
+                    $hasStudentIdColumn = \Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
+                    $hasUserIdColumn = \Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
+                    
+                    $completedCPQuery = \Illuminate\Support\Facades\DB::table('class_participation_marks');
+                    if ($hasStudentIdColumn) {
+                        $completedCPQuery->where('student_id', $userId);
+                    } else if ($hasUserIdColumn) {
+                        $completedCPQuery->where('user_id', $userId);
+                    }
+                    
+                    $completedCPIds = $completedCPQuery->pluck('class_participation_id')->toArray();
+                    if (!empty($completedCPIds)) {
+                        $cpsQuery->whereNotIn('id', $completedCPIds);
+                    }
+                }
+
+                // Apply date filter if column exists
+                $hasParticipationDateColumn = \Illuminate\Support\Facades\DB::getSchemaBuilder()->hasColumn('class_participations', 'participation_date');
+                if ($hasParticipationDateColumn) {
+                    $cpsQuery->whereRaw("DATE(participation_date) >= ?", [$todayStart->format('Y-m-d')])
+                              ->orderBy('participation_date', 'asc');
+                } else {
+                    $cpsQuery->orderBy('created_at', 'asc');
+                }
+                
+                $cpsQuery->limit(5);
+
+                $upcomingCPs = $cpsQuery->get()->map(function($cp) {
+                    $batch = null;
+                    if ($cp->batch_id) {
+                        $batchData = \Illuminate\Support\Facades\DB::table('batches')
+                            ->where('id', $cp->batch_id)
+                            ->first();
+                        $batch = $batchData ? ['id' => $cp->batch_id, 'title' => $batchData->title ?? null] : null;
+                    }
+                    return [
+                        'id' => $cp->id,
+                        'title' => $cp->title ?? $cp->name ?? 'Untitled Participation',
+                        'participation_date' => $cp->participation_date ?? null,
+                        'batch' => $batch,
+                    ];
+                })->toArray();
+            }
+        } catch (\Exception $e) {
+            // Log error but don't break the /me endpoint
+            \Log::warning('Error fetching upcoming activities in /me: ' . $e->getMessage());
+        }
+
+        return [
+            'tasks' => $upcomingTasks,
+            'quizzes' => $upcomingQuizzes,
+            'class_participations' => $upcomingCPs,
+        ];
+    }
+
+    /**
      * Handle user signup.
      *
      * @param Request $request

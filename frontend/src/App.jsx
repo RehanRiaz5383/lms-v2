@@ -32,10 +32,16 @@ import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import { useUserStatusPolling } from './hooks/useUserStatusPolling';
 
 // Inner component to handle message listener
 function AppContent() {
   const navigate = useNavigate();
+
+  // Poll user status at regular intervals to check if user is blocked
+  // This is crucial for security - if a user is blocked while logged in,
+  // they will be immediately logged out
+  useUserStatusPolling(30000); // Poll every 30 seconds
 
   useEffect(() => {
     // Restore session from localStorage on app load

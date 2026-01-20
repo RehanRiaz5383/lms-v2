@@ -36,6 +36,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/toast';
 import { formatCurrency } from '../utils/currency';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import UpcomingActivities from '../components/UpcomingActivities';
 
 // Countdown timer component for nearest task
 const TaskCountdownTimer = ({ dueDate }) => {
@@ -282,134 +283,12 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Main Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {/* Tasks Card */}
-          <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tasks
-              </CardTitle>
-              <div className="bg-blue-500/10 p-2 rounded-lg">
-                <ClipboardList className="h-4 w-4 text-blue-500" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {stats.tasks?.submitted || 0} / {stats.tasks?.total || 0}
-              </div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-muted-foreground">
-                  {stats.tasks?.pending || 0} pending
-                </p>
-                <div className={`text-xs font-medium ${getStatusColor(stats.tasks?.completion_rate || 0)}`}>
-                  {stats.tasks?.completion_rate || 0}%
-                </div>
-              </div>
-              {stats.tasks?.nearest_due_date && (
-                <div className="mb-2 p-2 bg-muted/50 rounded-md border border-border/50">
-                  <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Most Recent Pending Task:
-                  </p>
-                  <TaskCountdownTimer dueDate={stats.tasks.nearest_due_date} />
-                  {/* Debug: Show the date value to help diagnose */}
-                  <p className="text-xs text-muted-foreground mt-1 opacity-50">
-                    Due: {new Date(stats.tasks.nearest_due_date).toLocaleString()}
-                  </p>
-                </div>
-              )}
-              <div className="mt-2 w-full bg-muted rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    (stats.tasks?.completion_rate || 0) >= 80 ? 'bg-green-500' :
-                    (stats.tasks?.completion_rate || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${stats.tasks?.completion_rate || 0}%` }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quizzes Card */}
-          <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-purple-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Quizzes
-              </CardTitle>
-              <div className="bg-purple-500/10 p-2 rounded-lg">
-                <HelpCircle className="h-4 w-4 text-purple-500" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {stats.quizzes?.completed || 0} / {stats.quizzes?.total || 0}
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {stats.quizzes?.pending || 0} pending
-                </p>
-                <div className={`text-xs font-medium ${getStatusColor(stats.quizzes?.completion_rate || 0)}`}>
-                  {stats.quizzes?.completion_rate || 0}%
-                </div>
-              </div>
-              <div className="mt-2 w-full bg-muted rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    (stats.quizzes?.completion_rate || 0) >= 80 ? 'bg-green-500' :
-                    (stats.quizzes?.completion_rate || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${stats.quizzes?.completion_rate || 0}%` }}
-                />
-              </div>
-              {stats.quizzes?.average_score > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Avg Score: {stats.quizzes?.average_score}%
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Tests Card */}
-          <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tests
-              </CardTitle>
-              <div className="bg-green-500/10 p-2 rounded-lg">
-                <Target className="h-4 w-4 text-green-500" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {stats.tests?.completed || 0} / {stats.tests?.total || 0}
-              </div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {stats.tests?.pending || 0} pending
-                </p>
-                <div className={`text-xs font-medium ${getStatusColor(stats.tests?.completion_rate || 0)}`}>
-                  {stats.tests?.completion_rate || 0}%
-                </div>
-              </div>
-              <div className="mt-2 w-full bg-muted rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    (stats.tests?.completion_rate || 0) >= 80 ? 'bg-green-500' :
-                    (stats.tests?.completion_rate || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                  }`}
-                  style={{ width: `${stats.tests?.completion_rate || 0}%` }}
-                />
-              </div>
-              {stats.tests?.average_score > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Avg Score: {stats.tests?.average_score}%
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Pending Payments Card */}
+        {/* My Upcoming Activities and Pending Payments - 70/30 Split */}
+        <div className="grid gap-4 lg:grid-cols-[70%_30%]">
+          {/* My Upcoming Activities - 70% width */}
+          <UpcomingActivities />
+          
+          {/* Pending Payments Card - 30% width */}
           <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
