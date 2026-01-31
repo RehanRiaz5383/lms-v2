@@ -52,10 +52,11 @@ class AuthController extends ApiController
         // Dispatch event for all user types (only once)
         event(new StudentLogin($user));
 
-        // Add picture URL if available
-        $pictureUrl = null;
+        // The picture_url accessor will automatically be used when serializing the model
+        // It correctly handles both Google Drive paths (lms/User_Profile/...) and legacy paths
+        // Access it to ensure it's included in the response
         if ($user->picture) {
-            $pictureUrl = url('/load-storage/' . $user->picture);
+            $user->picture_url; // Trigger the accessor
         }
 
         return $this->success([
@@ -66,7 +67,7 @@ class AuthController extends ApiController
                 'user_type' => $user->user_type,
                 'user_type_title' => $user->userType?->title ?? null,
                 'picture' => $user->picture,
-                'picture_url' => $pictureUrl,
+                'picture_url' => $user->picture_url, // Uses getPictureUrlAttribute() accessor
                 'block' => $user->block ?? 0,
                 'block_reason' => $user->block_reason,
                 'roles' => $user->roles->map(function($role) {
@@ -111,10 +112,11 @@ class AuthController extends ApiController
         $user = $request->user();
         $user->load('userType', 'roles');
 
-        // Add picture URL if available
-        $pictureUrl = null;
+        // The picture_url accessor will automatically be used when serializing the model
+        // It correctly handles both Google Drive paths (lms/User_Profile/...) and legacy paths
+        // Access it to ensure it's included in the response
         if ($user->picture) {
-            $pictureUrl = url('/load-storage/' . $user->picture);
+            $user->picture_url; // Trigger the accessor
         }
 
         return $this->success([
@@ -124,7 +126,7 @@ class AuthController extends ApiController
             'user_type' => $user->user_type,
             'user_type_title' => $user->userType?->title ?? null,
             'picture' => $user->picture,
-            'picture_url' => $pictureUrl,
+            'picture_url' => $user->picture_url, // Uses getPictureUrlAttribute() accessor
             'block' => $user->block ?? 0,
             'block_reason' => $user->block_reason,
             'roles' => $user->roles->map(function($role) {

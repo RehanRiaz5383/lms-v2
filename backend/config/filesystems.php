@@ -60,6 +60,18 @@ return [
             'report' => false,
         ],
 
+        'google' => [
+            'driver' => 'google',
+            'clientId' => env('GOOGLE_DRIVE_CLIENT_ID'),
+            'clientSecret' => env('GOOGLE_DRIVE_CLIENT_SECRET'),
+            'refreshToken' => env('GOOGLE_DRIVE_REFRESH_TOKEN'),
+            'apiKey' => env('GOOGLE_DRIVE_API_KEY'), // Optional for OAuth2 flow
+            'serviceAccountKey' => storage_path('app/possible-post-485911-b5-8f45772724d4.json'),
+            'folder' => env('GOOGLE_DRIVE_FOLDER', ''), // Root folder name (empty for root, or 'lms' if using folder name)
+            'teamDriveId' => env('GOOGLE_DRIVE_TEAM_DRIVE_ID'),
+            'sharedFolderId' => env('GOOGLE_DRIVE_SHARED_FOLDER_ID', '1QEkYsqRPc60wmgn5tuVX23124qCtFZcU'), // LMS folder ID
+        ],
+
     ],
 
     /*

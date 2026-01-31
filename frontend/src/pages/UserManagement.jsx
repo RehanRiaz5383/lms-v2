@@ -30,6 +30,7 @@ import StudentPerformanceReport from '../components/reports/StudentPerformanceRe
 import ImpersonateModal from '../components/ImpersonateModal';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, buildEndpoint, getStorageUrl } from '../config/api';
+import ProfilePicture from '../components/ProfilePicture';
 import {
   Plus,
   Search,
@@ -89,6 +90,13 @@ const UserManagement = () => {
   const [savingFee, setSavingFee] = useState(false);
   const [manualVoucherAmount, setManualVoucherAmount] = useState('');
   const [manualVoucherDescription, setManualVoucherDescription] = useState('');
+  const [showEditVoucherDrawer, setShowEditVoucherDrawer] = useState(false);
+  const [selectedVoucherForEdit, setSelectedVoucherForEdit] = useState(null);
+  const [editVoucherFormData, setEditVoucherFormData] = useState({
+    description: '',
+    fee_amount: '',
+    due_date: '',
+  });
   const [manualVoucherDueDate, setManualVoucherDueDate] = useState('');
   const [creatingVoucher, setCreatingVoucher] = useState(false);
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
@@ -104,6 +112,9 @@ const UserManagement = () => {
     address: '',
     fees: '',
     expected_fee_promise_date: '',
+    guardian_name: '',
+    guardian_email: '',
+    guardian_contact_no: '',
   });
   const [searchValue, setSearchValue] = useState(filters.search || '');
 
@@ -155,6 +166,9 @@ const UserManagement = () => {
       address: '',
       fees: '',
       expected_fee_promise_date: '',
+      guardian_name: '',
+      guardian_email: '',
+      guardian_contact_no: '',
     });
     setShowDrawer(true);
   };
@@ -169,6 +183,9 @@ const UserManagement = () => {
       address: user.address || '',
       fees: user.fees || '',
       expected_fee_promise_date: user.expected_fee_promise_date ? String(user.expected_fee_promise_date) : '',
+      guardian_name: user.guardian_name || '',
+      guardian_email: user.guardian_email || '',
+      guardian_contact_no: user.guardian_contact_no || '',
     });
     setShowDrawer(true);
   };
@@ -632,6 +649,36 @@ const UserManagement = () => {
     }
   };
 
+  const handleEditVoucherClick = (voucher) => {
+    setSelectedVoucherForEdit(voucher);
+    setEditVoucherFormData({
+      description: voucher.description || '',
+      fee_amount: voucher.fee_amount || '',
+      due_date: voucher.due_date ? new Date(voucher.due_date).toISOString().split('T')[0] : '',
+    });
+    setShowEditVoucherDrawer(true);
+  };
+
+  const handleEditVoucherSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedVoucherForEdit) return;
+
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.update, { id: selectedVoucherForEdit.id });
+      await apiService.put(endpoint, {
+        description: editVoucherFormData.description || null,
+        fee_amount: editVoucherFormData.fee_amount ? parseFloat(editVoucherFormData.fee_amount) : null,
+        due_date: editVoucherFormData.due_date || null,
+      });
+      success('Voucher updated successfully');
+      setShowEditVoucherDrawer(false);
+      setSelectedVoucherForEdit(null);
+      await loadVouchers(studentForFee.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to update voucher');
+    }
+  };
+
   const handleSendNotification = (user) => {
     setUserToNotify(user);
     setNotificationTitle('');
@@ -848,25 +895,11 @@ const UserManagement = () => {
                             />
                           </td>
                           <td className="p-4">
-                            {user.picture || user.picture_url ? (
-                              <img
-                                src={user.picture_url || getStorageUrl(user.picture)}
-                                alt={user.name}
-                                className="w-10 h-10 rounded-full object-cover"
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                  e.target.nextSibling.style.display = 'flex';
-                                }}
-                              />
-                            ) : null}
-                            <div
-                              className={cn(
-                                "w-10 h-10 rounded-full bg-muted flex items-center justify-center",
-                                (user.picture || user.picture_url) && "hidden"
-                              )}
-                            >
-                              <User className="h-5 w-5 text-muted-foreground" />
-                            </div>
+                            <ProfilePicture
+                              src={user.picture_url || (user.picture ? getStorageUrl(user.picture) : null)}
+                              alt={user.name}
+                              size="md"
+                            />
                           </td>
                           <td className="p-4">{user.name}</td>
                           <td className="p-4">{user.email}</td>
@@ -1552,6 +1585,14 @@ const UserManagement = () => {
                           </td>
                           <td className="p-2">
                             <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleEditVoucherClick(voucher)}
+                              >
+                                <Edit className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
                               {(voucher.status === 'submitted' || voucher.status === 'pending') && (
                                 <Button
                                   size="sm"
@@ -1646,6 +1687,68 @@ const UserManagement = () => {
             </CardContent>
           </Card>
         </div>
+      </Drawer>
+
+      {/* Edit Voucher Drawer */}
+      <Drawer
+        isOpen={showEditVoucherDrawer}
+        onClose={() => {
+          setShowEditVoucherDrawer(false);
+          setSelectedVoucherForEdit(null);
+          setEditVoucherFormData({ description: '', fee_amount: '', due_date: '' });
+        }}
+        title="Edit Voucher"
+      >
+        <form onSubmit={handleEditVoucherSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="edit_voucher_description">Description</Label>
+            <Input
+              id="edit_voucher_description"
+              type="text"
+              value={editVoucherFormData.description}
+              onChange={(e) => setEditVoucherFormData({ ...editVoucherFormData, description: e.target.value })}
+              placeholder="Fee Voucher"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_voucher_fee_amount">Fee Amount (PKR) *</Label>
+            <Input
+              id="edit_voucher_fee_amount"
+              type="number"
+              step="0.01"
+              min="0"
+              value={editVoucherFormData.fee_amount}
+              onChange={(e) => setEditVoucherFormData({ ...editVoucherFormData, fee_amount: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_voucher_due_date">Due Date *</Label>
+            <Input
+              id="edit_voucher_due_date"
+              type="date"
+              value={editVoucherFormData.due_date}
+              onChange={(e) => setEditVoucherFormData({ ...editVoucherFormData, due_date: e.target.value })}
+              required
+            />
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button type="submit" className="flex-1">
+              Update Voucher
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowEditVoucherDrawer(false);
+                setSelectedVoucherForEdit(null);
+                setEditVoucherFormData({ description: '', fee_amount: '', due_date: '' });
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
       </Drawer>
     </div>
   );

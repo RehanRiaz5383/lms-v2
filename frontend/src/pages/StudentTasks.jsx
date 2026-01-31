@@ -157,12 +157,37 @@ const StudentTasks = () => {
 
   const isOverdue = (dueDate) => {
     if (!dueDate) return false;
-    // Set timezone to Asia/Karachi for comparison
+    // Get current time in Asia/Karachi timezone
     const now = new Date();
     const due = new Date(dueDate);
-    // Set due date to end of day (23:59:59) in Asia/Karachi
+    
+    // Set due date to end of day (23:59:59.999) for comparison
+    // This ensures button is removed at 00:00:01 AM of the next day
     due.setHours(23, 59, 59, 999);
+    
+    // Task is overdue if current time is after the end of due date
     return now > due;
+  };
+
+  // Check if task can be submitted (client-side check)
+  const canSubmitTask = (task) => {
+    // If already submitted, can update
+    if (task.is_submitted) {
+      return true;
+    }
+    
+    // Use backend's can_submit flag if available (primary check)
+    if (task.can_submit !== undefined) {
+      return task.can_submit;
+    }
+    
+    // Fallback: check if overdue (client-side validation)
+    if (task.due_date) {
+      return !isOverdue(task.due_date);
+    }
+    
+    // No due date, can always submit
+    return true;
   };
 
   // Countdown timer component
@@ -447,7 +472,7 @@ const StudentTasks = () => {
                               <Eye className="h-4 w-4" />
                             </Button>
                           </Tooltip>
-                          {task.can_submit && (
+                          {canSubmitTask(task) && (
                             <Tooltip content={task.is_submitted ? "Update Submission" : "Submit Task"}>
                               <Button
                                 size="sm"
@@ -559,13 +584,22 @@ const StudentTasks = () => {
         isOpen={showDetailsDialog}
         onClose={() => setShowDetailsDialog(false)}
         title="Task Details"
+        size="60%"
       >
         {selectedTask && (
           <div className="space-y-4">
             <div>
               <h3 className="text-xl font-semibold text-foreground">{selectedTask.title}</h3>
-              {selectedTask.description && (
-                <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{selectedTask.description}</p>
+              {(selectedTask.comments || selectedTask.description) && (
+                <div className="mt-4">
+                  <Label className="text-muted-foreground mb-2 block">Description</Label>
+                  <div 
+                    className="prose prose-sm max-w-none text-foreground mt-2 p-4 bg-muted/50 rounded-md border border-border"
+                    dangerouslySetInnerHTML={{ 
+                      __html: selectedTask.comments || selectedTask.description || '' 
+                    }}
+                  />
+                </div>
               )}
             </div>
 
@@ -728,7 +762,7 @@ const StudentTasks = () => {
 
             {/* Action Buttons */}
             <div className="flex justify-end gap-2 pt-4 border-t border-border">
-              {selectedTask.can_submit && (
+              {canSubmitTask(selectedTask) && (
                 <Button onClick={() => {
                   setShowDetailsDialog(false);
                   handleSubmitClick(selectedTask);

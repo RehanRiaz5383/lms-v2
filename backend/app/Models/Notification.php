@@ -43,7 +43,7 @@ class Notification extends Model
         if (!$this->read) {
             $this->update([
                 'read' => true,
-                'read_at' => now(),
+                'read_at' => \Carbon\Carbon::now('Asia/Karachi'),
             ]);
         }
     }
@@ -120,8 +120,9 @@ class Notification extends Model
                 $notificationData['read'] = false;
             }
 
-            $notificationData['created_at'] = now();
-            $notificationData['updated_at'] = now();
+            // Use Asia/Karachi timezone for timestamps
+            $notificationData['created_at'] = \Carbon\Carbon::now('Asia/Karachi');
+            $notificationData['updated_at'] = \Carbon\Carbon::now('Asia/Karachi');
 
             // Check if id column is UUID (char(36)) or auto-increment
             $idColumnInfo = \DB::select("SHOW COLUMNS FROM notifications WHERE Field = 'id'");

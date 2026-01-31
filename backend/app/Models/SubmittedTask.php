@@ -70,7 +70,7 @@ class SubmittedTask extends Model
         $filePath = $this->answer_file ?? $this->file_path ?? null;
         if ($filePath) {
             $useDirectStorage = env('USE_DIRECT_STORAGE', false);
-            $appUrl = env('APP_URL', 'http://localhost:8000');
+            $appUrl = config('app.url', 'http://localhost:8000');
             if ($useDirectStorage) {
                 return $appUrl . '/storage.php?file=' . urlencode($filePath);
             }

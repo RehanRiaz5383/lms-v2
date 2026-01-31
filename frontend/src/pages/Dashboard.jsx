@@ -29,6 +29,9 @@ import {
   Wallet,
   BarChart3,
   ChevronDown,
+  Bell,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS } from '../config/api';
@@ -139,13 +142,16 @@ const TaskCountdownTimer = ({ dueDate }) => {
 const Dashboard = () => {
   const { user } = useAppSelector((state) => state.auth);
   const navigate = useNavigate();
-  const { error: showError } = useToast();
+  const { error: showError, success } = useToast();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [trendingData, setTrendingData] = useState([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [trendingFilter, setTrendingFilter] = useState('all_time');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [pendingSubmissions, setPendingSubmissions] = useState([]);
+  const [loadingPendingSubmissions, setLoadingPendingSubmissions] = useState(false);
+  const [notifyingStudentId, setNotifyingStudentId] = useState(null);
 
   // Check if user is student
   const isStudent = user?.roles?.some(role => role.title?.toLowerCase() === 'student') || 
@@ -157,6 +163,7 @@ const Dashboard = () => {
     } else {
       loadDashboardStats();
       loadTrendingSignupReasons();
+      loadPendingTaskSubmissions();
     }
   }, [isStudent]);
 
@@ -206,6 +213,35 @@ const Dashboard = () => {
       showError('Failed to load trending signup reasons');
     } finally {
       setLoadingTrending(false);
+    }
+  };
+
+  const loadPendingTaskSubmissions = async () => {
+    try {
+      setLoadingPendingSubmissions(true);
+      const response = await apiService.get(API_ENDPOINTS.dashboard.pendingTaskSubmissions);
+      setPendingSubmissions(response.data.data || []);
+    } catch (err) {
+      console.error('Failed to load pending task submissions:', err);
+      showError('Failed to load pending task submissions');
+    } finally {
+      setLoadingPendingSubmissions(false);
+    }
+  };
+
+  const handleNotifyStudent = async (studentId, taskId) => {
+    try {
+      setNotifyingStudentId(studentId);
+      await apiService.post(API_ENDPOINTS.dashboard.notifyStudentOverdue, {
+        student_id: studentId,
+        task_id: taskId,
+      });
+      success('Notification sent successfully to student');
+    } catch (err) {
+      console.error('Failed to notify student:', err);
+      showError('Failed to send notification to student');
+    } finally {
+      setNotifyingStudentId(null);
     }
   };
 
@@ -691,49 +727,83 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Video Source Distribution */}
+        {/* Overdue Task Submissions */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Video Sources</CardTitle>
-            <CardDescription>Internal vs External</CardDescription>
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Overdue Task Submissions
+            </CardTitle>
+            <CardDescription>Students with tasks past their due date</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <FileVideo className="h-4 w-4 text-blue-500" />
-                    <span>Internal Videos</span>
-                  </div>
-                  <span className="font-medium">{overview.internal_videos}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-3">
-                  <div
-                    className="bg-blue-500 h-3 rounded-full transition-all"
-                    style={{ 
-                      width: `${overview.total_videos > 0 ? (overview.internal_videos / overview.total_videos) * 100 : 0}%` 
-                    }}
-                  />
-                </div>
+            {loadingPendingSubmissions ? (
+              <div className="flex items-center justify-center h-64">
+                <Activity className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <Link2 className="h-4 w-4 text-orange-500" />
-                    <span>External Videos</span>
-                  </div>
-                  <span className="font-medium">{overview.external_videos}</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-3">
-                  <div
-                    className="bg-orange-500 h-3 rounded-full transition-all"
-                    style={{ 
-                      width: `${overview.total_videos > 0 ? (overview.external_videos / overview.total_videos) * 100 : 0}%` 
-                    }}
-                  />
-                </div>
+            ) : pendingSubmissions.length === 0 ? (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <p>No overdue task submissions</p>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {pendingSubmissions.slice(0, 10).map((submission) => (
+                  <div
+                    key={submission.id}
+                    className="flex items-start justify-between p-3 rounded-lg border transition-colors bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {submission.student_name}
+                        </p>
+                        <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-600 rounded">
+                          Overdue
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mb-1">
+                        {submission.student_email}
+                      </p>
+                      <p className="text-xs font-medium text-foreground">
+                        Task: {submission.task_title}
+                      </p>
+                      {submission.task_expiry_date && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Due: {new Date(submission.task_expiry_date).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleNotifyStudent(submission.student_id, submission.task_id)}
+                      disabled={notifyingStudentId === submission.student_id}
+                      className="ml-2 flex-shrink-0"
+                    >
+                      {notifyingStudentId === submission.student_id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Bell className="h-4 w-4" />
+                      )}
+                      <span className="ml-1 hidden sm:inline">Notify</span>
+                    </Button>
+                  </div>
+                ))}
+                {pendingSubmissions.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    onClick={() => navigate('/dashboard/pending-task-submissions')}
+                  >
+                    {pendingSubmissions.length > 10 ? (
+                      <>View All {pendingSubmissions.length} Overdue Submissions</>
+                    ) : (
+                      <>View All Overdue Submissions</>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

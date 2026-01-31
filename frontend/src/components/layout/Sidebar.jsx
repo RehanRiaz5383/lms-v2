@@ -274,6 +274,11 @@ const Sidebar = ({ isOpen, onClose }) => {
           icon: Video,
           path: '/dashboard/videos',
         },
+        {
+          title: 'Tasks',
+          icon: ClipboardList,
+          path: '/dashboard/admin-tasks',
+        },
       ],
     },
     // Accounts menu with submenu (Admin only) - moved below Academics
@@ -336,6 +341,11 @@ const Sidebar = ({ isOpen, onClose }) => {
           title: 'Scheduled Jobs',
           icon: Clock,
           path: '/dashboard/scheduled-jobs',
+        },
+        {
+          title: 'Google Drive Folders',
+          icon: FolderOpen,
+          path: '/dashboard/settings/google-drive-folders',
         },
       ],
     },

@@ -14,6 +14,7 @@ import SubjectsManagement from './pages/SubjectsManagement';
 import VideosManagement from './pages/VideosManagement';
 import SmtpSettings from './pages/SmtpSettings';
 import NotificationSettings from './pages/NotificationSettings';
+import GoogleDriveFolders from './pages/GoogleDriveFolders';
 import Profile from './pages/Profile';
 import StudentLectureVideos from './pages/StudentLectureVideos';
 import StudentTasks from './pages/StudentTasks';
@@ -23,6 +24,7 @@ import BatchExplore from './pages/BatchExplore';
 import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
 import ScheduledJobs from './pages/ScheduledJobs';
+import AdminTasks from './pages/AdminTasks';
 import AccountBook from './pages/AccountBook';
 import FeeVouchers from './pages/FeeVouchers';
 import IncomeReport from './pages/IncomeReport';
@@ -30,6 +32,7 @@ import ExpenseManagement from './pages/ExpenseManagement';
 import IncomeExpenseReport from './pages/IncomeExpenseReport';
 import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
+import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { useUserStatusPolling } from './hooks/useUserStatusPolling';
@@ -162,6 +165,16 @@ function App() {
                 <VideosManagement />
               </BlockedRoute>
             } />
+            <Route path="admin-tasks" element={
+              <BlockedRoute>
+                <AdminTasks />
+              </BlockedRoute>
+            } />
+            <Route path="pending-task-submissions" element={
+              <BlockedRoute>
+                <PendingTaskSubmissions />
+              </BlockedRoute>
+            } />
             <Route path="settings/smtp" element={
               <BlockedRoute>
                 <SmtpSettings />
@@ -170,6 +183,11 @@ function App() {
             <Route path="settings/notifications" element={
               <BlockedRoute>
                 <NotificationSettings />
+              </BlockedRoute>
+            } />
+            <Route path="settings/google-drive-folders" element={
+              <BlockedRoute>
+                <GoogleDriveFolders />
               </BlockedRoute>
             } />
             <Route path="scheduled-jobs" element={

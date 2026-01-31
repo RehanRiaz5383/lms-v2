@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Drawer } from '../components/ui/drawer';
 import {
   Check,
   X,
@@ -13,6 +14,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Edit,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, buildEndpoint } from '../config/api';
@@ -32,6 +34,13 @@ const FeeVouchers = () => {
     total: 0,
     from: 0,
     to: 0,
+  });
+  const [showEditDrawer, setShowEditDrawer] = useState(false);
+  const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    description: '',
+    fee_amount: '',
+    due_date: '',
   });
 
   useEffect(() => {
@@ -83,6 +92,36 @@ const FeeVouchers = () => {
       success('Payment clearance notification sent to student');
     } catch (err) {
       showError(err.response?.data?.message || 'Failed to send notification');
+    }
+  };
+
+  const handleEditClick = (voucher) => {
+    setSelectedVoucher(voucher);
+    setEditFormData({
+      description: voucher.description || '',
+      fee_amount: voucher.fee_amount || '',
+      due_date: voucher.due_date ? new Date(voucher.due_date).toISOString().split('T')[0] : '',
+    });
+    setShowEditDrawer(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedVoucher) return;
+
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.update, { id: selectedVoucher.id });
+      await apiService.put(endpoint, {
+        description: editFormData.description || null,
+        fee_amount: editFormData.fee_amount ? parseFloat(editFormData.fee_amount) : null,
+        due_date: editFormData.due_date || null,
+      });
+      success('Voucher updated successfully');
+      setShowEditDrawer(false);
+      setSelectedVoucher(null);
+      loadVouchers();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to update voucher');
     }
   };
 
@@ -284,6 +323,14 @@ const FeeVouchers = () => {
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEditClick(voucher)}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />
+                              Edit
+                            </Button>
                             {(voucher.status === 'submitted' ||
                               voucher.status === 'pending') && (
                               <Button
@@ -361,6 +408,68 @@ const FeeVouchers = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Voucher Drawer */}
+      <Drawer
+        isOpen={showEditDrawer}
+        onClose={() => {
+          setShowEditDrawer(false);
+          setSelectedVoucher(null);
+          setEditFormData({ description: '', fee_amount: '', due_date: '' });
+        }}
+        title="Edit Voucher"
+      >
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="edit_description">Description</Label>
+            <Input
+              id="edit_description"
+              type="text"
+              value={editFormData.description}
+              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+              placeholder="Fee Voucher"
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_fee_amount">Fee Amount (PKR) *</Label>
+            <Input
+              id="edit_fee_amount"
+              type="number"
+              step="0.01"
+              min="0"
+              value={editFormData.fee_amount}
+              onChange={(e) => setEditFormData({ ...editFormData, fee_amount: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit_due_date">Due Date *</Label>
+            <Input
+              id="edit_due_date"
+              type="date"
+              value={editFormData.due_date}
+              onChange={(e) => setEditFormData({ ...editFormData, due_date: e.target.value })}
+              required
+            />
+          </div>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button type="submit" className="flex-1">
+              Update Voucher
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowEditDrawer(false);
+                setSelectedVoucher(null);
+                setEditFormData({ description: '', fee_amount: '', due_date: '' });
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Drawer>
     </div>
   );
 };

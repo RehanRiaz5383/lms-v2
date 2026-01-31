@@ -32,22 +32,39 @@ const CountdownTimer = ({ dueDate, type = 'default' }) => {
     const updateTimer = () => {
       try {
         const now = new Date();
-        let due = new Date(dueDate);
+        const dateStr = String(dueDate);
+        
+        // Check if it's a date-only format (YYYY-MM-DD)
+        const isDateOnly = dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || 
+                          (!dateStr.includes('T') && !dateStr.includes(' ') && dateStr.length <= 10);
+        
+        let due;
+        if (isDateOnly) {
+          // For date-only formats, parse as local date and set to end of day (23:59:59.999)
+          // This ensures if due_date is 26/01/2026, timer counts until 26/01/2026 23:59:59.999
+          // and expires at 27/01/2026 00:00:00
+          const [year, month, day] = dateStr.split('-').map(Number);
+          due = new Date(year, month - 1, day, 23, 59, 59, 999);
+        } else {
+          // For datetime formats, parse normally
+          due = new Date(dueDate);
+          
+          // If it's a datetime with time 00:00:00, treat it as end of that day
+          if (due.getHours() === 0 && due.getMinutes() === 0 && due.getSeconds() === 0 && due.getMilliseconds() === 0) {
+            due.setHours(23, 59, 59, 999);
+          }
+        }
         
         if (isNaN(due.getTime())) {
           setTimeLeft(null);
           setIsExpired(false);
           return;
         }
-
-        // Check if it's a date-only format and set to end of day
-        const dateStr = String(dueDate);
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || (!dateStr.includes('T') && !dateStr.includes(' ') && dateStr.length <= 10)) {
-          due.setHours(23, 59, 59, 999);
-        }
         
         const diff = due - now;
 
+        // Task expires at 00:00:01 AM of the next day (27/01/2026 00:00:01)
+        // So we check if current time is past the end of due date
         if (diff <= 0) {
           setTimeLeft(null);
           setIsExpired(true);
@@ -146,7 +163,10 @@ const UpcomingActivities = () => {
         .filter(task => {
           if (!task.expiry_date) return false;
           const dueDate = new Date(task.expiry_date);
+          // Set to end of day (23:59:59.999) to match countdown timer logic
+          // This ensures tasks are shown until the end of the due date
           dueDate.setHours(23, 59, 59, 999);
+          // Include tasks that haven't expired yet (dueDate >= now) and aren't submitted
           return dueDate >= now && !task.is_submitted;
         })
         .sort((a, b) => {

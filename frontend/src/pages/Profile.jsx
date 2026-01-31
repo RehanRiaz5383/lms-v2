@@ -9,6 +9,7 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Loader2, Save, Upload, User, X } from 'lucide-react';
 import { getStorageUrl, normalizeStorageUrl } from '../config/api';
+import ProfilePicture from '../components/ProfilePicture';
 
 const Profile = () => {
   const dispatch = useAppDispatch();
@@ -27,6 +28,9 @@ const Profile = () => {
     address: '',
     country: '',
     city: '',
+    guardian_name: '',
+    guardian_email: '',
+    guardian_contact_no: '',
   });
   const [profilePicture, setProfilePicture] = useState(null);
   const [profilePicturePreview, setProfilePicturePreview] = useState(null);
@@ -57,6 +61,9 @@ const Profile = () => {
         address: profile.address || '',
         country: profile.country || '',
         city: profile.city || '',
+        guardian_name: profile.guardian_name || '',
+        guardian_email: profile.guardian_email || '',
+        guardian_contact_no: profile.guardian_contact_no || '',
       });
       
       // Set profile picture preview if available and no new picture selected
@@ -246,6 +253,9 @@ const Profile = () => {
             address: updatedProfile.address || '',
             country: updatedProfile.country || '',
             city: updatedProfile.city || '',
+            guardian_name: updatedProfile.guardian_name || '',
+            guardian_email: updatedProfile.guardian_email || '',
+            guardian_contact_no: updatedProfile.guardian_contact_no || '',
           });
           
           // Update picture preview with new URL
@@ -300,6 +310,9 @@ const Profile = () => {
             address: updatedProfile.address || '',
             country: updatedProfile.country || '',
             city: updatedProfile.city || '',
+            guardian_name: updatedProfile.guardian_name || '',
+            guardian_email: updatedProfile.guardian_email || '',
+            guardian_contact_no: updatedProfile.guardian_contact_no || '',
           });
         }
         
@@ -433,10 +446,8 @@ const Profile = () => {
                 <div className="relative">
                   {profilePicturePreview ? (
                     <div className="relative">
-                      <img
-                        src={profilePicturePreview}
-                        alt="Profile"
-                        className="w-32 h-32 rounded-full object-cover border-4 border-border transition-all duration-500 ease-out"
+                      <div
+                        className="transition-all duration-500 ease-out"
                         style={{
                           filter: isUploading 
                             ? `blur(${Math.max(0, 20 - (uploadProgress / 100) * 20)}px) brightness(${0.5 + (uploadProgress / 100) * 0.5})` 
@@ -445,7 +456,15 @@ const Profile = () => {
                             ? `scale(${0.9 + (uploadProgress / 100) * 0.1})` 
                             : 'scale(1)',
                         }}
-                      />
+                      >
+                        <ProfilePicture
+                          src={profilePicturePreview}
+                          alt="Profile"
+                          size="lg"
+                          showBorder={true}
+                          className="border-4"
+                        />
+                      </div>
                       {isUploading && (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="bg-background/80 backdrop-blur-sm rounded-full p-2">
@@ -464,9 +483,13 @@ const Profile = () => {
                       )}
                     </div>
                   ) : (
-                    <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center border-4 border-border">
-                      <User className="h-16 w-16 text-muted-foreground" />
-                    </div>
+                    <ProfilePicture
+                      src={null}
+                      alt="Profile"
+                      size="lg"
+                      showBorder={true}
+                      className="border-4"
+                    />
                   )}
                 </div>
                 <div className="text-center space-y-2">
@@ -593,6 +616,31 @@ const Profile = () => {
                     id="country"
                     value={profileData.country}
                     onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="guardian_name">Guardian Name</Label>
+                  <Input
+                    id="guardian_name"
+                    value={profileData.guardian_name}
+                    onChange={(e) => setProfileData({ ...profileData, guardian_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="guardian_email">Guardian Email</Label>
+                  <Input
+                    id="guardian_email"
+                    type="email"
+                    value={profileData.guardian_email}
+                    onChange={(e) => setProfileData({ ...profileData, guardian_email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="guardian_contact_no">Guardian Contact Number</Label>
+                  <Input
+                    id="guardian_contact_no"
+                    value={profileData.guardian_contact_no}
+                    onChange={(e) => setProfileData({ ...profileData, guardian_contact_no: e.target.value })}
                   />
                 </div>
               </div>

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\Models\SubmittedTask;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 
 class TaskController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get all tasks for a batch and subject.
      *
@@ -88,8 +90,14 @@ class TaskController extends ApiController
                     $task->due_date = null;
                 }
                 
+                // Get description from comments column (preferred) or description column
                 $hasDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
-                if (!$hasDescriptionColumn) {
+                $hasCommentsColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'comments');
+                
+                if ($hasCommentsColumn && $task->comments) {
+                    // Use comments column if it exists and has value
+                    $task->description = $task->comments;
+                } else if (!$hasDescriptionColumn) {
                     $task->description = null;
                 }
 
@@ -99,7 +107,7 @@ class TaskController extends ApiController
                         ->where('task_id', $task->id)
                         ->get()
                         ->map(function ($file) {
-                            $appUrl = env('APP_URL', 'http://localhost:8000');
+                            $appUrl = config('app.url', 'http://localhost:8000');
                             $filePath = $file->file_path ?? null;
                             if ($filePath) {
                                 $file->file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
@@ -163,6 +171,7 @@ class TaskController extends ApiController
 
             // Check which columns exist in the tasks table
             $hasDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
+            $hasCommentsColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'comments');
             $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'user_id');
             $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'status');
             $hasCreatedByColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'created_by');
@@ -191,9 +200,15 @@ class TaskController extends ApiController
                 }
             }
 
-            // Only include description if column exists
-            if ($hasDescriptionColumn && $request->has('description')) {
-                $taskData['description'] = $request->input('description');
+            // Save description to comments column (preferred) or description column
+            if ($request->has('description')) {
+                $description = $request->input('description');
+                // Prefer comments column over description column
+                if ($hasCommentsColumn) {
+                    $taskData['comments'] = $description;
+                } else if ($hasDescriptionColumn) {
+                    $taskData['description'] = $description;
+                }
             }
 
             // Only include user_id if column exists
@@ -218,8 +233,9 @@ class TaskController extends ApiController
             // Handle task file upload if provided
             if ($request->hasFile('task_file')) {
                 $file = $request->file('task_file');
-                $fileName = time() . '_' . $task->id . '_' . $file->getClientOriginalName();
-                $filePath = $file->storeAs('Task_Files', $fileName, 'public');
+                
+                // Upload to Google Drive using folder name (from database)
+                $filePath = $this->uploadToGoogleDrive($file, 'Task_Files');
                 
                 // Check if task_files table exists or if we need to store in a different way
                 // For now, we'll store the file path in a separate table or add a column if it exists
@@ -329,7 +345,7 @@ class TaskController extends ApiController
                                 (isset($submission->file_path) ? $submission->file_path : null);
                     if ($filePath) {
                         $useDirectStorage = env('USE_DIRECT_STORAGE', false);
-                        $appUrl = env('APP_URL', 'http://localhost:8000');
+                        $appUrl = config('app.url', 'http://localhost:8000');
                         if ($useDirectStorage) {
                             $submission->file_url = $appUrl . '/storage.php?file=' . urlencode($filePath);
                         } else {
@@ -376,8 +392,14 @@ class TaskController extends ApiController
                 $task->due_date = null;
             }
             
+            // Get description from comments column (preferred) or description column
             $hasDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
-            if (!$hasDescriptionColumn) {
+            $hasCommentsColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'comments');
+            
+            if ($hasCommentsColumn && $task->comments) {
+                // Use comments column if it exists and has value
+                $task->description = $task->comments;
+            } else if (!$hasDescriptionColumn) {
                 $task->description = null;
             }
             
@@ -397,7 +419,7 @@ class TaskController extends ApiController
                     $taskFile = DB::table('task_files')->where('task_id', $task->id)->first();
                     if ($taskFile && isset($taskFile->file_path)) {
                         $useDirectStorage = env('USE_DIRECT_STORAGE', false);
-                        $appUrl = env('APP_URL', 'http://localhost:8000');
+                        $appUrl = config('app.url', 'http://localhost:8000');
                         if ($useDirectStorage) {
                             $task->file_url = $appUrl . '/storage.php?file=' . urlencode($taskFile->file_path);
                         } else {
@@ -414,7 +436,7 @@ class TaskController extends ApiController
                     ->where('task_id', $task->id)
                     ->get()
                     ->map(function ($file) {
-                        $appUrl = env('APP_URL', 'http://localhost:8000');
+                        $appUrl = config('app.url', 'http://localhost:8000');
                         $filePath = $file->file_path ?? null;
                         if ($filePath) {
                             $file->file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
@@ -477,6 +499,7 @@ class TaskController extends ApiController
 
             // Check which columns exist
             $hasDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
+            $hasCommentsColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'comments');
             $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
             $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'status');
             $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
@@ -484,9 +507,15 @@ class TaskController extends ApiController
             
             $updateData = ['title' => $request->input('title')];
             
-            // Only include description if column exists
-            if ($hasDescriptionColumn && $request->has('description')) {
-                $updateData['description'] = $request->input('description');
+            // Save description to comments column (preferred) or description column
+            if ($request->has('description')) {
+                $description = $request->input('description');
+                // Prefer comments column over description column
+                if ($hasCommentsColumn) {
+                    $updateData['comments'] = $description;
+                } else if ($hasDescriptionColumn) {
+                    $updateData['description'] = $description;
+                }
             }
             
             // Only include expiry_date if column exists (map from due_date to expiry_date)
@@ -619,7 +648,7 @@ class TaskController extends ApiController
                                 (isset($submission->file_path) ? $submission->file_path : null);
                     if ($filePath) {
                         $useDirectStorage = env('USE_DIRECT_STORAGE', false);
-                        $appUrl = env('APP_URL', 'http://localhost:8000');
+                        $appUrl = config('app.url', 'http://localhost:8000');
                         if ($useDirectStorage) {
                             $submission->file_url = $appUrl . '/storage.php?file=' . urlencode($filePath);
                         } else {
@@ -811,9 +840,8 @@ class TaskController extends ApiController
                 }
             }
 
-            // Handle file upload - store in submitted_tasks folder
-            $fileName = time() . '_' . $studentId . '_' . $file->getClientOriginalName();
-            $filePath = $file->storeAs('submitted_tasks', $fileName, 'public');
+            // Handle file upload - upload to Google Drive using folder name (from database)
+            $filePath = $this->uploadToGoogleDrive($file, 'submitted_tasks');
 
             // Check if submission already exists
             $submission = SubmittedTask::where('task_id', $taskId)
@@ -827,10 +855,10 @@ class TaskController extends ApiController
 
             if ($submission) {
                 // Update existing submission
-                // Delete old file if exists
+                // Delete old file if exists (from Google Drive)
                 $oldFilePath = $hasAnswerFileColumn ? $submission->answer_file : ($hasFilePathColumn ? $submission->file_path : null);
-                if ($oldFilePath && Storage::disk('public')->exists($oldFilePath)) {
-                    Storage::disk('public')->delete($oldFilePath);
+                if ($oldFilePath) {
+                    $this->deleteFromGoogleDrive($oldFilePath);
                 }
 
                 // Update the correct column
@@ -1164,5 +1192,373 @@ class TaskController extends ApiController
             \Log::error('Failed to create task assigned notification: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Get all unchecked task submissions for admin.
+     * Ordered by oldest to newest (created_at ASC).
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getUncheckedSubmissions(Request $request): JsonResponse
+    {
+        try {
+            if (!DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
+                return $this->success([], 'No submissions found');
+            }
+
+            $hasIsCheckedColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'is_checked');
+            
+            // Check which columns exist in submitted_tasks table
+            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+            $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'obtained_marks');
+            $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'marks');
+            $hasInstructorCommentsColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'instructor_comments');
+            $hasTeacherRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'teacher_remarks');
+            $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
+            
+            // Check which columns exist in tasks table
+            $hasTaskDescriptionColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'description');
+            $hasTaskCommentsColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'comments');
+            $hasTaskMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
+            $hasTaskTotalMarksColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'total_marks');
+            $hasTaskExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
+            
+            // Build select array dynamically based on existing columns
+            $selectFields = [
+                'submitted_tasks.id as submission_id',
+                'submitted_tasks.task_id',
+                'submitted_tasks.student_id',
+                'submitted_tasks.created_at as submitted_at',
+                'tasks.title as task_title',
+                'users.name as student_name',
+                'users.first_name',
+                'users.last_name',
+                'users.email as student_email',
+                'batches.title as batch_title',
+                'subjects.title as subject_title'
+            ];
+            
+            // Add task description/comments if column exists (prefer comments, fallback to description)
+            if ($hasTaskCommentsColumn) {
+                $selectFields[] = 'tasks.comments as task_description';
+            } else if ($hasTaskDescriptionColumn) {
+                $selectFields[] = 'tasks.description as task_description';
+            }
+            
+            // Add task marks if column exists (prefer marks, fallback to total_marks)
+            if ($hasTaskMarksColumn) {
+                $selectFields[] = 'tasks.marks as task_marks';
+            } else if ($hasTaskTotalMarksColumn) {
+                $selectFields[] = 'tasks.total_marks as task_marks';
+            }
+            
+            // Add task due date if column exists (prefer expiry_date, fallback to due_date)
+            if ($hasTaskExpiryDateColumn) {
+                $selectFields[] = 'tasks.expiry_date as task_due_date';
+            } else if ($hasTaskDueDateColumn) {
+                $selectFields[] = 'tasks.due_date as task_due_date';
+            }
+            
+            // Add file columns if they exist
+            if ($hasAnswerFileColumn) {
+                $selectFields[] = 'submitted_tasks.answer_file';
+            }
+            if ($hasFilePathColumn) {
+                $selectFields[] = 'submitted_tasks.file_path';
+            }
+            
+            // Add marks columns if they exist
+            if ($hasObtainedMarksColumn) {
+                $selectFields[] = 'submitted_tasks.obtained_marks';
+            }
+            if ($hasMarksColumn) {
+                $selectFields[] = 'submitted_tasks.marks';
+            }
+            
+            // Add comments/remarks columns if they exist
+            if ($hasInstructorCommentsColumn) {
+                $selectFields[] = 'submitted_tasks.instructor_comments';
+            }
+            if ($hasTeacherRemarksColumn) {
+                $selectFields[] = 'submitted_tasks.teacher_remarks';
+            }
+            if ($hasRemarksColumn) {
+                $selectFields[] = 'submitted_tasks.remarks';
+            }
+            
+            // Check if tasks table has file_path column
+            $hasTaskFilePathColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'file_path');
+            if ($hasTaskFilePathColumn) {
+                $selectFields[] = 'tasks.file_path as task_file_path';
+            }
+            
+            // Build query for unchecked submissions
+            $query = DB::table('submitted_tasks')
+                ->join('tasks', 'tasks.id', '=', 'submitted_tasks.task_id')
+                ->join('users', 'users.id', '=', 'submitted_tasks.student_id')
+                ->leftJoin('batches', 'batches.id', '=', 'tasks.batch_id')
+                ->leftJoin('subjects', 'subjects.id', '=', 'tasks.subject_id')
+                ->select($selectFields);
+
+            // Filter by is_checked if column exists
+            if ($hasIsCheckedColumn) {
+                $query->where(function($q) {
+                    $q->whereNull('submitted_tasks.is_checked')
+                      ->orWhere('submitted_tasks.is_checked', 0);
+                });
+            }
+
+            // Filter out blocked users
+            $query->where(function($q) {
+                $q->where('users.block', 0)
+                  ->orWhereNull('users.block');
+            });
+
+            // Filter by batch_id if provided
+            if ($request->has('batch_id') && $request->input('batch_id')) {
+                $query->where('tasks.batch_id', $request->input('batch_id'));
+            }
+
+            // Search by student name if provided
+            if ($request->has('search') && $request->input('search')) {
+                $searchTerm = $request->input('search');
+                $query->where(function($q) use ($searchTerm) {
+                    $q->where('users.name', 'like', "%{$searchTerm}%")
+                      ->orWhere('users.first_name', 'like', "%{$searchTerm}%")
+                      ->orWhere('users.last_name', 'like', "%{$searchTerm}%")
+                      ->orWhere('users.email', 'like', "%{$searchTerm}%");
+                });
+            }
+
+            // Order by sort parameter (default: latest to oldest)
+            $sortOrder = $request->input('sort', 'latest'); // 'oldest' or 'latest'
+            $orderDirection = $sortOrder === 'latest' ? 'desc' : 'asc';
+            $query->orderBy('submitted_tasks.created_at', $orderDirection);
+
+            $submissions = $query->get();
+
+            // Process submissions to add file URLs and format data
+            $submissions = $submissions->map(function ($submission) use ($hasAnswerFileColumn, $hasFilePathColumn, $hasObtainedMarksColumn, $hasMarksColumn, $hasInstructorCommentsColumn, $hasTeacherRemarksColumn, $hasRemarksColumn, $hasTaskFilePathColumn, $hasTaskDescriptionColumn, $hasTaskCommentsColumn, $hasTaskMarksColumn, $hasTaskTotalMarksColumn, $hasTaskExpiryDateColumn) {
+                // Add student submission file URL
+                $filePath = null;
+                if ($hasAnswerFileColumn && isset($submission->answer_file)) {
+                    $filePath = $submission->answer_file;
+                } else if ($hasFilePathColumn && isset($submission->file_path)) {
+                    $filePath = $submission->file_path;
+                }
+                if ($filePath) {
+                    $useDirectStorage = env('USE_DIRECT_STORAGE', false);
+                    $appUrl = config('app.url', 'http://localhost:8000');
+                    if ($useDirectStorage) {
+                        $submission->submission_file_url = $appUrl . '/storage.php?file=' . urlencode($filePath);
+                    } else {
+                        $submission->submission_file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
+                    }
+                } else {
+                    $submission->submission_file_url = null;
+                }
+
+                // Add task file URL from tasks.file_path column
+                if ($hasTaskFilePathColumn && isset($submission->task_file_path) && $submission->task_file_path) {
+                    $useDirectStorage = env('USE_DIRECT_STORAGE', false);
+                    $appUrl = config('app.url', 'http://localhost:8000');
+                    if ($useDirectStorage) {
+                        $submission->task_file_url = $appUrl . '/storage.php?file=' . urlencode($submission->task_file_path);
+                    } else {
+                        $submission->task_file_url = $appUrl . '/load-storage/' . ltrim($submission->task_file_path, '/');
+                    }
+                    $submission->task_files = [];
+                } else {
+                    $submission->task_file_url = null;
+                    $submission->task_files = [];
+                }
+
+                // Format student name
+                $submission->student_name = $submission->student_name ?? 
+                    trim(($submission->first_name ?? '') . ' ' . ($submission->last_name ?? '')) ?? 
+                    $submission->student_email ?? 
+                    'Unknown Student';
+                
+                // Set task description (from comments or description column)
+                if (!$hasTaskCommentsColumn && !$hasTaskDescriptionColumn) {
+                    $submission->task_description = null;
+                }
+                // If column exists, task_description is already set from the SELECT query
+
+                // Set task marks (from tasks table)
+                // If column doesn't exist, set to null; otherwise keep the value (even if null or 0)
+                if (!$hasTaskMarksColumn && !$hasTaskTotalMarksColumn) {
+                    $submission->task_marks = null;
+                }
+                // If column exists, task_marks is already set from the SELECT query, so no need to modify it
+                // Ensure it's a number if it exists (handle string values)
+                if (isset($submission->task_marks) && $submission->task_marks !== null) {
+                    $submission->task_marks = is_numeric($submission->task_marks) ? (float) $submission->task_marks : $submission->task_marks;
+                }
+                
+                // Set task due_date (from tasks.expiry_date)
+                // If column doesn't exist, set to null; otherwise keep the value
+                if (!$hasTaskExpiryDateColumn) {
+                    $submission->task_due_date = null;
+                }
+                // If column exists, task_due_date is already set from the SELECT query
+                // Format the date if it exists
+                if (isset($submission->task_due_date) && $submission->task_due_date !== null) {
+                    try {
+                        $submission->task_due_date = is_string($submission->task_due_date) 
+                            ? $submission->task_due_date 
+                            : (new \Carbon\Carbon($submission->task_due_date))->format('Y-m-d');
+                    } catch (\Exception $e) {
+                        // Keep original value if parsing fails
+                    }
+                }
+                
+                // Set task due_date (from tasks.expiry_date)
+                // If column doesn't exist, set to null; otherwise keep the value
+                if (!$hasTaskExpiryDateColumn) {
+                    $submission->task_due_date = null;
+                }
+                // If column exists, task_due_date is already set from the SELECT query
+                // Format the date if it exists
+                if (isset($submission->task_due_date) && $submission->task_due_date !== null) {
+                    try {
+                        $submission->task_due_date = is_string($submission->task_due_date) 
+                            ? $submission->task_due_date 
+                            : (new \Carbon\Carbon($submission->task_due_date))->format('Y-m-d');
+                    } catch (\Exception $e) {
+                        // Keep original value if parsing fails
+                    }
+                }
+
+                // Get obtained marks (from submitted_tasks table - for grading purposes)
+                if ($hasObtainedMarksColumn && isset($submission->obtained_marks)) {
+                    $submission->obtained_marks = $submission->obtained_marks;
+                } else if ($hasMarksColumn && isset($submission->marks)) {
+                    $submission->obtained_marks = $submission->marks;
+                } else {
+                    $submission->obtained_marks = null;
+                }
+
+                // Get remarks (prefer instructor_comments, fallback to teacher_remarks or remarks)
+                if ($hasInstructorCommentsColumn && isset($submission->instructor_comments) && $submission->instructor_comments) {
+                    $submission->remarks = $submission->instructor_comments;
+                } else if ($hasTeacherRemarksColumn && isset($submission->teacher_remarks) && $submission->teacher_remarks) {
+                    $submission->remarks = $submission->teacher_remarks;
+                } else if ($hasRemarksColumn && isset($submission->remarks)) {
+                    $submission->remarks = $submission->remarks;
+                } else {
+                    $submission->remarks = null;
+                }
+
+                return $submission;
+            });
+
+            return $this->success($submissions, 'Unchecked task submissions retrieved successfully');
+        } catch (\Exception $e) {
+            \Log::error('Error fetching unchecked task submissions: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            // Return actual error message for debugging
+            return $this->error($e->getMessage() . ' (Line: ' . $e->getLine() . ')', 'Failed to retrieve unchecked task submissions', 500);
+        }
+    }
+
+    /**
+     * Delete a task submission.
+     *
+     * @param int $submissionId
+     * @return JsonResponse
+     */
+    public function deleteSubmission(int $submissionId): JsonResponse
+    {
+        try {
+            $submission = SubmittedTask::find($submissionId);
+
+            if (!$submission) {
+                return $this->notFound('Submission not found');
+            }
+
+            // Delete the submission file if it exists
+            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+            
+            $filePath = null;
+            if ($hasAnswerFileColumn && $submission->answer_file) {
+                $filePath = $submission->answer_file;
+            } else if ($hasFilePathColumn && $submission->file_path) {
+                $filePath = $submission->file_path;
+            }
+            
+            if ($filePath && Storage::disk('public')->exists($filePath)) {
+                Storage::disk('public')->delete($filePath);
+            }
+
+            $submission->delete();
+
+            return $this->success(null, 'Submission deleted successfully');
+        } catch (\Exception $e) {
+            \Log::error('Error deleting submission: ' . $e->getMessage(), [
+                'exception' => $e,
+                'submission_id' => $submissionId,
+            ]);
+            return $this->error($e->getMessage(), 'Failed to delete submission', 500);
+        }
+    }
+
+    /**
+     * Bulk delete task submissions.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function bulkDeleteSubmissions(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'submission_ids' => 'required|array',
+            'submission_ids.*' => 'required|integer|exists:submitted_tasks,id',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationError($validator->errors()->toArray());
+        }
+
+        try {
+            $submissionIds = $request->input('submission_ids');
+            $submissions = SubmittedTask::whereIn('id', $submissionIds)->get();
+
+            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+
+            $deletedCount = 0;
+            foreach ($submissions as $submission) {
+                // Delete the submission file if it exists
+                $filePath = null;
+                if ($hasAnswerFileColumn && $submission->answer_file) {
+                    $filePath = $submission->answer_file;
+                } else if ($hasFilePathColumn && $submission->file_path) {
+                    $filePath = $submission->file_path;
+                }
+                
+                if ($filePath && Storage::disk('public')->exists($filePath)) {
+                    Storage::disk('public')->delete($filePath);
+                }
+
+                $submission->delete();
+                $deletedCount++;
+            }
+
+            return $this->success(['deleted_count' => $deletedCount], "Successfully deleted {$deletedCount} submission(s)");
+        } catch (\Exception $e) {
+            \Log::error('Error bulk deleting submissions: ' . $e->getMessage(), [
+                'exception' => $e,
+                'submission_ids' => $request->input('submission_ids'),
+            ]);
+            return $this->error($e->getMessage(), 'Failed to delete submissions', 500);
+        }
+    }
+
 }
 

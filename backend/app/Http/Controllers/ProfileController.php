@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
 
 class ProfileController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get current user's profile.
      *
@@ -21,9 +24,13 @@ class ProfileController extends ApiController
         $user = $request->user();
         $user->load('userType', 'roles');
 
-        // Add picture URL if available
+        // The picture_url accessor (getPictureUrlAttribute) will automatically be used
+        // when the model is serialized to JSON. It correctly handles both Google Drive
+        // paths (lms/User_Profile/...) and legacy local storage paths.
+        // No need to manually set it - just access it to ensure it's included in JSON
         if ($user->picture) {
-            $user->picture_url = url('/load-storage/' . $user->picture);
+            // Access the property to trigger the accessor and include it in JSON
+            $user->picture_url;
         }
 
         // Ensure user_type_title is set
@@ -94,40 +101,49 @@ class ProfileController extends ApiController
             try {
                 // Delete old picture if exists
                 if ($user->picture) {
-                    $oldPicturePath = str_replace('storage/', '', $user->picture);
-                    if (Storage::disk('public')->exists($oldPicturePath)) {
-                        Storage::disk('public')->delete($oldPicturePath);
+                    try {
+                        // Try to delete old picture (don't fail if it doesn't exist)
+                        $oldPath = $user->picture;
+                        if (strpos($oldPath, 'lms/User_Profile/') === 0 || strpos($oldPath, 'lms/User_Profile/') !== false || strpos($oldPath, 'User_Profile/') !== false) {
+                            // Path is already in correct format (with or without lms prefix)
+                            try {
+                                // Ensure path has lms prefix
+                                if (strpos($oldPath, 'lms/User_Profile/') !== 0) {
+                                    $oldPath = 'lms/' . $oldPath;
+                                }
+                                Storage::disk('google')->delete($oldPath);
+                            } catch (\Exception $e) {
+                                \Log::warning('Could not delete old picture from Google Drive', [
+                                    'path' => $oldPath,
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        \Log::warning('Error deleting old picture', ['error' => $e->getMessage()]);
+                        // Continue with upload even if deletion fails
                     }
                 }
 
                 // Store new picture
                 $file = $request->file('picture');
-                \Log::info('Uploading file', [
+                \Log::info('Uploading file to Google Drive', [
                     'original_name' => $file->getClientOriginalName(),
                     'mime_type' => $file->getMimeType(),
                     'size' => $file->getSize(),
                 ]);
 
-                // Ensure User_Profile directory exists
-                if (!Storage::disk('public')->exists('User_Profile')) {
-                    Storage::disk('public')->makeDirectory('User_Profile');
-                }
-
-                $fileName = time() . '_' . $user->id . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
-                $path = $file->storeAs('User_Profile', $fileName, 'public');
+                // Upload to Google Drive using folder name (from database)
+                $remoteFilePath = $this->uploadToGoogleDrive($file, 'User_Profile');
                 
-                \Log::info('File stored', ['path' => $path, 'full_path' => storage_path('app/public/' . $path)]);
-                
-                // Verify file exists
-                if (!Storage::disk('public')->exists($path)) {
-                    \Log::error('File was not stored successfully', ['path' => $path]);
-                    return $this->error('Failed to store profile picture', 500);
-                }
-                
-                // Store relative path (without 'storage/' prefix for database)
-                $validated['picture'] = $path;
+                // Store relative path for database
+                $validated['picture'] = $remoteFilePath;
             } catch (\Exception $e) {
-                \Log::error('File upload error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+                \Log::error('Google Drive file upload error', [
+                    'error' => $e->getMessage(),
+                    'error_class' => get_class($e),
+                    'trace' => $e->getTraceAsString(),
+                ]);
                 return $this->error('Failed to upload profile picture: ' . $e->getMessage(), 500);
             }
         }
@@ -135,9 +151,9 @@ class ProfileController extends ApiController
         $user->update($validated);
         $user->load('userType', 'roles');
 
-        // Add full URL for picture
+        // Add full URL for picture (Google Drive)
         if ($user->picture) {
-            $user->picture_url = url('/load-storage/' . $user->picture);
+            $user->picture_url = url('/api/storage/google/' . $user->picture);
             \Log::info('Profile picture URL', ['url' => $user->picture_url, 'path' => $user->picture]);
         }
 

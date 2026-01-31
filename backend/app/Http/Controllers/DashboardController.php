@@ -6,7 +6,10 @@ use App\Models\User;
 use App\Models\Batch;
 use App\Models\Subject;
 use App\Models\Video;
+use App\Models\Task;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends ApiController
@@ -238,5 +241,191 @@ class DashboardController extends ApiController
             'filter' => $filter,
             'total' => count($trending),
         ], 'Trending signup reasons retrieved successfully');
+    }
+
+    /**
+     * Get overdue task submissions (students who haven't submitted tasks that are past due date).
+     *
+     * @return JsonResponse
+     */
+    public function getPendingTaskSubmissions(): JsonResponse
+    {
+        try {
+            // Check if required tables exist
+            if (!DB::getSchemaBuilder()->hasTable('tasks') || 
+                !DB::getSchemaBuilder()->hasTable('submitted_tasks') ||
+                !DB::getSchemaBuilder()->hasTable('user_batches')) {
+                return $this->success([], 'Overdue task submissions retrieved successfully');
+            }
+
+            // Get all tasks
+            $tasks = Task::all();
+
+            // Check which column name is used in user_batches table
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id');
+            $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id');
+            
+            // Get all submitted task IDs grouped by student_id
+            $submittedTasks = DB::table('submitted_tasks')
+                ->select('task_id', 'student_id')
+                ->get()
+                ->groupBy('student_id')
+                ->map(function ($submissions) {
+                    return $submissions->pluck('task_id')->toArray();
+                })
+                ->toArray();
+
+            $pendingSubmissions = [];
+
+            foreach ($tasks as $task) {
+                // Get students assigned to this task's batch
+                $studentIds = [];
+                
+                if ($task->batch_id) {
+                    // Get students from user_batches and filter to only students (user_type = 2) and not blocked
+                    if ($hasUserIdColumn) {
+                        $studentIds = DB::table('user_batches')
+                            ->join('users', 'users.id', '=', 'user_batches.user_id')
+                            ->where('user_batches.batch_id', $task->batch_id)
+                            ->where('users.user_type', 2) // Only students
+                            ->where('users.block', 0) // Not blocked
+                            ->pluck('user_batches.user_id')
+                            ->toArray();
+                    } else if ($hasStudentIdColumn) {
+                        $studentIds = DB::table('user_batches')
+                            ->join('users', 'users.id', '=', 'user_batches.student_id')
+                            ->where('user_batches.batch_id', $task->batch_id)
+                            ->where('users.user_type', 2) // Only students
+                            ->where('users.block', 0) // Not blocked
+                            ->pluck('user_batches.student_id')
+                            ->toArray();
+                    }
+                } else {
+                    // If task has no batch_id, skip it (can't determine which students should have it)
+                    continue;
+                }
+
+                // Skip if no students found for this batch
+                if (empty($studentIds)) {
+                    continue;
+                }
+
+                // Filter out students who have already submitted
+                foreach ($studentIds as $studentId) {
+                    $studentSubmittedTasks = $submittedTasks[$studentId] ?? [];
+                    
+                    if (!in_array($task->id, $studentSubmittedTasks)) {
+                        // Get student details
+                        $student = User::find($studentId);
+                        
+                        if ($student) {
+                            // Check if task is overdue (past the due date)
+                            // Task is overdue if current time is past the end of expiry_date
+                            $isOverdue = false;
+                            if ($task->expiry_date) {
+                                $now = \Carbon\Carbon::now('Asia/Karachi');
+                                // Parse expiry_date and set to end of day (23:59:59.999)
+                                $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')
+                                    ->endOfDay(); // Sets to 23:59:59.999
+                                
+                                // Task is overdue if current time is after the end of due date
+                                // Example: If expiry_date is 26/01/2026, it's overdue on 27/01/2026 00:00:01 AM
+                                $isOverdue = $now->gt($expiryDate);
+                            }
+
+                            // Only include overdue tasks
+                            if ($isOverdue) {
+                                $pendingSubmissions[] = [
+                                    'id' => $task->id . '_' . $studentId, // Unique ID for frontend
+                                    'student_id' => $studentId,
+                                    'student_name' => $student->name,
+                                    'student_email' => $student->email,
+                                    'task_id' => $task->id,
+                                    'task_title' => $task->title,
+                                    'task_expiry_date' => $task->expiry_date,
+                                    'is_overdue' => true, // Always true since we filter for overdue only
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sort by expiry date (oldest first - most overdue first)
+            usort($pendingSubmissions, function ($a, $b) {
+                if ($a['task_expiry_date'] && $b['task_expiry_date']) {
+                    return strcmp($a['task_expiry_date'], $b['task_expiry_date']);
+                }
+                return 0;
+            });
+
+            return $this->success($pendingSubmissions, 'Overdue task submissions retrieved successfully');
+        } catch (\Exception $e) {
+            \Log::error('Failed to get pending task submissions: ' . $e->getMessage());
+            return $this->error($e->getMessage(), 'Failed to retrieve pending task submissions', 500);
+        }
+    }
+
+    /**
+     * Notify a student about overdue task submission.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function notifyStudentOverdueSubmission(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'student_id' => 'required|integer|exists:users,id',
+                'task_id' => 'required|integer|exists:tasks,id',
+            ]);
+
+            $student = User::find($validated['student_id']);
+            $task = Task::find($validated['task_id']);
+
+            if (!$student || !$task) {
+                return $this->error('Student or task not found', 'Not found', 404);
+            }
+
+            // Format expiry date
+            $expiryDateStr = 'No due date';
+            if ($task->expiry_date) {
+                $expiryDate = \Carbon\Carbon::parse($task->expiry_date)->setTimezone('Asia/Karachi');
+                $expiryDateStr = $expiryDate->format('M d, Y');
+            }
+
+            // Create notification
+            $title = 'Overdue Task Submission';
+            $message = "Your task '{$task->title}' submission is overdue. Please submit it as soon as possible.";
+            if ($task->expiry_date) {
+                $message = "Your task '{$task->title}' submission is overdue (Due: {$expiryDateStr}). Please submit it as soon as possible.";
+            }
+
+            $notificationData = [
+                'task_id' => $task->id,
+                'task_title' => $task->title,
+                'expiry_date' => $task->expiry_date,
+                'url' => '/dashboard/tasks',
+            ];
+
+            $created = Notification::createNotification(
+                $student->id,
+                'task_overdue',
+                $title,
+                $message,
+                $notificationData
+            );
+
+            if (!$created) {
+                return $this->error('Failed to create notification', 'Notification error', 500);
+            }
+
+            return $this->success(null, 'Notification sent successfully to student');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->validationError($e->errors(), 'Validation failed');
+        } catch (\Exception $e) {
+            \Log::error('Failed to notify student about overdue submission: ' . $e->getMessage());
+            return $this->error($e->getMessage(), 'Failed to send notification', 500);
+        }
     }
 }

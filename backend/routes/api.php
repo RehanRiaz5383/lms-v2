@@ -22,6 +22,7 @@ use App\Http\Controllers\CloudflareTurnstileController;
 use App\Http\Controllers\QuizController;
 use App\Http\Controllers\ClassParticipationController;
 use App\Http\Controllers\PushNotificationController;
+use App\Http\Controllers\GoogleDriveTestController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +43,14 @@ Route::get('/turnstile-settings', [CloudflareTurnstileController::class, 'getSet
 // Public video creation route for testing (excluded from auth)
 Route::post('/videos', [VideoController::class, 'store']);
 
+// Google Drive Test Endpoints (Public - no authentication required)
+Route::prefix('google-drive')->group(function () {
+    Route::get('/test', [GoogleDriveTestController::class, 'testListFiles']);
+    Route::get('/test/base-folder', [GoogleDriveTestController::class, 'testBaseFolder']);
+    Route::get('/test/search', [GoogleDriveTestController::class, 'testSearchFiles']);
+    Route::get('/test/folder-info', [GoogleDriveTestController::class, 'testGetFolderInfo']);
+});
+
 // Protected routes (require authentication)
 Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
@@ -51,6 +60,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
     Route::get('/dashboard/trending-signup-reasons', [DashboardController::class, 'getTrendingSignupReasons']);
+    Route::get('/dashboard/pending-task-submissions', [DashboardController::class, 'getPendingTaskSubmissions'])->middleware('admin');
+    Route::post('/dashboard/notify-student-overdue', [DashboardController::class, 'notifyStudentOverdueSubmission'])->middleware('admin');
 
     // Student routes
     Route::prefix('student')->group(function () {
@@ -112,6 +123,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [VoucherController::class, 'getAllVouchers']); // Get all vouchers with filters
         Route::get('/income-report', [VoucherController::class, 'getIncomeReport']); // Income report (approved vouchers)
         Route::post('/generate', [VoucherController::class, 'generateVouchers']); // Test endpoint for manual voucher generation
+        Route::put('/{id}', [VoucherController::class, 'updateVoucher']); // Update voucher
         Route::post('/{id}/approve', [VoucherController::class, 'approveVoucher']);
         Route::post('/{id}/reject', [VoucherController::class, 'rejectVoucher']);
         Route::post('/{id}/notify', [VoucherController::class, 'notifyPaymentClearance']); // Send payment clearance notification
@@ -163,10 +175,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('tasks')->group(function () {
         Route::get('/', [TaskController::class, 'index']);
         Route::post('/', [TaskController::class, 'store']);
+        // Specific routes must come before parameterized routes
+        Route::get('/unchecked-submissions', [TaskController::class, 'getUncheckedSubmissions'])->middleware('admin');
+        Route::delete('/submissions/{submissionId}', [TaskController::class, 'deleteSubmission'])->middleware('admin');
+        Route::post('/submissions/bulk-delete', [TaskController::class, 'bulkDeleteSubmissions'])->middleware('admin');
+        Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
         Route::get('/{id}', [TaskController::class, 'show']);
         Route::put('/{id}', [TaskController::class, 'update']);
         Route::delete('/{id}', [TaskController::class, 'destroy']);
-        Route::get('/{id}/submissions', [TaskController::class, 'getSubmissions']);
         Route::post('/{taskId}/submissions/{submissionId}/grade', [TaskController::class, 'gradeSubmission']);
         Route::post('/{taskId}/upload-student-submission', [TaskController::class, 'uploadStudentSubmission']);
     });
@@ -215,6 +231,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [SmtpSettingsController::class, 'index']);
         Route::put('/', [SmtpSettingsController::class, 'update']);
         Route::post('/test', [SmtpSettingsController::class, 'test']);
+    });
+
+    // Google Drive Folders Management (Admin only)
+    Route::middleware('admin')->prefix('google-drive-folders')->group(function () {
+        Route::get('/', [\App\Http\Controllers\GoogleDriveFolderController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\GoogleDriveFolderController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\GoogleDriveFolderController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\GoogleDriveFolderController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\GoogleDriveFolderController::class, 'destroy']);
     });
 
     // Notification Settings (available to all authenticated users)

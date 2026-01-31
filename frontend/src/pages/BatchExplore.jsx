@@ -16,6 +16,7 @@ import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion, UserCheck } from 'lucide-react';
 import { cn } from '../utils/cn';
+import RichTextEditor from '../components/RichTextEditor';
 
 const BatchExplore = () => {
   const { id } = useParams();
@@ -39,6 +40,7 @@ const BatchExplore = () => {
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
   const [loadingClassParticipations, setLoadingClassParticipations] = useState(false);
   const [loadingStudents, setLoadingStudents] = useState(false);
+  const [submittingTask, setSubmittingTask] = useState(false);
   const [draggedVideo, setDraggedVideo] = useState(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
@@ -119,6 +121,13 @@ const BatchExplore = () => {
   const [editingClassParticipation, setEditingClassParticipation] = useState(null);
   const [classParticipationStudents, setClassParticipationStudents] = useState([]);
   const [classParticipationMarks, setClassParticipationMarks] = useState({}); // { studentId: { obtained_marks, total_marks, remarks } }
+  const [showIndividualMarkDialog, setShowIndividualMarkDialog] = useState(false);
+  const [selectedStudentForMark, setSelectedStudentForMark] = useState(null);
+  const [individualMarkData, setIndividualMarkData] = useState({
+    obtained_marks: '',
+    total_marks: '',
+    remarks: '',
+  });
   const [classParticipationFormData, setClassParticipationFormData] = useState({
     title: '',
     participation_date: '',
@@ -269,9 +278,11 @@ const BatchExplore = () => {
       // Format as YYYY-MM-DD for date input
       formattedDueDate = date.toISOString().split('T')[0];
     }
+    // Get description from comments column (preferred) or description column
+    const taskDescription = task.comments || task.description || '';
     setTaskFormData({
       title: task.title || '',
-      description: task.description || '',
+      description: taskDescription,
       due_date: formattedDueDate,
       user_id: task.user_id || '',
       marks: task.marks || task.total_marks || '',
@@ -282,6 +293,7 @@ const BatchExplore = () => {
 
   const handleTaskSubmit = async (e) => {
     e.preventDefault();
+    setSubmittingTask(true);
     try {
       const formData = new FormData();
       formData.append('title', taskFormData.title);
@@ -332,6 +344,8 @@ const BatchExplore = () => {
       await loadTasks(selectedSubject.id);
     } catch (err) {
       showError(err.response?.data?.message || (editingTask ? 'Failed to update task' : 'Failed to create task'));
+    } finally {
+      setSubmittingTask(false);
     }
   };
 
@@ -681,44 +695,48 @@ const BatchExplore = () => {
       const response = await apiService.get(endpoint);
       const data = response.data.data;
       setClassParticipationStudents(data.students || []);
-      
-      // Initialize marks state with existing marks
-      const marksState = {};
-      data.students?.forEach(student => {
-        marksState[student.id] = {
-          obtained_marks: student.obtained_marks || '',
-          total_marks: student.total_marks || participation.total_marks || '',
-          remarks: student.remarks || '',
-        };
-      });
-      setClassParticipationMarks(marksState);
       setShowAssignClassParticipationMarksDrawer(true);
     } catch (err) {
       showError('Failed to load students for class participation');
     }
   };
 
-  const handleClassParticipationMarksSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const marks = Object.entries(classParticipationMarks).map(([studentId, markData]) => ({
-        student_id: parseInt(studentId),
-        obtained_marks: parseFloat(markData.obtained_marks) || 0,
-        total_marks: markData.total_marks ? parseFloat(markData.total_marks) : null,
-        remarks: markData.remarks || null,
-      }));
+  const handleAssignIndividualMark = (student, participation) => {
+    setSelectedStudentForMark(student);
+    setSelectedClassParticipation(participation);
+    setIndividualMarkData({
+      obtained_marks: student.obtained_marks || '',
+      total_marks: student.total_marks || participation.total_marks || '',
+      remarks: student.remarks || '',
+    });
+    setShowIndividualMarkDialog(true);
+  };
 
+  const handleIndividualMarkSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentForMark || !selectedClassParticipation) return;
+
+    try {
       const endpoint = buildEndpoint(API_ENDPOINTS.classParticipations.assignMarks, { id: selectedClassParticipation.id });
-      await apiService.post(endpoint, { marks });
-      success('Marks assigned successfully');
-      setShowAssignClassParticipationMarksDrawer(false);
-      setSelectedClassParticipation(null);
-      setClassParticipationMarks({});
-      await loadClassParticipations(selectedSubject?.id);
+      await apiService.post(endpoint, {
+        marks: [{
+          student_id: selectedStudentForMark.id,
+          obtained_marks: parseFloat(individualMarkData.obtained_marks) || 0,
+          total_marks: individualMarkData.total_marks ? parseFloat(individualMarkData.total_marks) : null,
+          remarks: individualMarkData.remarks || null,
+        }],
+      });
+      success('Mark assigned successfully');
+      setShowIndividualMarkDialog(false);
+      setSelectedStudentForMark(null);
+      setIndividualMarkData({ obtained_marks: '', total_marks: '', remarks: '' });
+      // Reload students list
+      await handleAssignClassParticipationMarks(selectedClassParticipation);
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to assign marks');
+      showError(err.response?.data?.message || 'Failed to assign mark');
     }
   };
+
 
   const formatDate = (dateString) => {
     if (!dateString) return 'No due date';
@@ -1701,10 +1719,11 @@ const BatchExplore = () => {
                               </span>
                             )}
                           </div>
-                          {task.description && (
-                            <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                              {task.description}
-                            </p>
+                          {(task.comments || task.description) && (
+                            <div 
+                              className="text-xs text-muted-foreground mb-2 line-clamp-2 prose prose-sm max-w-none"
+                              dangerouslySetInnerHTML={{ __html: (task.comments || task.description).substring(0, 200) + '...' }}
+                            />
                           )}
                           {/* Task Attachment Files */}
                           {task.attachment_files && task.attachment_files.length > 0 && (
@@ -1719,7 +1738,8 @@ const BatchExplore = () => {
                                     className="h-6 text-xs px-2"
                                     onClick={() => {
                                       if (file.file_url) {
-                                        window.open(file.file_url, '_blank');
+                                        const normalizedUrl = normalizeUrl(file.file_url);
+                                        window.open(normalizedUrl, '_blank');
                                       }
                                     }}
                                   >
@@ -2364,11 +2384,9 @@ const BatchExplore = () => {
           </div>
           <div>
             <Label htmlFor="task_description">Description</Label>
-            <textarea
-              id="task_description"
+            <RichTextEditor
               value={taskFormData.description}
-              onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              onChange={(value) => setTaskFormData({ ...taskFormData, description: value })}
               placeholder="Enter task description"
             />
           </div>
@@ -2447,7 +2465,8 @@ const BatchExplore = () => {
             </p>
           </div>
           <div className="flex gap-2 pt-4">
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" disabled={submittingTask}>
+              {submittingTask && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editingTask ? 'Update Task' : 'Create Task'}
             </Button>
             <Button
@@ -2507,11 +2526,9 @@ const BatchExplore = () => {
           </div>
           <div>
             <Label htmlFor="edit_task_description">Description</Label>
-            <textarea
-              id="edit_task_description"
+            <RichTextEditor
               value={taskFormData.description}
-              onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
-              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              onChange={(value) => setTaskFormData({ ...taskFormData, description: value })}
               placeholder="Enter task description"
             />
           </div>
@@ -2608,7 +2625,8 @@ const BatchExplore = () => {
                       type="button"
                       onClick={() => {
                         if (file.file_url) {
-                          window.open(file.file_url, '_blank');
+                          const normalizedUrl = normalizeUrl(file.file_url);
+                          window.open(normalizedUrl, '_blank');
                         }
                       }}
                     >
@@ -2644,7 +2662,8 @@ const BatchExplore = () => {
             </p>
           </div>
           <div className="flex gap-2 pt-4">
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" disabled={submittingTask}>
+              {submittingTask && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Update Task
             </Button>
             <Button
@@ -2757,7 +2776,9 @@ const BatchExplore = () => {
                               : filePath;
                             fileUrl = `${APP_BASE_URL}/load-storage/${cleanPath}`;
                           }
+                          // Normalize URL to fix localhost:8000 issues in production
                           if (fileUrl) {
+                            fileUrl = normalizeUrl(fileUrl);
                             window.open(fileUrl, '_blank');
                           }
                         }}
@@ -3330,122 +3351,124 @@ const BatchExplore = () => {
         </form>
       </Drawer>
 
-      {/* Assign Class Participation Marks Drawer */}
+      {/* Assign Class Participation Marks Drawer - Shows list of students with individual assign buttons */}
       <Drawer
         isOpen={showAssignClassParticipationMarksDrawer}
         onClose={() => {
           setShowAssignClassParticipationMarksDrawer(false);
           setSelectedClassParticipation(null);
           setClassParticipationStudents([]);
-          setClassParticipationMarks({});
         }}
         title={`Assign Marks - ${selectedClassParticipation?.title || 'Class Participation'}`}
         size="80%"
       >
-        <form onSubmit={handleClassParticipationMarksSubmit} className="space-y-4">
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            {classParticipationStudents.map((student) => (
-              <div
-                key={student.id}
-                className="p-4 border border-border rounded-lg space-y-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <h4 className="font-medium">{student.full_name || student.name || student.email}</h4>
-                    <p className="text-sm text-muted-foreground">{student.email}</p>
-                  </div>
-                  {student.has_mark && (
-                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
-                      Marked
-                    </span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor={`cp_obtained_marks_${student.id}`}>
-                      Obtained Marks *
-                    </Label>
-                    <Input
-                      id={`cp_obtained_marks_${student.id}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={classParticipationMarks[student.id]?.obtained_marks || ''}
-                      onChange={(e) => {
-                        setClassParticipationMarks({
-                          ...classParticipationMarks,
-                          [student.id]: {
-                            ...classParticipationMarks[student.id],
-                            obtained_marks: e.target.value,
-                          },
-                        });
-                      }}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`cp_total_marks_${student.id}`}>
-                      Total Marks
-                    </Label>
-                    <Input
-                      id={`cp_total_marks_${student.id}`}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={classParticipationMarks[student.id]?.total_marks || selectedClassParticipation?.total_marks || ''}
-                      onChange={(e) => {
-                        setClassParticipationMarks({
-                          ...classParticipationMarks,
-                          [student.id]: {
-                            ...classParticipationMarks[student.id],
-                            total_marks: e.target.value,
-                          },
-                        });
-                      }}
-                      placeholder={selectedClassParticipation?.total_marks ? `Default: ${selectedClassParticipation.total_marks}` : 'Enter total marks'}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor={`cp_remarks_${student.id}`}>Remarks (Optional)</Label>
-                  <textarea
-                    id={`cp_remarks_${student.id}`}
-                    value={classParticipationMarks[student.id]?.remarks || ''}
-                    onChange={(e) => {
-                      setClassParticipationMarks({
-                        ...classParticipationMarks,
-                        [student.id]: {
-                          ...classParticipationMarks[student.id],
-                          remarks: e.target.value,
-                        },
-                      });
-                    }}
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Enter remarks (optional)"
-                  />
-                </div>
+        <div className="space-y-4">
+          <div className="space-y-2 max-h-[70vh] overflow-y-auto">
+            {classParticipationStudents.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No students found
               </div>
-            ))}
+            ) : (
+              <div className="grid gap-3">
+                {classParticipationStudents.map((student) => (
+                  <div
+                    key={student.id}
+                    className="p-4 border border-border rounded-lg flex items-center justify-between hover:bg-muted/50"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h4 className="font-medium">{student.full_name || student.name || student.email}</h4>
+                        {student.has_mark && (
+                          <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
+                            Marked: {student.obtained_marks} / {student.total_marks}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">{student.email}</p>
+                      {student.has_mark && student.remarks && (
+                        <p className="text-xs text-muted-foreground mt-1">Remarks: {student.remarks}</p>
+                      )}
+                    </div>
+                    <Button
+                      variant={student.has_mark ? "outline" : "default"}
+                      size="sm"
+                      onClick={() => handleAssignIndividualMark(student, selectedClassParticipation)}
+                    >
+                      <Award className="h-4 w-4 mr-2" />
+                      {student.has_mark ? 'Update Mark' : 'Assign Mark'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="flex gap-2 pt-4 border-t">
-            <Button type="submit" className="flex-1">
-              Save Marks
-            </Button>
+        </div>
+      </Drawer>
+
+      {/* Individual Mark Assignment Dialog */}
+      <Dialog
+        isOpen={showIndividualMarkDialog}
+        onClose={() => {
+          setShowIndividualMarkDialog(false);
+          setSelectedStudentForMark(null);
+          setIndividualMarkData({ obtained_marks: '', total_marks: '', remarks: '' });
+        }}
+        title={`${selectedStudentForMark?.has_mark ? 'Update' : 'Assign'} Mark - ${selectedStudentForMark?.full_name || selectedStudentForMark?.name || selectedStudentForMark?.email || 'Student'}`}
+      >
+        <form onSubmit={handleIndividualMarkSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="individual_obtained_marks">Obtained Marks *</Label>
+            <Input
+              id="individual_obtained_marks"
+              type="number"
+              step="0.01"
+              min="0"
+              value={individualMarkData.obtained_marks}
+              onChange={(e) => setIndividualMarkData({ ...individualMarkData, obtained_marks: e.target.value })}
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="individual_total_marks">Total Marks</Label>
+            <Input
+              id="individual_total_marks"
+              type="number"
+              step="0.01"
+              min="0"
+              value={individualMarkData.total_marks}
+              onChange={(e) => setIndividualMarkData({ ...individualMarkData, total_marks: e.target.value })}
+              placeholder={selectedClassParticipation?.total_marks ? `Default: ${selectedClassParticipation.total_marks}` : 'Enter total marks'}
+            />
+          </div>
+          <div>
+            <Label htmlFor="individual_remarks">Remarks (Optional)</Label>
+            <textarea
+              id="individual_remarks"
+              value={individualMarkData.remarks}
+              onChange={(e) => setIndividualMarkData({ ...individualMarkData, remarks: e.target.value })}
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Enter remarks (optional)"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                setShowAssignClassParticipationMarksDrawer(false);
-                setSelectedClassParticipation(null);
-                setClassParticipationStudents([]);
-                setClassParticipationMarks({});
+                setShowIndividualMarkDialog(false);
+                setSelectedStudentForMark(null);
+                setIndividualMarkData({ obtained_marks: '', total_marks: '', remarks: '' });
               }}
             >
               Cancel
             </Button>
+            <Button type="submit">
+              <Award className="h-4 w-4 mr-2" />
+              {selectedStudentForMark?.has_mark ? 'Update Mark' : 'Assign Mark'}
+            </Button>
           </div>
         </form>
-      </Drawer>
+      </Dialog>
     </div>
   );
 };

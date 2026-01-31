@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\Models\SubmittedTask;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 
 class StudentTaskController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get all tasks assigned to the authenticated student.
      *
@@ -159,7 +161,7 @@ class StudentTaskController extends ApiController
                         ->where('task_id', $task->id)
                         ->get()
                         ->map(function ($file) {
-                            $appUrl = env('APP_URL', 'http://localhost:8000');
+                            $appUrl = config('app.url', 'http://localhost:8000');
                             $filePath = $file->file_path ?? null;
                             if ($filePath) {
                                 $file->file_url = $appUrl . '/load-storage/' . ltrim($filePath, '/');
@@ -434,10 +436,9 @@ class StudentTaskController extends ApiController
                 return $this->validationError($validator->errors()->toArray());
             }
 
-            // Handle file upload - store in submitted_tasks folder
+            // Handle file upload - upload to Google Drive using folder name (from database)
             $file = $request->file('file');
-            $fileName = time() . '_' . $userId . '_' . $file->getClientOriginalName();
-            $filePath = $file->storeAs('submitted_tasks', $fileName, 'public');
+            $filePath = $this->uploadToGoogleDrive($file, 'submitted_tasks');
 
             // Check if submission already exists
             $submission = SubmittedTask::where('task_id', $task->id)
@@ -451,10 +452,10 @@ class StudentTaskController extends ApiController
 
             if ($submission) {
                 // Update existing submission
-                // Delete old file if exists
+                // Delete old file if exists (from Google Drive)
                 $oldFilePath = $hasAnswerFileColumn ? $submission->answer_file : ($hasFilePathColumn ? $submission->file_path : null);
-                if ($oldFilePath && Storage::disk('public')->exists($oldFilePath)) {
-                    Storage::disk('public')->delete($oldFilePath);
+                if ($oldFilePath) {
+                    $this->deleteFromGoogleDrive($oldFilePath);
                 }
 
                 // Update the correct column
@@ -638,6 +639,8 @@ class StudentTaskController extends ApiController
 
     /**
      * Check if a task can be submitted (before or on due date, up to 23:59:59).
+     * Button should be removed on the next day at 00:00:01 AM.
+     * Example: If due_date is 26/01/2026, button should be removed on 27/01/2026 00:00:01 AM.
      *
      * @param Task|object $task
      * @return bool
@@ -650,16 +653,22 @@ class StudentTaskController extends ApiController
 
         try {
             // Set timezone to Asia/Karachi
-            $now = now()->setTimezone('Asia/Karachi');
+            $now = \Carbon\Carbon::now('Asia/Karachi');
             
-            // Parse expiry_date and set to end of day (23:59:59) in Asia/Karachi timezone
+            // Parse expiry_date in Asia/Karachi timezone and set to end of day (23:59:59.999)
             $dueDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')
-                ->endOfDay(); // Sets to 23:59:59
+                ->endOfDay(); // Sets to 23:59:59.999
 
-            // Can submit if current time is before or equal to end of due date (23:59:59)
+            // Can submit if current time is before or equal to end of due date (23:59:59.999)
+            // After 00:00:00 of the next day, submission is no longer allowed
             return $now->lte($dueDate);
         } catch (\Exception $e) {
             // If date parsing fails, allow submission
+            \Log::warning('Failed to parse task expiry_date', [
+                'task_id' => $task->id ?? null,
+                'expiry_date' => $task->expiry_date ?? null,
+                'error' => $e->getMessage(),
+            ]);
             return true;
         }
     }

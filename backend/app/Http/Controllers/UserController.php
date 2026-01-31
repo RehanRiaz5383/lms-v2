@@ -9,15 +9,18 @@ use App\Models\User;
 use App\Models\UserType;
 use App\Models\Batch;
 use App\Models\Notification;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
 
 class UserController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get list of users with pagination and filters.
      *
@@ -122,13 +125,15 @@ class UserController extends ApiController
     public function store(Request $request): JsonResponse
     {
         try {
-            $validated = $request->validate([
+            // Extract role_ids first to determine if user_type is required
+            $roleIds = $request->input('role_ids', []);
+            
+            $validationRules = [
                 'name' => 'required|string|max:255',
                 'first_name' => 'nullable|string|max:255',
                 'last_name' => 'nullable|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:8',
-                'user_type' => 'required|integer|exists:user_types,id',
                 'contact_no' => 'nullable|string|max:20',
                 'emergency_contact_no' => 'nullable|string|max:20',
                 'address' => 'nullable|string',
@@ -141,7 +146,18 @@ class UserController extends ApiController
                 'expected_fee_promise_date' => 'nullable|integer|min:1|max:31',
                 'requested_course' => 'nullable|string',
                 'source' => 'nullable|string',
-            ]);
+            ];
+            
+            // user_type is required only if role_ids is not provided
+            if (empty($roleIds)) {
+                $validationRules['user_type'] = 'required|integer|exists:user_types,id';
+            } else {
+                $validationRules['user_type'] = 'nullable|integer|exists:user_types,id';
+                $validationRules['role_ids'] = 'required|array';
+                $validationRules['role_ids.*'] = 'exists:user_types,id';
+            }
+            
+            $validated = $request->validate($validationRules);
         } catch (ValidationException $e) {
             return $this->validationError($e->errors(), 'Validation failed');
         }
@@ -233,25 +249,23 @@ class UserController extends ApiController
             try {
                 // Delete old picture if exists
                 if ($user->picture) {
-                    $oldPicturePath = str_replace('storage/', '', $user->picture);
-                    if (Storage::disk('public')->exists($oldPicturePath)) {
-                        Storage::disk('public')->delete($oldPicturePath);
+                    $oldPicturePath = 'lms/User_Profile/' . basename($user->picture);
+                    if (Storage::disk('google')->exists($oldPicturePath)) {
+                        Storage::disk('google')->delete($oldPicturePath);
                     }
                 }
 
                 // Store new picture
                 $file = $request->file('picture');
                 
-                // Ensure User_Profile directory exists
-                if (!Storage::disk('public')->exists('User_Profile')) {
-                    Storage::disk('public')->makeDirectory('User_Profile');
-                }
-
-                $fileName = time() . '_' . $user->id . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
-                $path = $file->storeAs('User_Profile', $fileName, 'public');
+                // Upload to Google Drive using folder name (from database)
+                $remoteFilePath = $this->uploadToGoogleDrive($file, 'User_Profile');
                 
                 // Store relative path
-                $validated['picture'] = $path;
+                $validated['picture'] = $remoteFilePath;
+            } catch (\Google\Service\Exception $e) {
+                // This will catch Google-specific errors (like permissions or quota)
+                return $this->error('Failed to upload profile picture: ' . $e->getMessage(), $e->getCode() ?: 500);
             } catch (\Exception $e) {
                 return $this->error('Failed to upload profile picture: ' . $e->getMessage(), 500);
             }
@@ -386,25 +400,66 @@ class UserController extends ApiController
             try {
                 // Delete old picture if exists
                 if ($student->picture) {
-                    $oldPicturePath = str_replace('storage/', '', $student->picture);
-                    if (Storage::disk('public')->exists($oldPicturePath)) {
-                        Storage::disk('public')->delete($oldPicturePath);
+                    $oldPicturePath = 'lms/User_Profile/' . basename($student->picture);
+                    if (Storage::disk('google')->exists($oldPicturePath)) {
+                        Storage::disk('google')->delete($oldPicturePath);
                     }
                 }
 
                 // Store new picture
                 $file = $request->file('picture');
                 
-                // Ensure User_Profile directory exists
-                if (!Storage::disk('public')->exists('User_Profile')) {
-                    Storage::disk('public')->makeDirectory('User_Profile');
-                }
-
                 $fileName = time() . '_' . $student->id . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());
-                $path = $file->storeAs('User_Profile', $fileName, 'public');
+                
+                // Upload to Google Drive using direct Google Drive API
+                $remoteFilePath = 'lms/User_Profile/' . $fileName;
+                
+                // 1. Initialize the Google Client with OAuth2
+                $client = new Client();
+                $client->setClientId(config('services.google.client_id'));
+                $client->setClientSecret(config('services.google.client_secret'));
+                $client->setDeveloperKey(config('services.google.api_key'));
+                $client->addScope(Drive::DRIVE);
+                
+                // 2. Authenticate using the Refresh Token
+                $client->refreshToken(config('services.google.refresh_token'));
+                
+                // Auto-refresh the access token if it's expired
+                if ($client->isAccessTokenExpired()) {
+                    $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+                }
+                
+                $service = new Drive($client);
+                
+                // 3. Define your specific Folder ID (User_Profile folder owned by you)
+                // This ensures files use YOUR storage quota
+                $userProfileFolderId = '1vKLAY4Yc3LSs8a9Mcn7DWn2gVGCuxbjF';
+                
+                // 4. Create File Metadata
+                $fileMetadata = new DriveFile([
+                    'name' => $fileName,
+                    'parents' => [$userProfileFolderId] // This puts it in YOUR folder
+                ]);
+                
+                // 5. Get File Content
+                $filePath = $file->getRealPath();
+                $content = file_get_contents($filePath);
+                $mimeType = $file->getMimeType() ?: 'image/jpeg';
+                
+                // 6. Execute Upload
+                // Note: 'multipart' is fine for files under 5MB. For larger files, use 'resumable'
+                $uploadedFile = $service->files->create($fileMetadata, [
+                    'data' => $content,
+                    'mimeType' => $mimeType,
+                    'uploadType' => 'multipart',
+                    'fields' => 'id, webViewLink'
+                ]);
                 
                 // Store relative path
-                $validated['picture'] = $path;
+                $validated['picture'] = $remoteFilePath;
+            } catch (\Google\Service\Exception $e) {
+                // This will catch Google-specific errors (like permissions or quota)
+                return $this->error('Failed to upload profile picture: ' . $e->getMessage(), $e->getCode() ?: 500);
             } catch (\Exception $e) {
                 return $this->error('Failed to upload profile picture: ' . $e->getMessage(), 500);
             }

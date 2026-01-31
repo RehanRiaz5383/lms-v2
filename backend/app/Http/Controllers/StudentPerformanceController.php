@@ -77,8 +77,9 @@ class StudentPerformanceController extends ApiController
 
             $userId = $student->id;
 
-            // Get user's batch IDs
+            // Get user's batch IDs and batch information from user_batches table
             $userBatchIds = [];
+            $userBatches = [];
             if (DB::getSchemaBuilder()->hasTable('user_batches')) {
                 $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id');
                 if ($hasUserIdColumn) {
@@ -90,6 +91,22 @@ class StudentPerformanceController extends ApiController
                     $userBatchIds = DB::table('user_batches')
                         ->where('student_id', $userId)
                         ->pluck('batch_id')
+                        ->toArray();
+                }
+                
+                // Get batch information
+                if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                    $userBatches = DB::table('batches')
+                        ->whereIn('id', $userBatchIds)
+                        ->select('id', 'title', 'active')
+                        ->get()
+                        ->map(function($batch) {
+                            return [
+                                'id' => $batch->id,
+                                'title' => $batch->title ?? 'Untitled Batch',
+                                'active' => isset($batch->active) ? (bool)$batch->active : true,
+                            ];
+                        })
                         ->toArray();
                 }
             }
@@ -111,12 +128,13 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('tasks')) {
                     $tasksQuery = DB::table('tasks');
                     
+                    // Only show tasks from batches assigned in user_batches table
                     if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                         if (!empty($userBatchIds)) {
-                            $tasksQuery->whereIn('batch_id', $userBatchIds)
-                                       ->orWhereNull('batch_id');
+                            $tasksQuery->whereIn('batch_id', $userBatchIds);
                         } else {
-                            $tasksQuery->whereNull('batch_id');
+                            // If user has no batches assigned, return empty tasks
+                            $tasksQuery->whereRaw('1 = 0');
                         }
                     } else if (DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
                         $tasksQuery->where('user_id', $userId);
@@ -152,6 +170,22 @@ class StudentPerformanceController extends ApiController
                         $totalMarksObtained = 0;
                         $totalMarksPossible = 0;
                         
+                        // Get batch information for tasks
+                        $batchInfoMap = [];
+                        if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                            $batches = DB::table('batches')
+                                ->whereIn('id', $userBatchIds)
+                                ->select('id', 'title', 'active')
+                                ->get();
+                            foreach ($batches as $batch) {
+                                $batchInfoMap[$batch->id] = [
+                                    'id' => $batch->id,
+                                    'title' => $batch->title ?? 'Untitled Batch',
+                                    'active' => isset($batch->active) ? (bool)$batch->active : true,
+                                ];
+                            }
+                        }
+                        
                         // Build task details array
                         foreach ($allTasks as $task) {
                             $taskId = $task->id;
@@ -176,6 +210,12 @@ class StudentPerformanceController extends ApiController
                                 $totalMarksPossible += $taskTotalMarks;
                             }
                             
+                            // Get batch information for this task
+                            $batchInfo = null;
+                            if (isset($task->batch_id) && isset($batchInfoMap[$task->batch_id])) {
+                                $batchInfo = $batchInfoMap[$task->batch_id];
+                            }
+                            
                             $taskDetails[] = [
                                 'id' => $taskId,
                                 'title' => $task->title ?? $task->name ?? 'Untitled Task',
@@ -183,6 +223,7 @@ class StudentPerformanceController extends ApiController
                                 'obtained_marks' => $obtainedMarks,
                                 'is_submitted' => $submittedTask !== null,
                                 'is_graded' => $obtainedMarks !== null,
+                                'batch' => $batchInfo,
                             ];
                         }
                         
@@ -214,6 +255,23 @@ class StudentPerformanceController extends ApiController
                         }
                     } else {
                         $tasksData['pending'] = $tasksData['total'];
+                        
+                        // Get batch information for tasks
+                        $batchInfoMap = [];
+                        if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                            $batches = DB::table('batches')
+                                ->whereIn('id', $userBatchIds)
+                                ->select('id', 'title', 'active')
+                                ->get();
+                            foreach ($batches as $batch) {
+                                $batchInfoMap[$batch->id] = [
+                                    'id' => $batch->id,
+                                    'title' => $batch->title ?? 'Untitled Batch',
+                                    'active' => isset($batch->active) ? (bool)$batch->active : true,
+                                ];
+                            }
+                        }
+                        
                         // Build task details without submissions
                         foreach ($allTasks as $task) {
                             $hasTaskTotalMarks = DB::getSchemaBuilder()->hasColumn('tasks', 'total_marks');
@@ -225,6 +283,12 @@ class StudentPerformanceController extends ApiController
                                 $taskTotalMarks = (float) $task->{$taskMarksColumn};
                             }
                             
+                            // Get batch information for this task
+                            $batchInfo = null;
+                            if (isset($task->batch_id) && isset($batchInfoMap[$task->batch_id])) {
+                                $batchInfo = $batchInfoMap[$task->batch_id];
+                            }
+                            
                             $taskDetails[] = [
                                 'id' => $task->id,
                                 'title' => $task->title ?? $task->name ?? 'Untitled Task',
@@ -232,6 +296,7 @@ class StudentPerformanceController extends ApiController
                                 'obtained_marks' => null,
                                 'is_submitted' => false,
                                 'is_graded' => false,
+                                'batch' => $batchInfo,
                             ];
                         }
                     }
@@ -262,8 +327,14 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('class_participations')) {
                     $participationsQuery = DB::table('class_participations');
                     
-                    if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id') && !empty($userBatchIds)) {
-                        $participationsQuery->whereIn('batch_id', $userBatchIds);
+                    // Only show class participations from batches assigned in user_batches table
+                    if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id')) {
+                        if (!empty($userBatchIds)) {
+                            $participationsQuery->whereIn('batch_id', $userBatchIds);
+                        } else {
+                            // If user has no batches assigned, return empty participations
+                            $participationsQuery->whereRaw('1 = 0');
+                        }
                     }
                     
                     // Get all class participations for this student
@@ -289,6 +360,22 @@ class StudentPerformanceController extends ApiController
                         $totalMarksObtained = 0;
                         $totalMarksPossible = 0;
                         
+                        // Get batch information for class participations
+                        $batchInfoMap = [];
+                        if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                            $batches = DB::table('batches')
+                                ->whereIn('id', $userBatchIds)
+                                ->select('id', 'title', 'active')
+                                ->get();
+                            foreach ($batches as $batch) {
+                                $batchInfoMap[$batch->id] = [
+                                    'id' => $batch->id,
+                                    'title' => $batch->title ?? 'Untitled Batch',
+                                    'active' => isset($batch->active) ? (bool)$batch->active : true,
+                                ];
+                            }
+                        }
+                        
                         foreach ($allParticipations as $participation) {
                             $mark = $participationMarks->get($participation->id);
                             $obtainedMarks = $mark ? (float)($mark->obtained_marks ?? 0) : null;
@@ -299,6 +386,12 @@ class StudentPerformanceController extends ApiController
                                 $totalMarksPossible += $totalMarks;
                             }
                             
+                            // Get batch information for this participation
+                            $batchInfo = null;
+                            if (isset($participation->batch_id) && isset($batchInfoMap[$participation->batch_id])) {
+                                $batchInfo = $batchInfoMap[$participation->batch_id];
+                            }
+                            
                             $participationDetails[] = [
                                 'id' => $participation->id,
                                 'title' => $participation->title ?? 'Untitled',
@@ -307,7 +400,7 @@ class StudentPerformanceController extends ApiController
                                 'obtained_marks' => $obtainedMarks,
                                 'remarks' => $mark->remarks ?? null,
                                 'subject' => null, // Can be loaded if needed
-                                'batch' => null, // Can be loaded if needed
+                                'batch' => $batchInfo,
                             ];
                         }
                         
@@ -344,9 +437,14 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('quizzes')) {
                     $quizzesQuery = DB::table('quizzes');
                     
-                    if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id') && !empty($userBatchIds)) {
-                        $quizzesQuery->whereIn('batch_id', $userBatchIds)
-                                     ->orWhereNull('batch_id');
+                    // Only show quizzes from batches assigned in user_batches table
+                    if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id')) {
+                        if (!empty($userBatchIds)) {
+                            $quizzesQuery->whereIn('batch_id', $userBatchIds);
+                        } else {
+                            // If user has no batches assigned, return empty quizzes
+                            $quizzesQuery->whereRaw('1 = 0');
+                        }
                     } else if (DB::getSchemaBuilder()->hasColumn('quizzes', 'user_id')) {
                         $quizzesQuery->where('user_id', $userId);
                     }
@@ -381,6 +479,22 @@ class StudentPerformanceController extends ApiController
                         $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'obtained_marks');
                         $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'marks');
                         
+                        // Get batch information for quizzes
+                        $batchInfoMap = [];
+                        if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                            $batches = DB::table('batches')
+                                ->whereIn('id', $userBatchIds)
+                                ->select('id', 'title', 'active')
+                                ->get();
+                            foreach ($batches as $batch) {
+                                $batchInfoMap[$batch->id] = [
+                                    'id' => $batch->id,
+                                    'title' => $batch->title ?? 'Untitled Batch',
+                                    'active' => isset($batch->active) ? (bool)$batch->active : true,
+                                ];
+                            }
+                        }
+                        
                         // Build quiz details array
                         foreach ($allQuizzes as $quiz) {
                             $quizId = $quiz->id;
@@ -407,6 +521,12 @@ class StudentPerformanceController extends ApiController
                                 $totalMarksPossible += $quizTotalMarks;
                             }
                             
+                            // Get batch information for this quiz
+                            $batchInfo = null;
+                            if (isset($quiz->batch_id) && isset($batchInfoMap[$quiz->batch_id])) {
+                                $batchInfo = $batchInfoMap[$quiz->batch_id];
+                            }
+                            
                             $quizDetails[] = [
                                 'id' => $quizId,
                                 'title' => $quiz->title ?? $quiz->description ?? 'Quiz ' . $quizId,
@@ -415,6 +535,7 @@ class StudentPerformanceController extends ApiController
                                 'obtained_marks' => $obtainedMarks,
                                 'is_completed' => $quizMark !== null,
                                 'is_graded' => $obtainedMarks !== null,
+                                'batch' => $batchInfo,
                             ];
                         }
                         
@@ -429,11 +550,34 @@ class StudentPerformanceController extends ApiController
                         }
                     } else {
                         $quizzesData['pending'] = $quizzesData['total'];
+                        
+                        // Get batch information for quizzes
+                        $batchInfoMap = [];
+                        if (!empty($userBatchIds) && DB::getSchemaBuilder()->hasTable('batches')) {
+                            $batches = DB::table('batches')
+                                ->whereIn('id', $userBatchIds)
+                                ->select('id', 'title', 'active')
+                                ->get();
+                            foreach ($batches as $batch) {
+                                $batchInfoMap[$batch->id] = [
+                                    'id' => $batch->id,
+                                    'title' => $batch->title ?? 'Untitled Batch',
+                                    'active' => isset($batch->active) ? (bool)$batch->active : true,
+                                ];
+                            }
+                        }
+                        
                         // Build quiz details without marks
                         foreach ($allQuizzes as $quiz) {
                             $quizTotalMarks = 100; // Default
                             if (DB::getSchemaBuilder()->hasColumn('quizzes', 'total_marks') && isset($quiz->total_marks) && $quiz->total_marks > 0) {
                                 $quizTotalMarks = (float) $quiz->total_marks;
+                            }
+                            
+                            // Get batch information for this quiz
+                            $batchInfo = null;
+                            if (isset($quiz->batch_id) && isset($batchInfoMap[$quiz->batch_id])) {
+                                $batchInfo = $batchInfoMap[$quiz->batch_id];
                             }
                             
                             $quizDetails[] = [
@@ -444,6 +588,7 @@ class StudentPerformanceController extends ApiController
                                 'obtained_marks' => null,
                                 'is_completed' => false,
                                 'is_graded' => false,
+                                'batch' => $batchInfo,
                             ];
                         }
                     }
@@ -582,6 +727,7 @@ class StudentPerformanceController extends ApiController
                     'email' => 'info@techinnsolutions.net',
                     'mobile' => 'info@techinnsolutions.net',
                 ],
+                'batches' => $userBatches, // Include batch information from user_batches table
                 'tasks' => $tasksData,
                 'quizzes' => $quizzesData,
                 'class_participations' => $classParticipationsData,

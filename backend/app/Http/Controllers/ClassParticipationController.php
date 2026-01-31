@@ -255,11 +255,15 @@ class ClassParticipationController extends ApiController
                 return $this->notFound('Class participation not found');
             }
 
-            // Get students enrolled in the batch
+            // Get students enrolled in the batch (exclude blocked students)
             $query = DB::table('user_batches')
                 ->join('users', 'users.id', '=', 'user_batches.user_id')
                 ->where('user_batches.batch_id', $participation->batch_id)
                 ->where('users.user_type', 2) // Students only
+                ->where(function($q) {
+                    $q->where('users.block', 0)
+                      ->orWhereNull('users.block');
+                }) // Exclude blocked students
                 ->select('users.id', 'users.name', 'users.first_name', 'users.last_name', 'users.email');
 
             $students = $query->orderBy('users.name')

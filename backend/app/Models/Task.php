@@ -14,6 +14,8 @@ class Task extends Model
         'batch_id',
         'subject_id',
         'expiry_date',
+        'comments',
+        'description', // Keep for backward compatibility
     ];
 
     /**
@@ -57,7 +59,7 @@ class Task extends Model
             $filePath = $this->attributes['file_path'] ?? null;
             if ($filePath) {
                 $useDirectStorage = env('USE_DIRECT_STORAGE', false);
-                $appUrl = env('APP_URL', 'http://localhost:8000');
+                $appUrl = config('app.url', 'http://localhost:8000');
                 if ($useDirectStorage) {
                     return $appUrl . '/storage.php?file=' . urlencode($filePath);
                 }

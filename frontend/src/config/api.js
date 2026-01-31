@@ -68,6 +68,8 @@ export const API_ENDPOINTS = {
   dashboard: {
     stats: '/dashboard/stats',
     trendingSignupReasons: '/dashboard/trending-signup-reasons',
+    pendingTaskSubmissions: '/dashboard/pending-task-submissions',
+    notifyStudentOverdue: '/dashboard/notify-student-overdue',
   },
   
   // Student
@@ -146,6 +148,7 @@ export const API_ENDPOINTS = {
     list: '/vouchers',
     generate: '/vouchers/generate',
     incomeReport: '/vouchers/income-report',
+    update: '/vouchers/:id',
     approve: '/vouchers/:id/approve',
     reject: '/vouchers/:id/reject',
     notify: '/vouchers/:id/notify',
@@ -211,6 +214,9 @@ export const API_ENDPOINTS = {
     getSubmissions: '/tasks/:id/submissions',
     gradeSubmission: '/tasks/:taskId/submissions/:submissionId/grade',
     uploadStudentSubmission: '/tasks/:taskId/upload-student-submission',
+    getUncheckedSubmissions: '/tasks/unchecked-submissions',
+    deleteSubmission: '/tasks/submissions/:submissionId',
+    bulkDeleteSubmissions: '/tasks/submissions/bulk-delete',
   },
 
   // Quizzes Management
@@ -267,6 +273,15 @@ export const API_ENDPOINTS = {
     getAdminSettings: '/turnstile-settings/admin',
     updateSettings: '/turnstile-settings',
   },
+  
+  // Google Drive Folders (Admin only)
+  googleDriveFolders: {
+    list: '/google-drive-folders',
+    show: '/google-drive-folders/:id',
+    create: '/google-drive-folders',
+    update: '/google-drive-folders/:id',
+    delete: '/google-drive-folders/:id',
+  },
 };
 
 /**
@@ -303,17 +318,66 @@ export const getStorageUrl = (path) => {
   if (!path) return null;
   // Remove leading slash if present
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  
+  // Check if it's a Google Drive path (User_Profile, videos, etc.)
+  if (cleanPath.startsWith('User_Profile/') || 
+      cleanPath.startsWith('videos/') || 
+      cleanPath.startsWith('Task_Files/') || 
+      cleanPath.startsWith('tasks/') ||
+      cleanPath.startsWith('submitted_tasks/') ||
+      cleanPath.startsWith('voucher_submissions/') ||
+      cleanPath.startsWith('feed/') ||
+      cleanPath.startsWith('lms/User_Profile/') ||
+      cleanPath.startsWith('lms/videos/') ||
+      cleanPath.startsWith('lms/Task_Files/') ||
+      cleanPath.startsWith('lms/tasks/') ||
+      cleanPath.startsWith('lms/submitted_tasks/') ||
+      cleanPath.startsWith('lms/voucher_submissions/') ||
+      cleanPath.startsWith('lms/feed/')) {
+    return `${APP_BASE_URL}/api/storage/google/${cleanPath}`;
+  }
+  
+  // Legacy local storage paths
   return `${APP_BASE_URL}/load-storage/${cleanPath}`;
 };
 
 /**
- * Normalize storage URL - converts old /storage/ URLs to /load-storage/
- * @param {string} url - Storage URL (may contain /storage/ or /load-storage/)
- * @returns {string} Normalized storage URL with /load-storage/
+ * Normalize storage URL - converts old /storage/ URLs to /load-storage/ or Google Drive URLs
+ * @param {string} url - Storage URL (may contain /storage/, /load-storage/, or /api/storage/google/)
+ * @returns {string} Normalized storage URL
  */
 export const normalizeStorageUrl = (url) => {
   if (!url) return null;
-  // Replace /storage/ with /load-storage/ if present
+  
+  // If it already contains /api/storage/google/, return as is
+  if (url.includes('/api/storage/google/')) {
+    return url;
+  }
+  
+  // If it's a /load-storage/ URL with User_Profile, videos, etc., route to Google Drive
+  if (url.includes('/load-storage/')) {
+    const path = url.split('/load-storage/')[1];
+    if (path && (
+      path.startsWith('lms/User_Profile/') ||
+      path.startsWith('User_Profile/') || 
+      path.startsWith('lms/videos/') ||
+      path.startsWith('videos/') || 
+      path.startsWith('lms/Task_Files/') ||
+      path.startsWith('Task_Files/') || 
+      path.startsWith('lms/tasks/') ||
+      path.startsWith('tasks/') ||
+      path.startsWith('lms/submitted_tasks/') ||
+      path.startsWith('submitted_tasks/') ||
+      path.startsWith('lms/voucher_submissions/') ||
+      path.startsWith('voucher_submissions/') ||
+      path.startsWith('lms/feed/') ||
+      path.startsWith('feed/')
+    )) {
+      return `${APP_BASE_URL}/api/storage/google/${path}`;
+    }
+  }
+  
+  // Replace /storage/ with /load-storage/ if present (legacy support)
   return url.replace(/\/storage\//g, '/load-storage/');
 };
 

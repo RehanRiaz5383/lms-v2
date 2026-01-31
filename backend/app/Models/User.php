@@ -58,6 +58,15 @@ class User extends Authenticatable
     ];
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = [
+        'picture_url',
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -78,6 +87,13 @@ class User extends Authenticatable
     public function getPictureUrlAttribute(): ?string
     {
         if ($this->picture) {
+            // Check if the picture path is for Google Drive
+            // Paths can be: "lms/User_Profile/..." or "User_Profile/..." (for backward compatibility)
+            if (str_starts_with($this->picture, 'lms/User_Profile/') || 
+                str_starts_with($this->picture, 'User_Profile/')) {
+                return url('/api/storage/google/' . $this->picture);
+            }
+            // Legacy support for old local storage paths
             return url('/load-storage/' . $this->picture);
         }
         return null;

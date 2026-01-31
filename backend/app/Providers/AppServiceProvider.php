@@ -17,6 +17,7 @@ use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -108,5 +109,61 @@ class AppServiceProvider extends ServiceProvider
                 ]);
             }
         });
+
+        // Register Google Drive filesystem driver
+        try {
+            Storage::extend('google', function ($app, $config) {
+                $options = [];
+
+                if (!empty($config['teamDriveId'] ?? null)) {
+                    $options['teamDriveId'] = $config['teamDriveId'];
+                }
+
+                if (!empty($config['sharedFolderId'] ?? null)) {
+                    $options['sharedFolderId'] = $config['sharedFolderId'];
+                }
+
+                // Check if using service account or OAuth2
+                // Prioritize OAuth2 if credentials are available (for user quota)
+                $client = new \Google\Client();
+                
+                if (!empty($config['clientId'] ?? null) && !empty($config['clientSecret'] ?? null) && !empty($config['refreshToken'] ?? null)) {
+                    // Use OAuth2 authentication (preferred for user quota)
+                    $client->setClientId($config['clientId']);
+                    $client->setClientSecret($config['clientSecret']);
+                    $client->setDeveloperKey($config['apiKey'] ?? null);
+                    $client->addScope(\Google\Service\Drive::DRIVE);
+                    $client->refreshToken($config['refreshToken']);
+                    
+                    // Auto-refresh the access token if it's expired
+                    if ($client->isAccessTokenExpired()) {
+                        $client->fetchAccessTokenWithRefreshToken($config['refreshToken']);
+                    }
+                } elseif (!empty($config['serviceAccountKey'] ?? null) && file_exists($config['serviceAccountKey'])) {
+                    // Fallback to service account authentication
+                    $client->setAuthConfig($config['serviceAccountKey']);
+                    $client->addScope(\Google\Service\Drive::DRIVE);
+                    $client->setAccessType('offline');
+                } else {
+                    throw new \Exception('Google Drive authentication credentials not found. Please configure either OAuth2 or service account credentials.');
+                }
+                
+                $service = new \Google\Service\Drive($client);
+                
+                // When using sharedFolderId, the folder parameter should be empty or '/'
+                // The adapter will use the sharedFolderId as the root
+                $rootFolder = empty($config['sharedFolderId']) ? ($config['folder'] ?? '/') : '/';
+                
+                $adapter = new \Masbug\Flysystem\GoogleDriveAdapter($service, $rootFolder, $options);
+                $driver = new \League\Flysystem\Filesystem($adapter);
+
+                return new \Illuminate\Filesystem\FilesystemAdapter($driver, $adapter);
+            });
+        } catch (\Exception $e) {
+            Log::error('Failed to register Google Drive filesystem driver', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
     }
 }

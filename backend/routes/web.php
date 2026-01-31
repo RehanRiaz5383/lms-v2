@@ -70,6 +70,40 @@ Route::get('/load-storage/{path}', function ($path) {
         $path = str_replace('..', '', $path);
         $path = ltrim($path, '/');
         
+        // Check if this is a Google Drive path and redirect to Google Drive route
+        $googleDrivePaths = [
+            'User_Profile/',
+            'user_profile/',
+            'Task_Files/',
+            'task_files/',
+            'tasks/',
+            'submitted_tasks/',
+            'voucher_submissions/',
+            'videos/',
+            'feed/',
+            'lms/User_Profile/',
+            'lms/user_profile/',
+            'lms/Task_Files/',
+            'lms/task_files/',
+            'lms/tasks/',
+            'lms/submitted_tasks/',
+            'lms/voucher_submissions/',
+            'lms/videos/',
+            'lms/feed/',
+        ];
+        
+        foreach ($googleDrivePaths as $googlePath) {
+            if (str_starts_with($path, $googlePath) || str_starts_with($path, strtolower($googlePath))) {
+                // Redirect to Google Drive route
+                // Laravel's redirect() will automatically URL-encode the path
+                \Log::info('Redirecting Google Drive path from load-storage to api/storage/google', [
+                    'original_path' => $path,
+                    'redirect_to' => '/api/storage/google/' . $path
+                ]);
+                return redirect('/api/storage/google/' . $path, 301);
+            }
+        }
+        
         // Log for debugging (remove in production if needed)
         \Log::info('Storage route accessed', [
             'path' => $path,
@@ -120,6 +154,117 @@ Route::get('/load-storage/{path}', function ($path) {
         ]);
     } catch (\Exception $e) {
         \Log::error('Storage route error', [
+            'path' => $path,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        abort(500, 'Error serving file: ' . $e->getMessage());
+    }
+})->where('path', '.*');
+
+/**
+ * Google Drive Storage Route - Serves files from Google Drive
+ * This route serves files stored in Google Drive
+ */
+Route::get('/api/storage/google/{path}', function ($path) {
+    try {
+        // Security: Prevent directory traversal
+        $path = str_replace('..', '', $path);
+        $path = ltrim($path, '/');
+        
+        // The filesystem adapter uses sharedFolderId (lms folder) as root
+        // So paths stored as "lms/User_Profile/filename.png" should be accessed as "User_Profile/filename.png"
+        // But we need to handle both cases: with and without lms/ prefix
+        
+        $originalPath = $path;
+        $pathsToTry = [];
+        
+        // If path starts with lms/, remove it (adapter uses lms as root)
+        if (str_starts_with($path, 'lms/')) {
+            $pathWithoutLms = substr($path, 4); // Remove "lms/" prefix
+            $pathsToTry[] = $pathWithoutLms; // Try without lms/ first
+            $pathsToTry[] = $path; // Also try with lms/ (in case adapter expects it)
+        } else {
+            // Path doesn't have lms/ prefix
+            $pathsToTry[] = $path; // Try as-is first
+            $pathsToTry[] = 'lms/' . $path; // Also try with lms/ prefix
+        }
+        
+        // Use the first path for logging
+        $path = $pathsToTry[0];
+        
+        // For backward compatibility: if path doesn't have a known directory prefix,
+        // assume it's a legacy path and try as-is
+        
+        \Log::info('Google Drive storage route accessed', [
+            'original_path' => request()->path(),
+            'resolved_path' => $path,
+        ]);
+        
+        // Try to get file contents from Google Drive
+        // Try multiple path variations if needed
+        $fileContents = null;
+        $finalPath = null;
+        $lastError = null;
+        
+        foreach ($pathsToTry as $tryPath) {
+            try {
+                $fileContents = Storage::disk('google')->get($tryPath);
+                $finalPath = $tryPath;
+                break;
+            } catch (\League\Flysystem\UnableToReadFile $e) {
+                $lastError = $e;
+                continue; // Try next path
+            } catch (\Exception $e) {
+                $lastError = $e;
+                continue; // Try next path
+            }
+        }
+        
+        if (!$fileContents) {
+            \Log::warning('Google Drive file not found', [
+                'requested_path' => request()->path(),
+                'original_path' => $originalPath,
+                'paths_tried' => $pathsToTry,
+                'error' => $lastError?->getMessage()
+            ]);
+            abort(404, 'File not found');
+        }
+        
+        $path = $finalPath; // Use the path that worked for MIME type detection
+        
+        // Get MIME type - try multiple methods
+        $mimeType = null;
+        try {
+            $mimeType = Storage::disk('google')->mimeType($path);
+        } catch (\Exception $e) {
+            \Log::debug('Could not get MIME type from Google Drive', ['error' => $e->getMessage()]);
+        }
+        
+        // If MIME type detection fails, try to guess from extension
+        if (!$mimeType) {
+            $extension = pathinfo($path, PATHINFO_EXTENSION);
+            $mimeTypes = [
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'pdf' => 'application/pdf',
+                'mp4' => 'video/mp4',
+                'webm' => 'video/webm',
+            ];
+            $mimeType = $mimeTypes[strtolower($extension)] ?? 'application/octet-stream';
+        }
+        
+        // Return file with proper headers
+        return response($fileContents, 200, [
+            'Content-Type' => $mimeType,
+            'Cache-Control' => 'public, max-age=31536000', // Cache for 1 year
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Google Drive storage route error', [
             'path' => $path,
             'error' => $e->getMessage(),
             'trace' => $e->getTraceAsString()
@@ -618,3 +763,39 @@ Route::get('/upgrade-db', function () {
         ], 500);
     }
 })->name('upgrade-db');
+
+/**
+ * Test endpoint to check Google Drive folders in database
+ * This helps map folder names from database to code
+ */
+Route::get('/api/test/google-drive-folders', function () {
+    try {
+        $folders = \App\Models\GoogleDriveFolder::all()->map(function($folder) {
+            return [
+                'id' => $folder->id,
+                'name' => $folder->name,
+                'display_name' => $folder->display_name,
+                'directory_path' => $folder->directory_path,
+                'folder_id' => $folder->folder_id,
+                'is_active' => $folder->is_active,
+            ];
+        });
+        
+        return response()->json([
+            'success' => true,
+            'folders' => $folders,
+            'mapping_guide' => [
+                'Profile Pictures' => 'Look for folder with name containing "user" or "profile"',
+                'Task Files' => 'Look for folder with name containing "task" and "file"',
+                'Submitted Tasks' => 'Look for folder with name containing "submitted" or "submission"',
+                'Voucher Submissions' => 'Look for folder with name containing "voucher"',
+                'Videos' => 'Look for folder with name containing "video"',
+            ]
+        ], 200, [], JSON_PRETTY_PRINT);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});

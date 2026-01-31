@@ -8,6 +8,7 @@ import { Menu, Moon, Sun, LogOut, User, BarChart3, BookOpen } from 'lucide-react
 import { useEffect, useState } from 'react';
 import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
 import NotificationDropdown from '../notifications/NotificationDropdown';
+import ProfilePicture from '../ProfilePicture';
 
 const Header = ({ onMenuClick }) => {
   const dispatch = useAppDispatch();
@@ -128,17 +129,12 @@ const Header = ({ onMenuClick }) => {
           to="/dashboard/profile"
           className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted hover:bg-accent transition-colors cursor-pointer"
         >
-          {profilePicture ? (
-            <img
-              src={profilePicture}
-              alt={user?.name || 'User'}
-              className="w-8 h-8 rounded-full object-cover border-2 border-border"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="h-4 w-4 text-primary" />
-            </div>
-          )}
+          <ProfilePicture
+            src={profilePicture}
+            alt={user?.name || 'User'}
+            size="sm"
+            showBorder={true}
+          />
           <span className="text-sm font-medium text-foreground">
             {user?.name || 'User'}
           </span>

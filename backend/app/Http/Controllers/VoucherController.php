@@ -8,6 +8,7 @@ use App\Models\Notification;
 use App\Models\NotificationSetting;
 use App\Models\SmtpSetting;
 use App\Jobs\SendNotificationEmail;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,30 @@ use Carbon\Carbon;
 
 class VoucherController extends ApiController
 {
+    use UploadsToGoogleDrive;
+
+    /**
+     * Get Google Drive URL for a file path
+     * Handles both paths with and without 'lms/' prefix
+     */
+    private function getGoogleDriveUrl(?string $filePath): ?string
+    {
+        if (!$filePath) {
+            return null;
+        }
+
+        // Check if it's a Google Drive path (voucher_submissions, User_Profile, etc.)
+        $cleanPath = ltrim($filePath, '/');
+        
+        // Check for voucher_submissions (with or without lms/ prefix)
+        if (str_starts_with($cleanPath, 'lms/voucher_submissions/') || 
+            str_starts_with($cleanPath, 'voucher_submissions/')) {
+            return url('/api/storage/google/' . $cleanPath);
+        }
+        
+        // Legacy support for old local storage paths
+        return url('/load-storage/' . $cleanPath);
+    }
     /**
      * Get vouchers for the current student (student route).
      *
@@ -39,7 +64,7 @@ class VoucherController extends ApiController
             // Add file URL if submission_file exists
             $vouchers->transform(function ($voucher) {
                 if ($voucher->submission_file) {
-                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                    $voucher->submission_file_url = $this->getGoogleDriveUrl($voucher->submission_file);
                 }
                 return $voucher;
             });
@@ -89,7 +114,7 @@ class VoucherController extends ApiController
             // Add file URL if submission_file exists
             $vouchers->transform(function ($voucher) {
                 if ($voucher->submission_file) {
-                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                    $voucher->submission_file_url = $this->getGoogleDriveUrl($voucher->submission_file);
                 }
                 return $voucher;
             });
@@ -187,14 +212,13 @@ class VoucherController extends ApiController
                 return $this->validationError($validator->errors()->toArray());
             }
 
-            // Handle file upload
+            // Handle file upload - upload to Google Drive using folder name (from database)
             $file = $request->file('file');
-            $fileName = time() . '_' . $currentUser->id . '_' . $voucherId . '_' . $file->getClientOriginalName();
-            $filePath = $file->storeAs('voucher_submissions', $fileName, 'public');
+            $filePath = $this->uploadToGoogleDrive($file, 'voucher_submissions');
 
-            // Delete old file if exists
-            if ($voucher->submission_file && Storage::disk('public')->exists($voucher->submission_file)) {
-                Storage::disk('public')->delete($voucher->submission_file);
+            // Delete old file if exists (from Google Drive)
+            if ($voucher->submission_file) {
+                $this->deleteFromGoogleDrive($voucher->submission_file);
             }
 
             $voucher->submission_file = $filePath;
@@ -302,6 +326,52 @@ class VoucherController extends ApiController
             return $this->success($voucher, 'Voucher rejected successfully');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to reject voucher', 500);
+        }
+    }
+
+    /**
+     * Update a voucher (Admin only).
+     * Can update description, amount, and due date.
+     *
+     * @param Request $request
+     * @param int $voucherId
+     * @return JsonResponse
+     */
+    public function updateVoucher(Request $request, int $voucherId): JsonResponse
+    {
+        try {
+            $voucher = Voucher::with('student')->find($voucherId);
+
+            if (!$voucher) {
+                return $this->notFound('Voucher not found');
+            }
+
+            $validator = Validator::make($request->all(), [
+                'description' => 'nullable|string|max:255',
+                'fee_amount' => 'nullable|numeric|min:0',
+                'due_date' => 'nullable|date',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->validationError($validator->errors()->toArray());
+            }
+
+            // Update only provided fields
+            if ($request->has('description')) {
+                $voucher->description = $request->input('description');
+            }
+            if ($request->has('fee_amount')) {
+                $voucher->fee_amount = $request->input('fee_amount');
+            }
+            if ($request->has('due_date')) {
+                $voucher->due_date = $request->input('due_date');
+            }
+
+            $voucher->save();
+
+            return $this->success($voucher->load('student'), 'Voucher updated successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to update voucher', 500);
         }
     }
 
@@ -656,7 +726,7 @@ class VoucherController extends ApiController
             // Add file URL if submission_file exists
             $vouchers->getCollection()->transform(function ($voucher) {
                 if ($voucher->submission_file) {
-                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                    $voucher->submission_file_url = $this->getGoogleDriveUrl($voucher->submission_file);
                 }
                 return $voucher;
             });
@@ -865,7 +935,7 @@ class VoucherController extends ApiController
             // Format vouchers with additional data
             $vouchers->transform(function ($voucher) {
                 if ($voucher->submission_file) {
-                    $voucher->submission_file_url = url('/load-storage/' . $voucher->submission_file);
+                    $voucher->submission_file_url = $this->getGoogleDriveUrl($voucher->submission_file);
                 }
                 return $voucher;
             });
