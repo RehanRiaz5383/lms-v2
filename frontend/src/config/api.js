@@ -11,7 +11,7 @@
  * Options: 'development' | 'production'
  */
 const APP_MODE = 'production'; // Change to 'production' when deploying 
-//checking if it works on public repository
+//final updated code
 /**
  * Get the API base URL based on application mode
  */
