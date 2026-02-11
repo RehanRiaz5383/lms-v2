@@ -1,0 +1,30 @@
+name: Auto Deploy LMS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Pull Latest Changes
+        run: |
+          cd /var/www/lms
+          # Use -f to force overwrite if there are local untracked changes
+          git fetch --all
+          git reset --hard origin/main
+
+      - name: Upgrade Backend Database
+        run: |
+          # Hits your custom endpoint to trigger migrations/seeders
+          curl -s -X GET https://lms-v2.techinnsolutions.net/upgrade-db
+          echo "Database upgrade triggered."
+
+      - name: Build Frontend
+        run: |
+          cd /var/www/lms/frontend
+          # Use --no-audit to save memory if your server is small
+          npm install --no-audit
+          npm run build
