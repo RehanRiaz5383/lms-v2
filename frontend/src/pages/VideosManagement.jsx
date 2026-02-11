@@ -13,6 +13,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Drawer } from '../components/ui/drawer';
+import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { DateRangePicker } from '../components/ui/date-range-picker';
 import { getStorageUrl } from '../config/api';
@@ -26,6 +27,10 @@ import {
   Link2,
   GripVertical,
   X,
+  ExternalLink,
+  RefreshCw,
+  CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { debounce } from '../utils/debounce';
 import { apiService } from '../services/api';
@@ -60,6 +65,9 @@ const VideosManagement = () => {
   });
   const [searchValue, setSearchValue] = useState(filters.search || '');
   const [videoPreview, setVideoPreview] = useState(null);
+  const [showBackfillDialog, setShowBackfillDialog] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
 
   const debouncedSearch = useCallback(
     debounce((value) => {
@@ -125,13 +133,19 @@ const VideosManagement = () => {
       video_file: null, // Don't pre-fill file
       external_url: video.external_url || '',
     });
-    // Set preview for internal videos - use path column first, fallback to internal_path
+    // Set preview for internal videos - use video_url (direct download) if available, otherwise fallback to path
     if (video.source_type === 'internal') {
-      const videoPath = video.path || video.internal_path;
-      if (videoPath) {
-        setVideoPreview(getStorageUrl(videoPath));
+      // If video has a direct download URL (from video_url accessor), use it
+      if (video.video_url) {
+        setVideoPreview(video.video_url);
       } else {
-        setVideoPreview(null);
+        // Fallback to generating URL from path
+        const videoPath = video.path || video.internal_path;
+        if (videoPath) {
+          setVideoPreview(getStorageUrl(videoPath));
+        } else {
+          setVideoPreview(null);
+        }
       }
     } else {
       setVideoPreview(null);
@@ -372,12 +386,47 @@ const VideosManagement = () => {
 
   const getVideoUrl = (video) => {
     if (video.source_type === 'internal') {
+      // If video has a direct download URL (from video_url accessor), use it
+      if (video.video_url) {
+        return video.video_url;
+      }
+      // Fallback to generating URL from path
       const videoPath = video.path || video.internal_path;
       if (videoPath) {
         return getStorageUrl(videoPath);
       }
     }
     return video.external_url;
+  };
+
+  const handleBackfillGoogleDriveIds = async () => {
+    if (!window.confirm('This will update Google Drive file IDs for all videos that are missing them. Continue?')) {
+      return;
+    }
+
+    setBackfilling(true);
+    setBackfillResult(null);
+
+    try {
+      const response = await apiService.post(API_ENDPOINTS.videos.backfillGoogleDriveIds, {
+        dry_run: false,
+      });
+
+      if (response.data.success) {
+        setBackfillResult(response.data.data);
+        setShowBackfillDialog(true);
+        success('Google Drive file IDs backfilled successfully');
+        // Refresh videos list
+        dispatch(fetchVideos(filters));
+      } else {
+        showError(response.data.message || 'Backfill failed');
+      }
+    } catch (err) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to run backfill';
+      showError(errorMessage);
+    } finally {
+      setBackfilling(false);
+    }
   };
 
   return (
@@ -389,10 +438,29 @@ const VideosManagement = () => {
             Manage videos - upload internal videos or add external links
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create New Video
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleBackfillGoogleDriveIds}
+            disabled={backfilling}
+          >
+            {backfilling ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Running...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Backfill Google Drive File IDs
+              </>
+            )}
+          </Button>
+          <Button onClick={handleCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create New Video
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -698,17 +766,57 @@ const VideosManagement = () => {
               {videoPreview && (
                 <div>
                   <Label>Video Preview</Label>
-                  <div className="mt-2 rounded-md border border-input overflow-hidden bg-muted">
-                    <video
-                      src={videoPreview}
-                      controls
-                      className="w-full max-h-64"
-                      onLoadStart={() => {
-                        // Clean up object URL when component unmounts or new preview is set
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        if (videoPreview.startsWith('blob:')) {
+                          // For blob URLs (newly uploaded files), create a temporary page
+                          const newWindow = window.open('', '_blank');
+                          if (newWindow) {
+                            newWindow.document.write(`
+                              <!DOCTYPE html>
+                              <html>
+                                <head>
+                                  <title>Video Preview</title>
+                                  <style>
+                                    body {
+                                      margin: 0;
+                                      padding: 20px;
+                                      display: flex;
+                                      justify-content: center;
+                                      align-items: center;
+                                      min-height: 100vh;
+                                      background: #000;
+                                    }
+                                    video {
+                                      max-width: 100%;
+                                      max-height: 90vh;
+                                    }
+                                  </style>
+                                </head>
+                                <body>
+                                  <video src="${videoPreview}" controls autoplay></video>
+                                </body>
+                              </html>
+                            `);
+                            newWindow.document.close();
+                          }
+                        } else {
+                          // For storage URLs (existing videos), open directly
+                          window.open(videoPreview, '_blank');
+                        }
                       }}
                     >
-                      Your browser does not support the video tag.
-                    </video>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Open Video in New Tab
+                    </Button>
+                    {videoPreview.startsWith('blob:') && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Note: This is a preview of the newly selected file. After saving, you can open the uploaded video.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -918,6 +1026,97 @@ const VideosManagement = () => {
           )}
         </div>
       </Drawer>
+
+      {/* Backfill Results Dialog */}
+      <Dialog
+        isOpen={showBackfillDialog}
+        onClose={() => {
+          setShowBackfillDialog(false);
+          setBackfillResult(null);
+        }}
+        title="Backfill Results"
+        size="lg"
+      >
+        {backfillResult && (
+          <div className="space-y-4">
+
+            {backfillResult.summary && (
+              <div>
+                <Label className="text-base font-semibold mb-3 block">Summary</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <div>
+                      <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                        Successfully Updated
+                      </p>
+                      <p className="text-2xl font-bold text-green-700 dark:text-green-300">
+                        {backfillResult.summary.successfully_updated || 0}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                    <div>
+                      <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                        Not Found
+                      </p>
+                      <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
+                        {backfillResult.summary.not_found || 0}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                    <div>
+                      <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                        Failed
+                      </p>
+                      <p className="text-2xl font-bold text-red-700 dark:text-red-300">
+                        {backfillResult.summary.failed || 0}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                    <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        Total Processed
+                      </p>
+                      <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                        {backfillResult.summary.total_processed || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {backfillResult.output && (
+              <div>
+                <Label className="text-base font-semibold mb-2 block">Output</Label>
+                <div className="bg-muted rounded-lg p-4 max-h-64 overflow-y-auto">
+                  <pre className="text-xs whitespace-pre-wrap font-mono">
+                    {backfillResult.output}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowBackfillDialog(false);
+                  setBackfillResult(null);
+                }}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </div>
   );
 };

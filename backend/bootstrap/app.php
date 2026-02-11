@@ -49,9 +49,24 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Format authentication exceptions for API routes
         $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {
-            if ($request->is('api/*') || $request->expectsJson()) {
+            // Always return JSON for API routes (check this first to prevent redirect attempts)
+            if ($request->is('api/*')) {
                 return ApiResponse::unauthorized('Unauthenticated');
             }
+            // For JSON requests, return JSON
+            if ($request->expectsJson()) {
+                return ApiResponse::unauthorized('Unauthenticated');
+            }
+            // For web routes, try to redirect to login if route exists
+            try {
+                if (\Illuminate\Support\Facades\Route::has('login')) {
+                    return redirect()->route('login');
+                }
+            } catch (\Exception $routeException) {
+                // If login route doesn't exist, return 401 JSON response
+            }
+            // Fallback: return 401 JSON response
+            return ApiResponse::unauthorized('Unauthenticated');
         });
 
         // Format other exceptions for API routes

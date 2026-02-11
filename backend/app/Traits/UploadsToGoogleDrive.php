@@ -6,10 +6,15 @@ use App\Models\GoogleDriveFolder;
 use Google\Client;
 use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
+use Google\Service\Drive\Permission;
 use Illuminate\Support\Facades\Log;
 
 trait UploadsToGoogleDrive
 {
+    /**
+     * Store the last uploaded file ID for retrieval
+     */
+    protected static $lastUploadedFileId = null;
     /**
      * Upload a file to Google Drive in a specific folder
      * 
@@ -77,7 +82,7 @@ trait UploadsToGoogleDrive
                 'data' => $content,
                 'mimeType' => $mimeType,
                 'uploadType' => 'multipart',
-                'fields' => 'id, webViewLink'
+                'fields' => 'id, webViewLink, webContentLink'
             ]);
             
             // 7. Return the path to store in database
@@ -89,6 +94,9 @@ trait UploadsToGoogleDrive
                 'folder_id' => $folderId,
                 'folder_name' => $folder?->name ?? 'direct_id',
             ]);
+            
+            // Store file ID in a static property so it can be retrieved after upload
+            static::$lastUploadedFileId = $uploadedFile->getId();
             
             return $remoteFilePath;
             
@@ -105,6 +113,106 @@ trait UploadsToGoogleDrive
                 'folder_name_or_id' => $folderNameOrId,
             ]);
             throw new \Exception('Failed to upload file to Google Drive: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get the file ID of the last uploaded file
+     * 
+     * @return string|null The Google Drive file ID
+     */
+    protected function getLastUploadedFileId(): ?string
+    {
+        return static::$lastUploadedFileId;
+    }
+
+    /**
+     * Get direct download URL for a Google Drive file
+     * Makes the file publicly accessible and returns webContentLink for direct download
+     * 
+     * @param string $fileId The Google Drive file ID
+     * @param bool $makePublic Whether to make the file public if it's not already (default: true)
+     * @return string|null The direct download URL (webContentLink)
+     */
+    protected function getGoogleDriveDownloadUrl(string $fileId, bool $makePublic = true): ?string
+    {
+        try {
+            // Initialize the Google Client with OAuth2
+            $client = new Client();
+            $client->setClientId(config('services.google.client_id'));
+            $client->setClientSecret(config('services.google.client_secret'));
+            $client->setDeveloperKey(config('services.google.api_key'));
+            $client->addScope(Drive::DRIVE);
+            
+            // Authenticate using the Refresh Token
+            $client->refreshToken(config('services.google.refresh_token'));
+            
+            // Auto-refresh the access token if it's expired
+            if ($client->isAccessTokenExpired()) {
+                $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+            }
+            
+            $service = new Drive($client);
+            
+            // 1. Make the file publicly accessible (if requested and not already public)
+            if ($makePublic) {
+                try {
+                    // Check if file already has public permission
+                    $permissions = $service->permissions->listPermissions($fileId, [
+                        'fields' => 'permissions(id,type,role)'
+                    ]);
+                    
+                    $hasPublicPermission = false;
+                    foreach ($permissions->getPermissions() as $permission) {
+                        if ($permission->getType() === 'anyone' && $permission->getRole() === 'viewer') {
+                            $hasPublicPermission = true;
+                            break;
+                        }
+                    }
+                    
+                    // If not public, make it public
+                    if (!$hasPublicPermission) {
+                        $newPermission = new Permission([
+                            'type' => 'anyone',
+                            'role' => 'viewer',
+                        ]);
+                        $service->permissions->create($fileId, $newPermission);
+                        
+                        Log::info('Made Google Drive file public for direct download', [
+                            'file_id' => $fileId,
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    // Log but don't fail - file might already be public or permission might exist
+                    Log::debug('Could not set public permission (file may already be public)', [
+                        'file_id' => $fileId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+            
+            // 2. Fetch the file metadata to get the webContentLink
+            $file = $service->files->get($fileId, [
+                'fields' => 'webContentLink, webViewLink'
+            ]);
+            
+            // 3. Return the direct download URL (webContentLink)
+            // webContentLink is a permanent direct download link that doesn't expire
+            $downloadUrl = $file->getWebContentLink();
+            
+            if (!$downloadUrl) {
+                // Fallback to webViewLink if webContentLink is not available
+                $downloadUrl = $file->getWebViewLink();
+            }
+            
+            return $downloadUrl;
+            
+        } catch (\Exception $e) {
+            Log::error('Failed to get Google Drive download URL', [
+                'error' => $e->getMessage(),
+                'file_id' => $fileId,
+            ]);
+            return null;
         }
     }
 

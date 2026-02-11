@@ -22,7 +22,15 @@ class Video extends Model
         'path', // Internal path for videos
         'internal_path', // Also support internal_path for backward compatibility
         'external_url',
+        'google_drive_file_id', // Google Drive file ID for direct downloads
     ];
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['video_url'];
 
     /**
      * Get the attributes that should be cast.
@@ -38,10 +46,16 @@ class Video extends Model
 
     /**
      * Get the video URL based on source type.
+     * If google_drive_file_id exists, returns direct download URL endpoint.
      */
     public function getVideoUrlAttribute(): ?string
     {
         if ($this->source_type === 'internal') {
+            // If we have a Google Drive file ID, use direct download endpoint
+            if ($this->google_drive_file_id) {
+                return url('/api/videos/' . $this->id . '/direct-download');
+            }
+            
             // Use path column first, fallback to internal_path for backward compatibility
             $videoPath = $this->path ?? $this->internal_path;
             return $videoPath ? url('/load-storage/' . $videoPath) : null;

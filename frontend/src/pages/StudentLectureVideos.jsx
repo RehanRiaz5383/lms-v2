@@ -3,13 +3,11 @@ import { useAppSelector } from '../hooks/redux';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
-import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
-import { Video, Eye, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { Video, Eye, ExternalLink, Loader2 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS, getStorageUrl, API_BASE_URL } from '../config/api';
+import { API_ENDPOINTS, getStorageUrl } from '../config/api';
 import { useToast } from '../components/ui/toast';
-import { storage } from '../utils/storage';
 
 const StudentLectureVideos = () => {
   const { user } = useAppSelector((state) => state.auth);
@@ -20,8 +18,6 @@ const StudentLectureVideos = () => {
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [loading, setLoading] = useState(true);
-  const [selectedVideo, setSelectedVideo] = useState(null);
-  const [showVideoModal, setShowVideoModal] = useState(false);
 
   useEffect(() => {
     loadVideos();
@@ -46,73 +42,26 @@ const StudentLectureVideos = () => {
   };
 
   const handleViewVideo = (video) => {
-    setSelectedVideo(video);
     if (video.source_type === 'internal') {
-      setShowVideoModal(true);
+      // If video has a direct download URL (from video_url accessor), use it
+      // Otherwise, fallback to generating URL from path
+      if (video.video_url) {
+        window.open(video.video_url, '_blank');
+      } else {
+        const videoPath = video.path || video.internal_path;
+        if (videoPath) {
+          const videoUrl = getStorageUrl(videoPath);
+          if (videoUrl) {
+            window.open(videoUrl, '_blank');
+          }
+        }
+      }
     } else {
       // Open external video in new tab
       window.open(video.external_url, '_blank');
     }
   };
 
-  const handleDownload = async () => {
-    if (!selectedVideo || selectedVideo.source_type !== 'internal') {
-      showError('Only internal videos can be downloaded');
-      return;
-    }
-
-    try {
-      // Get download URL from API endpoint
-      const downloadEndpoint = API_ENDPOINTS.student.videos.download.replace(':id', selectedVideo.id);
-      const downloadUrl = `${API_BASE_URL}${downloadEndpoint}`;
-      
-      // Get auth token
-      const token = storage.getToken();
-      
-      // Create a temporary link to trigger download
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = selectedVideo.title || 'video';
-      
-      // Add auth token to headers via fetch, then create blob URL
-      const response = await fetch(downloadUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/octet-stream',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Download failed');
-      }
-
-      // Get blob from response
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      
-      // Create temporary link and trigger download
-      link.href = blobUrl;
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error('Download error:', err);
-      showError('Failed to download video. Please try again.');
-    }
-  };
-
-  const getVideoUrl = (video) => {
-    if (video.source_type === 'internal') {
-      const videoPath = video.path || video.internal_path;
-      if (videoPath) {
-        return getStorageUrl(videoPath);
-      }
-    }
-    return video.external_url;
-  };
 
   return (
     <div className="space-y-6">
@@ -250,51 +199,6 @@ const StudentLectureVideos = () => {
         </CardContent>
       </Card>
 
-      {/* Video Preview Modal */}
-      <Dialog
-        isOpen={showVideoModal}
-        onClose={() => {
-          setShowVideoModal(false);
-          setSelectedVideo(null);
-        }}
-        title={selectedVideo?.title || 'Video Preview'}
-        size="4xl"
-      >
-        {selectedVideo && selectedVideo.source_type === 'internal' && (
-          <div className="space-y-4">
-            {selectedVideo.short_description && (
-              <p className="text-sm text-muted-foreground">
-                {selectedVideo.short_description}
-              </p>
-            )}
-            <div className="rounded-lg border border-input overflow-hidden bg-muted">
-              <video
-                src={getVideoUrl(selectedVideo)}
-                controls
-                className="w-full"
-                style={{ maxHeight: '70vh' }}
-              >
-                Your browser does not support the video tag.
-              </video>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowVideoModal(false);
-                  setSelectedVideo(null);
-                }}
-              >
-                Close
-              </Button>
-              <Button onClick={handleDownload}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
-            </div>
-          </div>
-        )}
-      </Dialog>
     </div>
   );
 };

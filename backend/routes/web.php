@@ -207,27 +207,116 @@ Route::get('/api/storage/google/{path}', function ($path) {
         $fileContents = null;
         $finalPath = null;
         $lastError = null;
+        $errors = [];
         
         foreach ($pathsToTry as $tryPath) {
             try {
+                \Log::debug('Attempting to read file from Google Drive', ['path' => $tryPath]);
                 $fileContents = Storage::disk('google')->get($tryPath);
                 $finalPath = $tryPath;
+                \Log::info('Successfully read file from Google Drive', ['path' => $tryPath]);
                 break;
             } catch (\League\Flysystem\UnableToReadFile $e) {
+                $errorMsg = $e->getMessage();
+                $errors[] = "UnableToReadFile: {$errorMsg}";
                 $lastError = $e;
+                \Log::debug('UnableToReadFile exception', ['path' => $tryPath, 'error' => $errorMsg]);
+                continue; // Try next path
+            } catch (\League\Flysystem\FilesystemException $e) {
+                $errorMsg = $e->getMessage();
+                $errors[] = "FilesystemException: {$errorMsg}";
+                $lastError = $e;
+                \Log::debug('FilesystemException exception', ['path' => $tryPath, 'error' => $errorMsg]);
                 continue; // Try next path
             } catch (\Exception $e) {
+                $errorMsg = $e->getMessage();
+                $errorClass = get_class($e);
+                $errors[] = "{$errorClass}: {$errorMsg}";
                 $lastError = $e;
+                \Log::debug('Exception while reading file', [
+                    'path' => $tryPath, 
+                    'error' => $errorMsg,
+                    'class' => $errorClass,
+                    'trace' => $e->getTraceAsString()
+                ]);
                 continue; // Try next path
             }
         }
         
+        // If path-based lookup failed, try searching by filename in the videos folder
         if (!$fileContents) {
-            \Log::warning('Google Drive file not found', [
+            $fileName = basename($originalPath);
+            \Log::info('Path-based lookup failed, attempting filename search', [
+                'filename' => $fileName,
+                'paths_tried' => $pathsToTry,
+                'errors' => $errors
+            ]);
+            
+            try {
+                // Try to find the file by name in the videos folder
+                $videosFolder = \App\Models\GoogleDriveFolder::getByName('videos');
+                if ($videosFolder) {
+                    // Use Google Drive API directly to search for the file
+                    $client = new \Google\Client();
+                    $client->setClientId(config('services.google.client_id'));
+                    $client->setClientSecret(config('services.google.client_secret'));
+                    $client->setDeveloperKey(config('services.google.api_key'));
+                    $client->addScope(\Google\Service\Drive::DRIVE);
+                    $client->refreshToken(config('services.google.refresh_token'));
+                    
+                    if ($client->isAccessTokenExpired()) {
+                        $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+                    }
+                    
+                    $service = new \Google\Service\Drive($client);
+                    
+                    // Search for file by exact name in videos folder
+                    $query = "name='{$fileName}' and '{$videosFolder->folder_id}' in parents and trashed=false";
+                    $response = $service->files->listFiles([
+                        'q' => $query,
+                        'fields' => 'files(id, name)',
+                        'pageSize' => 1,
+                    ]);
+                    
+                    $files = $response->getFiles();
+                    if (!empty($files)) {
+                        $fileId = $files[0]->getId();
+                        \Log::info('Found file by filename search', [
+                            'filename' => $fileName,
+                            'file_id' => $fileId
+                        ]);
+                        
+                        // Download file content using file ID
+                        $file = $service->files->get($fileId, ['alt' => 'media']);
+                        $body = $file->getBody();
+                        
+                        // Handle different stream types
+                        if (method_exists($body, 'getContents')) {
+                            $fileContents = $body->getContents();
+                        } else {
+                            // Fallback for other stream types
+                            $fileContents = stream_get_contents($body);
+                        }
+                        
+                        $finalPath = 'videos/' . $fileName; // Use standard path format
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Filename search also failed', [
+                    'filename' => $fileName,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        if (!$fileContents) {
+            \Log::warning('Google Drive file not found after all attempts', [
                 'requested_path' => request()->path(),
                 'original_path' => $originalPath,
                 'paths_tried' => $pathsToTry,
-                'error' => $lastError?->getMessage()
+                'errors' => $errors,
+                'last_error' => $lastError?->getMessage(),
+                'last_error_class' => $lastError ? get_class($lastError) : null
             ]);
             abort(404, 'File not found');
         }

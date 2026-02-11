@@ -34,9 +34,9 @@ class StudentVideoController extends ApiController
             ], 'No videos assigned');
         }
 
-        // Build query for videos assigned to user's batches
-        $query = DB::table('batch_subjects_video')
-            ->join('videos', 'batch_subjects_video.video_id', '=', 'videos.id')
+        // Build query for videos assigned to user's batches using Video model
+        $query = Video::query()
+            ->join('batch_subjects_video', 'videos.id', '=', 'batch_subjects_video.video_id')
             ->join('batches', 'batch_subjects_video.batch_id', '=', 'batches.id')
             ->join('subjects', 'batch_subjects_video.subject_id', '=', 'subjects.id')
             ->whereIn('batch_subjects_video.batch_id', $userBatchIds)
@@ -125,14 +125,26 @@ class StudentVideoController extends ApiController
             return $this->notFound('Video not found or not accessible');
         }
 
-        // Get video path
-        $videoPath = $video->path ?? $video->internal_path;
+        // Convert to Video model to use accessors
+        $videoModel = Video::find($id);
+        
+        if (!$videoModel) {
+            return $this->notFound('Video not found');
+        }
+
+        // If Google Drive file ID exists, redirect to direct download endpoint
+        if ($videoModel->google_drive_file_id) {
+            return redirect(url('/api/videos/' . $id . '/direct-download'));
+        }
+
+        // Fallback to local storage if no Google Drive file ID
+        $videoPath = $videoModel->path ?? $videoModel->internal_path;
         
         if (!$videoPath) {
             return $this->error('Video file not found', 404);
         }
 
-        // Check if file exists
+        // Check if file exists locally
         $filePath = storage_path('app/public/' . $videoPath);
         
         if (!file_exists($filePath)) {
@@ -140,7 +152,7 @@ class StudentVideoController extends ApiController
         }
 
         // Return file download with proper headers
-        return response()->download($filePath, $video->title . '.' . pathinfo($videoPath, PATHINFO_EXTENSION));
+        return response()->download($filePath, $videoModel->title . '.' . pathinfo($videoPath, PATHINFO_EXTENSION));
     }
 }
 

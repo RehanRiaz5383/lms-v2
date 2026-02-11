@@ -1,5 +1,6 @@
 <?php
 
+use App\Logging\GoogleDriveHandler;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -19,6 +20,18 @@ return [
     */
 
     'default' => env('LOG_CHANNEL', 'stack'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Log Storage Type
+    |--------------------------------------------------------------------------
+    |
+    | This option defines where logs should be stored.
+    | Options: 'local' (default) or 'google_drive'
+    |
+    */
+
+    'storage_type' => env('LOG_STORAGE_TYPE', 'local'),
 
     /*
     |--------------------------------------------------------------------------
@@ -54,7 +67,21 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => (function () {
+                $storageType = env('LOG_STORAGE_TYPE', 'local');
+                $defaultChannels = explode(',', (string) env('LOG_STACK', 'single'));
+
+                if ($storageType === 'google_drive') {
+                    // Use Google Drive channels only
+                    return ['google_drive'];
+                } elseif ($storageType === 'both') {
+                    // Use both local and Google Drive
+                    return array_merge($defaultChannels, ['google_drive']);
+                } else {
+                    // Use local only (default)
+                    return $defaultChannels;
+                }
+            })(),
             'ignore_exceptions' => false,
         ],
 
@@ -125,6 +152,66 @@ return [
 
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
+        ],
+
+        'google_drive' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => env('LOG_SERVICE_NAME', null),
+            ],
+            'replace_placeholders' => true,
+        ],
+
+        'google_drive_api' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => 'api',
+            ],
+            'replace_placeholders' => true,
+        ],
+
+        'google_drive_auth' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => 'auth',
+            ],
+            'replace_placeholders' => true,
+        ],
+
+        'google_drive_payment' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => 'payment',
+            ],
+            'replace_placeholders' => true,
+        ],
+
+        'google_drive_console' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => 'console',
+            ],
+            'replace_placeholders' => true,
+        ],
+
+        'google_drive_jobs' => [
+            'driver' => 'monolog',
+            'handler' => GoogleDriveHandler::class,
+            'level' => env('LOG_GOOGLE_DRIVE_LEVEL', 'warning'), // Only log warning, error, and critical
+            'handler_with' => [
+                'service' => 'jobs',
+            ],
+            'replace_placeholders' => true,
         ],
 
     ],

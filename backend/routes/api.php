@@ -42,6 +42,8 @@ Route::post('/signup', [AuthController::class, 'signup']);
 Route::get('/turnstile-settings', [CloudflareTurnstileController::class, 'getSettings']); // Public endpoint to get site key
 // Public video creation route for testing (excluded from auth)
 Route::post('/videos', [VideoController::class, 'store']);
+// Public direct download route (no authentication required - file will be made public on Google Drive)
+Route::get('/videos/{id}/direct-download', [VideoController::class, 'directDownload']);
 
 // Google Drive Test Endpoints (Public - no authentication required)
 Route::prefix('google-drive')->group(function () {
@@ -163,12 +165,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [VideoController::class, 'index']);
         // POST /videos is now public (moved above for testing)
         Route::get('/{id}', [VideoController::class, 'show']);
+        // Note: direct-download route is public (moved above, outside auth middleware)
         Route::put('/{id}', [VideoController::class, 'update']);
         Route::delete('/{id}', [VideoController::class, 'destroy']);
         Route::post('/{id}/assign-batch-subject', [VideoController::class, 'assignToBatchSubject']);
         Route::get('/batch/{batchId}/subject/{subjectId}', [VideoController::class, 'getBatchSubjectVideos']);
         Route::post('/batch/{batchId}/subject/{subjectId}/reorder', [VideoController::class, 'reorderBatchSubjectVideos']);
         Route::delete('/{id}/batch-subject', [VideoController::class, 'removeFromBatchSubject'])->middleware('admin');
+        Route::post('/backfill-google-drive-ids', [VideoController::class, 'backfillGoogleDriveIds'])->middleware('admin'); // Backfill Google Drive file IDs
     });
 
     // Tasks Management (Admin, Teacher, CR)

@@ -61,6 +61,14 @@ class GoogleDriveFolderSeeder extends Seeder
                 'description' => 'Folder for storing feed/media files',
                 'is_active' => true,
             ],
+            [
+                'name' => 'logs',
+                'display_name' => 'Application Logs',
+                'directory_path' => 'lms/logs',
+                'folder_id' => env('GOOGLE_DRIVE_FOLDER_LOGS', '1CFhvOnU56UmhMDCCOBWusrgfWC_d8HHP'),
+                'description' => 'Folder for storing application logs (organized by date and service)',
+                'is_active' => true,
+            ],
         ];
 
         foreach ($folders as $folder) {

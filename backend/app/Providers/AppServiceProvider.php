@@ -165,5 +165,6 @@ class AppServiceProvider extends ServiceProvider
                 'trace' => $e->getTraceAsString()
             ]);
         }
+
     }
 }

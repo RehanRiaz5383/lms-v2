@@ -202,6 +202,7 @@ export const API_ENDPOINTS = {
     getBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId',
     reorderBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId/reorder',
     removeFromBatchSubject: '/videos/:id/batch-subject',
+    backfillGoogleDriveIds: '/videos/backfill-google-drive-ids',
   },
   
   // Tasks Management (Admin, Teacher, CR)

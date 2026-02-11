@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Video;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -11,6 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 class VideoController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get list of videos with pagination, filters, and sorting.
      *
@@ -104,10 +106,21 @@ class VideoController extends ApiController
         // Handle internal video upload
         if ($validated['source_type'] === 'internal' && $request->hasFile('video_file')) {
             $file = $request->file('video_file');
-            $fileName = time() . '_' . $file->getClientOriginalName();
-            $path = $file->storeAs('videos', $fileName, 'public');
-            $videoData['path'] = $path; // Use path column for internal videos
-            $videoData['internal_path'] = $path; // Also set internal_path for backward compatibility
+            
+            // Upload to Google Drive
+            try {
+                $path = $this->uploadToGoogleDrive($file, 'videos');
+                $videoData['path'] = $path; // Use path column for internal videos
+                $videoData['internal_path'] = $path; // Also set internal_path for backward compatibility
+                
+                // Get and store Google Drive file ID
+                $fileId = $this->getLastUploadedFileId();
+                if ($fileId) {
+                    $videoData['google_drive_file_id'] = $fileId;
+                }
+            } catch (\Exception $e) {
+                return $this->error('Failed to upload video to Google Drive: ' . $e->getMessage(), 500);
+            }
         }
 
         // Handle external video URL
@@ -164,11 +177,13 @@ class VideoController extends ApiController
             // If changing to external, clear internal path
             if ($validated['source_type'] === 'external') {
                 $oldPath = $video->path ?? $video->internal_path;
-                if ($oldPath && Storage::disk('public')->exists($oldPath)) {
-                    Storage::disk('public')->delete($oldPath);
+                if ($oldPath) {
+                    // Delete from Google Drive
+                    $this->deleteFromGoogleDrive($oldPath);
                 }
                 $updateData['path'] = null;
                 $updateData['internal_path'] = null;
+                $updateData['google_drive_file_id'] = null;
                 $updateData['external_url'] = $validated['external_url'] ?? null;
             }
             
@@ -180,19 +195,31 @@ class VideoController extends ApiController
 
         // Handle new video file upload (only if source_type is internal)
         if ($request->hasFile('video_file')) {
-            // Delete old video file if exists
+            // Delete old video file if exists (from Google Drive)
             $oldPath = $video->path ?? $video->internal_path;
-            if ($oldPath && Storage::disk('public')->exists($oldPath)) {
-                Storage::disk('public')->delete($oldPath);
+            if ($oldPath) {
+                $this->deleteFromGoogleDrive($oldPath);
             }
 
             $file = $request->file('video_file');
-            $fileName = time() . '_' . $file->getClientOriginalName();
-            $path = $file->storeAs('videos', $fileName, 'public');
-            $updateData['path'] = $path; // Use path column for internal videos
-            $updateData['internal_path'] = $path; // Also set internal_path for backward compatibility
-            $updateData['source_type'] = 'internal';
-            $updateData['external_url'] = null;
+            
+            // Upload to Google Drive
+            try {
+                $path = $this->uploadToGoogleDrive($file, 'videos');
+                $updateData['path'] = $path; // Use path column for internal videos
+                $updateData['internal_path'] = $path; // Also set internal_path for backward compatibility
+                
+                // Get and store Google Drive file ID
+                $fileId = $this->getLastUploadedFileId();
+                if ($fileId) {
+                    $updateData['google_drive_file_id'] = $fileId;
+                }
+                
+                $updateData['source_type'] = 'internal';
+                $updateData['external_url'] = null;
+            } catch (\Exception $e) {
+                return $this->error('Failed to upload video to Google Drive: ' . $e->getMessage(), 500);
+            }
         }
 
         // Handle external URL update
@@ -219,11 +246,11 @@ class VideoController extends ApiController
             return $this->notFound('Video not found');
         }
 
-        // Delete video file if it's internal
+        // Delete video file if it's internal (from Google Drive)
         if ($video->source_type === 'internal') {
             $videoPath = $video->path ?? $video->internal_path;
-            if ($videoPath && Storage::disk('public')->exists($videoPath)) {
-                Storage::disk('public')->delete($videoPath);
+            if ($videoPath) {
+                $this->deleteFromGoogleDrive($videoPath);
             }
         }
 
@@ -399,5 +426,144 @@ class VideoController extends ApiController
             ->delete();
 
         return $this->success(null, 'Video removed from batch and subject successfully');
+    }
+
+    /**
+     * Get direct download URL for a video from Google Drive.
+     * This redirects to Google Drive's direct download URL.
+     *
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     */
+    public function directDownload(int $id)
+    {
+        $video = Video::find($id);
+
+        if (!$video) {
+            return $this->notFound('Video not found');
+        }
+
+        if ($video->source_type !== 'internal') {
+            return $this->error('Direct download is only available for internal videos', 400);
+        }
+
+        if (!$video->google_drive_file_id) {
+            // Fallback to regular storage URL if file ID is not available
+            $videoPath = $video->path ?? $video->internal_path;
+            if ($videoPath) {
+                return redirect(url('/load-storage/' . $videoPath));
+            }
+            return $this->error('Video file not found', 404);
+        }
+
+        // Get direct download URL from Google Drive
+        $downloadUrl = $this->getGoogleDriveDownloadUrl($video->google_drive_file_id);
+
+        if (!$downloadUrl) {
+            // Fallback to regular storage URL if direct download URL cannot be obtained
+            $videoPath = $video->path ?? $video->internal_path;
+            if ($videoPath) {
+                return redirect(url('/load-storage/' . $videoPath));
+            }
+            return $this->error('Failed to get download URL', 500);
+        }
+
+        // Redirect to Google Drive's direct download URL
+        return redirect($downloadUrl);
+    }
+
+    /**
+     * Backfill Google Drive file IDs for existing videos.
+     * This runs the artisan command via API.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function backfillGoogleDriveIds(Request $request): JsonResponse
+    {
+        try {
+            $dryRun = $request->boolean('dry_run', false);
+            $limit = $request->integer('limit', 0);
+
+            // Build command
+            $command = 'videos:backfill-google-drive-ids';
+            $arguments = [];
+            
+            if ($dryRun) {
+                $arguments[] = '--dry-run';
+            }
+            
+            if ($limit > 0) {
+                $arguments[] = '--limit=' . $limit;
+            }
+
+            // Execute the command
+            $exitCode = \Artisan::call($command, $arguments);
+            $output = \Artisan::output();
+
+            // Parse the output to extract summary
+            $summary = $this->parseBackfillOutput($output);
+
+            if ($exitCode === 0) {
+                return $this->success([
+                    'output' => $output,
+                    'summary' => $summary,
+                    'dry_run' => $dryRun,
+                ], 'Backfill completed successfully');
+            } else {
+                return $this->error('Backfill failed: ' . $output, 500);
+            }
+        } catch (\Exception $e) {
+            return $this->error('Failed to run backfill: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Parse the backfill command output to extract summary
+     */
+    private function parseBackfillOutput(string $output): array
+    {
+        $summary = [
+            'successfully_updated' => 0,
+            'not_found' => 0,
+            'failed' => 0,
+            'total_processed' => 0,
+        ];
+
+        // Try to extract numbers from the output table format
+        // Pattern: "Successfully updated | 23"
+        if (preg_match('/Successfully updated\s*\|\s*(\d+)/i', $output, $matches)) {
+            $summary['successfully_updated'] = (int) $matches[1];
+        }
+        // Also try without pipe: "Successfully updated 23"
+        elseif (preg_match('/Successfully updated[^\d]*(\d+)/i', $output, $matches)) {
+            $summary['successfully_updated'] = (int) $matches[1];
+        }
+
+        // Pattern: "Not found in Google Drive | 2" or "Not found | 2"
+        if (preg_match('/Not found[^\d]*\|\s*(\d+)/i', $output, $matches)) {
+            $summary['not_found'] = (int) $matches[1];
+        }
+        elseif (preg_match('/Not found[^\d]*(\d+)/i', $output, $matches)) {
+            $summary['not_found'] = (int) $matches[1];
+        }
+
+        // Pattern: "Failed | 0"
+        if (preg_match('/Failed\s*\|\s*(\d+)/i', $output, $matches)) {
+            $summary['failed'] = (int) $matches[1];
+        }
+        elseif (preg_match('/Failed[^\d]*(\d+)/i', $output, $matches)) {
+            $summary['failed'] = (int) $matches[1];
+        }
+
+        // Pattern: "Total processed | 25"
+        if (preg_match('/Total processed\s*\|\s*(\d+)/i', $output, $matches)) {
+            $summary['total_processed'] = (int) $matches[1];
+        }
+        elseif (preg_match('/Total processed[^\d]*(\d+)/i', $output, $matches)) {
+            $summary['total_processed'] = (int) $matches[1];
+        }
+
+        return $summary;
     }
 }
