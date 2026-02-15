@@ -360,18 +360,209 @@ class StudentDashboardController extends ApiController
             // Handle error
         }
 
-        // Overall Performance
-        $overallAverage = 0;
-        $scoreCount = 0;
-        if ($averageQuizScore > 0) {
-            $overallAverage += $averageQuizScore;
-            $scoreCount++;
+        // Calculate Tasks Percentage (same logic as performance report)
+        $taskPercentage = 0;
+        $taskTotalMarksObtained = 0;
+        $taskTotalMarksPossible = 0;
+        
+        try {
+            if (DB::getSchemaBuilder()->hasTable('tasks') && DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
+                $tasksQuery = DB::table('tasks');
+                if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
+                    if (!empty($userBatchIds)) {
+                        $tasksQuery->whereIn('batch_id', $userBatchIds);
+                    } else {
+                        $tasksQuery->whereRaw('1 = 0');
+                    }
+                }
+                
+                $allTasks = $tasksQuery->get();
+                
+                $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'student_id');
+                $submittedQuery = DB::table('submitted_tasks')
+                    ->where($hasStudentIdColumn ? 'student_id' : 'user_id', $userId);
+                $submittedTasks = $submittedQuery->get();
+                
+                $hasObtainedMarks = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'obtained_marks');
+                $hasMarks = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'marks');
+                $marksColumn = $hasObtainedMarks ? 'obtained_marks' : ($hasMarks ? 'marks' : null);
+                
+                $hasTaskTotalMarks = DB::getSchemaBuilder()->hasColumn('tasks', 'total_marks');
+                $hasTaskMarks = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
+                $taskMarksColumn = $hasTaskTotalMarks ? 'total_marks' : ($hasTaskMarks ? 'marks' : null);
+                
+                foreach ($allTasks as $task) {
+                    $taskTotalMarks = 100;
+                    if ($taskMarksColumn && isset($task->{$taskMarksColumn}) && $task->{$taskMarksColumn} > 0) {
+                        $taskTotalMarks = (float) $task->{$taskMarksColumn};
+                    }
+                    
+                    $submittedTask = $submittedTasks->firstWhere('task_id', $task->id);
+                    $obtainedMarks = 0;
+                    if ($submittedTask && $marksColumn) {
+                        $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : 0;
+                    }
+                    
+                    $taskTotalMarksObtained += $obtainedMarks;
+                    $taskTotalMarksPossible += $taskTotalMarks;
+                }
+                
+                if ($taskTotalMarksPossible > 0) {
+                    $taskPercentage = round(($taskTotalMarksObtained / $taskTotalMarksPossible) * 100, 2);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Error calculating task percentage in dashboard: ' . $e->getMessage());
         }
-        if ($averageTestScore > 0) {
-            $overallAverage += $averageTestScore;
-            $scoreCount++;
+        
+        // Calculate Quizzes Percentage
+        $quizPercentage = 0;
+        $quizTotalMarksObtained = 0;
+        $quizTotalMarksPossible = 0;
+        
+        try {
+            if (DB::getSchemaBuilder()->hasTable('quizzes') && DB::getSchemaBuilder()->hasTable('quiz_marks')) {
+                $quizzesQuery = DB::table('quizzes');
+                if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id')) {
+                    if (!empty($userBatchIds)) {
+                        $quizzesQuery->whereIn('batch_id', $userBatchIds);
+                    } else {
+                        $quizzesQuery->whereRaw('1 = 0');
+                    }
+                }
+                
+                $allQuizzes = $quizzesQuery->get();
+                
+                $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'student_id');
+                $quizMarksQuery = DB::table('quiz_marks')
+                    ->where($hasStudentIdColumn ? 'student_id' : 'user_id', $userId);
+                $quizMarks = $quizMarksQuery->get();
+                
+                $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'obtained_marks');
+                $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'marks');
+                
+                foreach ($allQuizzes as $quiz) {
+                    $quizTotalMarks = 100;
+                    if (DB::getSchemaBuilder()->hasColumn('quizzes', 'total_marks') && isset($quiz->total_marks) && $quiz->total_marks > 0) {
+                        $quizTotalMarks = (float) $quiz->total_marks;
+                    }
+                    
+                    $quizMark = $quizMarks->firstWhere('quiz_id', $quiz->id);
+                    $obtainedMarks = 0;
+                    if ($quizMark) {
+                        if ($hasObtainedMarksColumn && isset($quizMark->obtained_marks)) {
+                            $obtainedMarks = is_numeric($quizMark->obtained_marks) ? (float) $quizMark->obtained_marks : 0;
+                        } else if ($hasMarksColumn && isset($quizMark->marks)) {
+                            $obtainedMarks = (float) $quizMark->marks;
+                        }
+                    }
+                    
+                    $quizTotalMarksObtained += $obtainedMarks;
+                    $quizTotalMarksPossible += $quizTotalMarks;
+                }
+                
+                if ($quizTotalMarksPossible > 0) {
+                    $quizPercentage = round(($quizTotalMarksObtained / $quizTotalMarksPossible) * 100, 2);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Error calculating quiz percentage in dashboard: ' . $e->getMessage());
         }
-        $overallAverage = $scoreCount > 0 ? round($overallAverage / $scoreCount, 1) : 0;
+        
+        // Calculate Class Participations Percentage
+        $classParticipationPercentage = 0;
+        $cpTotalMarksObtained = 0;
+        $cpTotalMarksPossible = 0;
+        
+        try {
+            if (DB::getSchemaBuilder()->hasTable('class_participations') && DB::getSchemaBuilder()->hasTable('class_participation_marks')) {
+                $participationsQuery = DB::table('class_participations');
+                if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id')) {
+                    if (!empty($userBatchIds)) {
+                        $participationsQuery->whereIn('batch_id', $userBatchIds);
+                    } else {
+                        $participationsQuery->whereRaw('1 = 0');
+                    }
+                }
+                
+                $allParticipations = $participationsQuery->get();
+                
+                $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
+                $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
+                $participationMarksQuery = DB::table('class_participation_marks');
+                if ($hasStudentIdColumn) {
+                    $participationMarksQuery->where('student_id', $userId);
+                } else if ($hasUserIdColumn) {
+                    $participationMarksQuery->where('user_id', $userId);
+                }
+                
+                $participationMarks = $participationMarksQuery->get()->keyBy('class_participation_id');
+                
+                foreach ($allParticipations as $participation) {
+                    $totalMarks = (float)($participation->total_marks ?? 0);
+                    
+                    $mark = $participationMarks->get($participation->id);
+                    $obtainedMarks = 0;
+                    if ($mark && isset($mark->obtained_marks)) {
+                        $obtainedMarks = (float)($mark->obtained_marks ?? 0);
+                    }
+                    
+                    $cpTotalMarksObtained += $obtainedMarks;
+                    $cpTotalMarksPossible += $totalMarks;
+                }
+                
+                if ($cpTotalMarksPossible > 0) {
+                    $classParticipationPercentage = round(($cpTotalMarksObtained / $cpTotalMarksPossible) * 100, 2);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Error calculating class participation percentage in dashboard: ' . $e->getMessage());
+        }
+        
+        // Calculate Overall Performance
+        // Simple average of three percentages: (task% + quiz% + class_participation%) / 3
+        $percentages = [
+            $taskPercentage,
+            $quizPercentage,
+            $classParticipationPercentage,
+        ];
+        
+        $overallPercentage = count($percentages) > 0 
+            ? round(array_sum($percentages) / count($percentages), 2) 
+            : 0;
+        
+        // Ensure percentage doesn't exceed 100%
+        $overallPercentage = min(100, max(0, $overallPercentage));
+        
+        // Determine Grade
+        $grade = 'N/A';
+        $remarks = '';
+        
+        if ($overallPercentage >= 90) {
+            $grade = 'A+';
+            $remarks = 'Excellent performance! Keep up the outstanding work.';
+        } else if ($overallPercentage >= 85) {
+            $grade = 'A';
+            $remarks = 'Very good performance. Continue to maintain this level.';
+        } else if ($overallPercentage >= 80) {
+            $grade = 'B+';
+            $remarks = 'Good performance. There is room for improvement.';
+        } else if ($overallPercentage >= 75) {
+            $grade = 'B';
+            $remarks = 'Satisfactory performance. Focus on areas that need improvement.';
+        } else if ($overallPercentage >= 70) {
+            $grade = 'C+';
+            $remarks = 'Average performance. More effort is needed to improve.';
+        } else if ($overallPercentage >= 65) {
+            $grade = 'C';
+            $remarks = 'Below average performance. Significant improvement required.';
+        } else if ($overallPercentage >= 60) {
+            $grade = 'D';
+            $remarks = 'Poor performance. Immediate attention and improvement needed.';
+        } else {
+            $grade = 'F';
+            $remarks = 'Very poor performance. Urgent intervention required.';
+        }
 
         $stats = [
             'tasks' => [
@@ -409,9 +600,29 @@ class StudentDashboardController extends ApiController
                 'upcoming_voucher' => $upcomingVoucher,
             ],
             'performance' => [
-                'overall_average' => $overallAverage,
+                'overall_average' => $overallPercentage,
                 'quiz_average' => round($averageQuizScore, 1),
                 'test_average' => round($averageTestScore, 1),
+                'grade' => $grade,
+                'remarks' => $remarks,
+                'breakdown' => [
+                    'tasks' => [
+                        'label' => 'Tasks',
+                        'percentage' => $taskPercentage,
+                    ],
+                    'quizzes' => [
+                        'label' => 'Quizzes',
+                        'percentage' => $quizPercentage,
+                    ],
+                    'class_participations' => [
+                        'label' => 'Class Participations',
+                        'percentage' => $classParticipationPercentage,
+                    ],
+                    'calculation' => [
+                        'formula' => "({$taskPercentage}% + {$quizPercentage}% + {$classParticipationPercentage}%) / 3",
+                        'result' => $overallPercentage . '%',
+                    ],
+                ],
             ],
             'recent_activity' => [
                 'tasks' => $recentTasks->map(function ($task) {

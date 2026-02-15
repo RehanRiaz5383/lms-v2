@@ -387,26 +387,97 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="text-center py-6">
-                  <div className="text-5xl font-bold text-foreground mb-2">
-                    {stats.performance?.overall_average || 0}%
+                {/* Detailed Breakdown Table */}
+                {stats.performance?.breakdown && (
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-foreground">
+                            Category
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-foreground">
+                            Percentage
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        <tr>
+                          <td className="px-4 py-3 text-foreground">
+                            {stats.performance.breakdown.tasks.label}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                            {stats.performance.breakdown.tasks.percentage}%
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3 text-foreground">
+                            {stats.performance.breakdown.quizzes.label}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                            {stats.performance.breakdown.quizzes.percentage}%
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="px-4 py-3 text-foreground">
+                            {stats.performance.breakdown.class_participations.label}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                            {stats.performance.breakdown.class_participations.percentage}%
+                          </td>
+                        </tr>
+                        <tr className="bg-muted/50">
+                          <td className="px-4 py-3 font-semibold text-foreground">
+                            Calculation
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-foreground">
+                            {stats.performance.breakdown.calculation.formula}
+                          </td>
+                        </tr>
+                        <tr className="bg-primary/10 border-t-2 border-primary">
+                          <td className="px-4 py-3 font-bold text-lg text-foreground">
+                            Overall Performance
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-lg text-primary">
+                            {stats.performance.breakdown.calculation.result}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <p className="text-sm text-muted-foreground">Overall Average</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-500">
-                      {stats.performance?.quiz_average || 0}%
+                )}
+
+                {/* Grade and Remarks */}
+                {stats.performance?.grade && (
+                  <div className="space-y-3 pt-2">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-1">Grade</p>
+                      <p className="text-3xl font-bold text-foreground">
+                        {stats.performance.grade}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">Quiz Average</p>
+                    {stats.performance.remarks && (
+                      <div className="p-3 bg-muted rounded-lg">
+                        <p className="text-xs font-semibold text-foreground mb-1">
+                          Remarks
+                        </p>
+                        <p className="text-sm text-foreground">
+                          {stats.performance.remarks}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-500">
-                      {stats.performance?.test_average || 0}%
+                )}
+
+                {/* Fallback if breakdown not available */}
+                {!stats.performance?.breakdown && (
+                  <div className="text-center py-6">
+                    <div className="text-5xl font-bold text-foreground mb-2">
+                      {stats.performance?.overall_average || 0}%
                     </div>
-                    <p className="text-xs text-muted-foreground">Test Average</p>
+                    <p className="text-sm text-muted-foreground">Overall Average</p>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
