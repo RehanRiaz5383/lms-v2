@@ -311,24 +311,54 @@ class ScheduledJobController extends ApiController
      */
     private function createTaskReminderNotification(int $studentId, $task, int $reminderHours, string $formattedDate): void
     {
-        $taskTitle = $task->title ?? 'Task';
-        
-        DB::table('notifications')->insert([
-            'id' => \Illuminate\Support\Str::uuid()->toString(),
-            'user_id' => $studentId,
-            'type' => 'task_reminder',
-            'title' => "Task Reminder: {$reminderHours} Hours Remaining",
-            'message' => "Your task '{$taskTitle}' is due in {$reminderHours} hours (Due: {$formattedDate}). Please submit it before the deadline.",
-            'data' => json_encode([
+        try {
+            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+                return;
+            }
+
+            $taskTitle = $task->title ?? 'Task';
+
+            // Check which column structure exists
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'id');
+
+            $notificationData = [];
+
+            // Set ID only if it's a UUID column (not auto-increment)
+            if ($hasIdColumn && !DB::getSchemaBuilder()->getColumnType('notifications', 'id') === 'bigint') {
+                $notificationData['id'] = \Illuminate\Support\Str::uuid()->toString();
+            }
+
+            // If both columns exist, set both
+            if ($hasUserIdColumn && $hasNotifiableIdColumn) {
+                $notificationData['user_id'] = $studentId;
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            } else if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            $notificationData['type'] = 'task_reminder';
+            $notificationData['title'] = "Task Reminder: {$reminderHours} Hours Remaining";
+            $notificationData['message'] = "Your task '{$taskTitle}' is due in {$reminderHours} hours (Due: {$formattedDate}). Please submit it before the deadline.";
+            $notificationData['data'] = json_encode([
                 'task_id' => $task->id,
                 'reminder_hours' => $reminderHours,
                 'expiry_date' => $task->expiry_date,
-            ]),
-            'read' => false,
-            'read_at' => null,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            ]);
+            $notificationData['read'] = false;
+            $notificationData['read_at'] = null;
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            DB::table('notifications')->insert($notificationData);
+        } catch (\Exception $e) {
+            Log::error("Failed to create task reminder notification for student {$studentId}: " . $e->getMessage());
+        }
     }
 
     /**
@@ -619,28 +649,97 @@ class ScheduledJobController extends ApiController
     private function createVoucherOverdueNotification(int $studentId, Voucher $voucher): void
     {
         try {
+            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+                return;
+            }
+
             $dueDate = Carbon::parse($voucher->due_date)->format('M d, Y');
             $description = $voucher->description ?? 'Fee Voucher';
             $amount = number_format($voucher->fee_amount, 2);
-            
-            DB::table('notifications')->insert([
-                'user_id' => $studentId,
-                'type' => 'voucher_overdue',
-                'title' => 'Voucher Due Date Crossed',
-                'message' => "Your {$description} (PKR {$amount}) due date ({$dueDate}) has crossed. You must pay the voucher immediately to avoid auto-blocking of your LMS account.",
-                'data' => json_encode([
+
+            // Check which column structure exists (same pattern as createVoucherNotification)
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasTypeColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'type');
+            $hasTitleColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'title');
+            $hasMessageColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'message');
+            $hasDataColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'data');
+            $hasReadColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read');
+
+            $notificationData = [];
+
+            // If both columns exist, set both (some servers require notifiable_id/type even when user_id exists)
+            if ($hasUserIdColumn && $hasNotifiableIdColumn) {
+                $notificationData['user_id'] = $studentId;
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            } else if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            if ($hasTypeColumn) {
+                $notificationData['type'] = 'voucher_overdue';
+            }
+
+            if ($hasTitleColumn) {
+                $notificationData['title'] = 'Voucher Due Date Crossed';
+            }
+
+            if ($hasMessageColumn) {
+                $notificationData['message'] = "Your {$description} (PKR {$amount}) due date ({$dueDate}) has crossed. You must pay the voucher immediately to avoid auto-blocking of your LMS account.";
+            }
+
+            if ($hasDataColumn) {
+                $notificationData['data'] = json_encode([
                     'voucher_id' => $voucher->id,
                     'fee_amount' => $voucher->fee_amount,
                     'description' => $voucher->description,
                     'due_date' => $voucher->due_date,
-                ]),
-                'read' => false,
-                'read_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
+                ]);
+            }
+
+            if ($hasReadColumn) {
+                $notificationData['read'] = false;
+            }
+
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            // Ensure we have required fields before inserting
+            if (empty($notificationData)) {
+                Log::warning('Notification data is empty, cannot insert', [
+                    'student_id' => $studentId,
+                    'voucher_id' => $voucher->id ?? null,
+                ]);
+                return;
+            }
+
+            Log::info('Attempting to insert overdue voucher notification', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
+                'notification_data_keys' => array_keys($notificationData),
+                'has_user_id' => $hasUserIdColumn,
+                'has_notifiable_id' => $hasNotifiableIdColumn,
+            ]);
+
+            DB::table('notifications')->insert($notificationData);
+            
+            Log::info('Overdue voucher notification created successfully', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
             ]);
         } catch (\Exception $e) {
-            Log::error("Failed to create overdue voucher notification for student {$studentId}: " . $e->getMessage());
+            // Log error with full details for debugging
+            Log::error("Failed to create overdue voucher notification for student {$studentId}: " . $e->getMessage(), [
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'voucher_id' => $voucher->id ?? null,
+                'notification_data' => $notificationData ?? [],
+            ]);
         }
     }
 
@@ -722,29 +821,98 @@ class ScheduledJobController extends ApiController
     private function createAutoBlockNotification(int $studentId, Voucher $voucher): void
     {
         try {
+            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+                return;
+            }
+
             $dueDate = Carbon::parse($voucher->due_date)->format('M d, Y');
             $description = $voucher->description ?? 'Fee Voucher';
             $amount = number_format($voucher->fee_amount, 2);
-            
-            DB::table('notifications')->insert([
-                'user_id' => $studentId,
-                'type' => 'account_blocked',
-                'title' => 'Account Auto-Blocked',
-                'message' => "Your LMS account has been auto-blocked due to non-payment of {$description} (PKR {$amount}) with due date {$dueDate}. Please contact admin to resolve this issue.",
-                'data' => json_encode([
+
+            // Check which column structure exists (same pattern as createVoucherNotification)
+            $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'user_id');
+            $hasNotifiableIdColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'notifiable_id');
+            $hasTypeColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'type');
+            $hasTitleColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'title');
+            $hasMessageColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'message');
+            $hasDataColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'data');
+            $hasReadColumn = DB::getSchemaBuilder()->hasColumn('notifications', 'read');
+
+            $notificationData = [];
+
+            // If both columns exist, set both (some servers require notifiable_id/type even when user_id exists)
+            if ($hasUserIdColumn && $hasNotifiableIdColumn) {
+                $notificationData['user_id'] = $studentId;
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            } else if ($hasUserIdColumn) {
+                $notificationData['user_id'] = $studentId;
+            } else if ($hasNotifiableIdColumn) {
+                $notificationData['notifiable_id'] = $studentId;
+                $notificationData['notifiable_type'] = 'App\\Models\\User';
+            }
+
+            if ($hasTypeColumn) {
+                $notificationData['type'] = 'account_blocked';
+            }
+
+            if ($hasTitleColumn) {
+                $notificationData['title'] = 'Account Auto-Blocked';
+            }
+
+            if ($hasMessageColumn) {
+                $notificationData['message'] = "Your LMS account has been auto-blocked due to non-payment of {$description} (PKR {$amount}) with due date {$dueDate}. Please contact admin to resolve this issue.";
+            }
+
+            if ($hasDataColumn) {
+                $notificationData['data'] = json_encode([
                     'voucher_id' => $voucher->id,
                     'fee_amount' => $voucher->fee_amount,
                     'description' => $voucher->description,
                     'due_date' => $voucher->due_date,
                     'block_reason' => 'Auto block by system due to non payment of fee voucher',
-                ]),
-                'read' => false,
-                'read_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
+                ]);
+            }
+
+            if ($hasReadColumn) {
+                $notificationData['read'] = false;
+            }
+
+            $notificationData['created_at'] = now();
+            $notificationData['updated_at'] = now();
+
+            // Ensure we have required fields before inserting
+            if (empty($notificationData)) {
+                Log::warning('Notification data is empty, cannot insert', [
+                    'student_id' => $studentId,
+                    'voucher_id' => $voucher->id ?? null,
+                ]);
+                return;
+            }
+
+            Log::info('Attempting to insert auto-block notification', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
+                'notification_data_keys' => array_keys($notificationData),
+                'has_user_id' => $hasUserIdColumn,
+                'has_notifiable_id' => $hasNotifiableIdColumn,
+            ]);
+
+            DB::table('notifications')->insert($notificationData);
+            
+            Log::info('Auto-block notification created successfully', [
+                'student_id' => $studentId,
+                'voucher_id' => $voucher->id ?? null,
             ]);
         } catch (\Exception $e) {
-            Log::error("Failed to create auto-block notification for student {$studentId}: " . $e->getMessage());
+            // Log error with full details for debugging
+            Log::error("Failed to create auto-block notification for student {$studentId}: " . $e->getMessage(), [
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'voucher_id' => $voucher->id ?? null,
+                'notification_data' => $notificationData ?? [],
+            ]);
         }
     }
 
