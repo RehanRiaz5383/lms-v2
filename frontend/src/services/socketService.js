@@ -1,0 +1,181 @@
+import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../config/api';
+import { storage } from '../utils/storage';
+
+class SocketService {
+  constructor() {
+    this.socket = null;
+    this.isConnected = false;
+    this.listeners = new Map();
+    this.socketUrl = null;
+  }
+
+  /**
+   * Initialize socket connection
+   */
+  async connect() {
+    // If already connected, don't create a new connection
+    if (this.socket?.connected) {
+      return;
+    }
+
+    // If socket exists but not connected, disconnect first to avoid duplicates
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+
+    try {
+      // Get socket configuration from backend
+      const token = storage.getToken();
+      if (!token) {
+        console.warn('No token available for socket connection');
+        return;
+      }
+
+      // Fetch socket config from backend
+      const response = await fetch(`${API_BASE_URL}/socket/config`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch socket config');
+      }
+
+      const config = await response.json();
+      
+      if (!config.data?.enabled) {
+        console.warn('Socket is disabled');
+        return;
+      }
+
+      this.socketUrl = config.data.socket_url || 'http://localhost:8080';
+
+      // Create socket connection
+      this.socket = io(this.socketUrl, {
+        auth: {
+          token: token,
+        },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+      });
+
+      // Connection event handlers
+      this.socket.on('connect', () => {
+        console.log('Socket connected');
+        this.isConnected = true;
+        this.emit('socket_connected');
+      });
+
+      this.socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        this.isConnected = false;
+        this.emit('socket_disconnected');
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        this.isConnected = false;
+        this.emit('socket_error', error);
+      });
+
+      // Handle connected event from server
+      this.socket.on('connected', (data) => {
+        this.emit('user_connected', data);
+      });
+
+      // Handle online users list
+      this.socket.on('online_users', (users) => {
+        this.emit('online_users_updated', users);
+      });
+
+      // Handle pong
+      this.socket.on('pong', () => {
+        // Keep-alive response
+      });
+
+      // Send ping periodically to keep connection alive
+      this.pingInterval = setInterval(() => {
+        if (this.socket?.connected) {
+          this.socket.emit('ping');
+        }
+      }, 30000); // Every 30 seconds
+
+    } catch (error) {
+      console.error('Failed to connect socket:', error);
+      this.isConnected = false;
+      this.emit('socket_error', error);
+    }
+  }
+
+  /**
+   * Disconnect socket
+   */
+  disconnect() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnected = false;
+    }
+
+    this.listeners.clear();
+  }
+
+  /**
+   * Emit custom event to listeners
+   */
+  emit(event, data) {
+    const handlers = this.listeners.get(event) || [];
+    handlers.forEach(handler => {
+      try {
+        handler(data);
+      } catch (error) {
+        console.error(`Error in socket event handler for ${event}:`, error);
+      }
+    });
+  }
+
+  /**
+   * Subscribe to custom events
+   */
+  on(event, handler) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(handler);
+
+    // Return unsubscribe function
+    return () => {
+      const handlers = this.listeners.get(event) || [];
+      const index = handlers.indexOf(handler);
+      if (index > -1) {
+        handlers.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Get current connection status
+   */
+  getConnectionStatus() {
+    return {
+      connected: this.isConnected,
+      socket: this.socket,
+    };
+  }
+}
+
+// Export singleton instance
+export const socketService = new SocketService();
+

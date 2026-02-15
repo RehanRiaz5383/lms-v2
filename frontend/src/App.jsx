@@ -35,6 +35,7 @@ import InternalIntegrations from './pages/InternalIntegrations';
 import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import WhosOnline from './components/chat/WhosOnline';
 import { useUserStatusPolling } from './hooks/useUserStatusPolling';
 
 // Inner component to handle message listener
@@ -267,6 +268,7 @@ function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
           <PWAInstallPrompt />
+          <WhosOnline />
         </BrowserRouter>
       </ToastProvider>
     </Provider>

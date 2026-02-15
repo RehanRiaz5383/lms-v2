@@ -29,3 +29,18 @@ jobs:
           # Use --no-audit to save memory if your server is small
           npm install --no-audit
           npm run build
+      - name: Setup Chatbot
+        run: |
+          cd /var/www/lms/chatbot
+          npm install --no-audit
+          # Check if PM2 process exists, restart if it does, start if it doesn't
+          if pm2 list | grep -q "lms-chatbot"; then
+            echo "Restarting existing lms-chatbot process..."
+            pm2 restart lms-chatbot
+          else
+            echo "Starting new lms-chatbot process..."
+            pm2 start server.js --name lms-chatbot
+            pm2 save
+          fi
+          # Show status
+          pm2 status lms-chatbot

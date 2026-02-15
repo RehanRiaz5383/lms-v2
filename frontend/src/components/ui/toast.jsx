@@ -75,7 +75,7 @@ export const ToastProvider = ({ children }) => {
       completeUploadProgress,
     }}>
       {children}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-md">
+      <div className="fixed top-4 left-4 z-[10000] flex flex-col gap-2 max-w-md">
         {toasts.map((toast) => (
           <Toast
             key={toast.id}
@@ -135,7 +135,7 @@ const Toast = ({ message, type, onClose }) => {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 p-4 rounded-lg border shadow-lg animate-in slide-in-from-right",
+        "flex items-center gap-3 p-4 rounded-lg border shadow-lg animate-in slide-in-from-left",
         styles[type]
       )}
     >

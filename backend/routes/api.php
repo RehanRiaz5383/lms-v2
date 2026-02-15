@@ -23,6 +23,7 @@ use App\Http\Controllers\QuizController;
 use App\Http\Controllers\ClassParticipationController;
 use App\Http\Controllers\PushNotificationController;
 use App\Http\Controllers\GoogleDriveTestController;
+use App\Http\Controllers\SocketController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -58,6 +59,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    // Socket routes
+    Route::prefix('socket')->group(function () {
+        Route::get('/config', [SocketController::class, 'getConfig']);
+        Route::get('/verify-token', [SocketController::class, 'verifyToken']);
+    });
 
     // Dashboard
     Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
