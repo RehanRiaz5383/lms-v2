@@ -104,6 +104,28 @@ class ScheduledJobSeeder extends Seeder
             $voucherAutoBlockJob->save();
         }
 
+        // Clear Log Files Job (Daily - removes log files older than 30 days)
+        $clearLogFilesJob = ScheduledJob::firstOrCreate(
+            ['job_class' => 'ClearLogFilesJob'],
+            [
+                'name' => 'Clear Log Files (Daily)',
+                'description' => 'Removes log files and directories from Google Drive logs folder older than 30 days',
+                'job_class' => 'ClearLogFilesJob',
+                'schedule_type' => 'daily',
+                'schedule_config' => null,
+                'enabled' => true,
+                'metadata' => [
+                    'days_old' => 30,
+                ],
+            ]
+        );
+
+        // Calculate next run time
+        if (!$clearLogFilesJob->next_run_at) {
+            $clearLogFilesJob->calculateNextRun();
+            $clearLogFilesJob->save();
+        }
+
         $this->command->info('Scheduled jobs seeded successfully!');
     }
 }

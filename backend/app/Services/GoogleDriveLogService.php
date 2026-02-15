@@ -8,6 +8,7 @@ use Google\Service\Drive;
 use Google\Service\Drive\DriveFile;
 use Illuminate\Support\Facades\Log as LaravelLog;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class GoogleDriveLogService
 {
@@ -302,6 +303,144 @@ class GoogleDriveLogService
             $files = $response->getFiles();
             return !empty($files) ? ['id' => $files[0]->getId(), 'name' => $files[0]->getName()] : null;
         } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Clear old log files and directories (older than specified days)
+     * 
+     * @param int $daysOld Number of days - files/folders older than this will be deleted
+     * @return array Statistics about deleted items
+     */
+    public function clearOldLogs(int $daysOld = 30): array
+    {
+        $deletedFiles = 0;
+        $deletedFolders = 0;
+        $errors = [];
+        $cutoffDate = Carbon::now()->subDays($daysOld);
+
+        try {
+            // Get all folders and files in the logs directory
+            $allItems = $this->listAllItemsInLogsFolder();
+
+            foreach ($allItems as $item) {
+                try {
+                    $itemDate = $this->getItemDate($item);
+                    
+                    // Check if item is older than cutoff date
+                    if ($itemDate && $itemDate->lt($cutoffDate)) {
+                        if ($item['mimeType'] === 'application/vnd.google-apps.folder') {
+                            // Delete folder (this will also delete all files inside)
+                            $this->service->files->delete($item['id']);
+                            $deletedFolders++;
+                            LaravelLog::info("Deleted old log folder: {$item['name']} (created: {$itemDate->format('Y-m-d')})");
+                        } else {
+                            // Delete file
+                            $this->service->files->delete($item['id']);
+                            $deletedFiles++;
+                            LaravelLog::info("Deleted old log file: {$item['name']} (created: {$itemDate->format('Y-m-d')})");
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to delete {$item['name']}: " . $e->getMessage();
+                    LaravelLog::error("Failed to delete log item: {$item['name']}", [
+                        'error' => $e->getMessage(),
+                        'item_id' => $item['id'],
+                    ]);
+                }
+            }
+
+            return [
+                'deleted_files' => $deletedFiles,
+                'deleted_folders' => $deletedFolders,
+                'errors' => $errors,
+                'cutoff_date' => $cutoffDate->format('Y-m-d'),
+            ];
+        } catch (\Exception $e) {
+            LaravelLog::error('Failed to clear old logs from Google Drive', [
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * List all items (files and folders) in the logs folder
+     */
+    private function listAllItemsInLogsFolder(): array
+    {
+        $allItems = [];
+        $pageToken = null;
+
+        do {
+            try {
+                $params = [
+                    'q' => "'{$this->logsFolder->folder_id}' in parents and trashed=false",
+                    'fields' => 'nextPageToken, files(id, name, mimeType, createdTime, modifiedTime)',
+                    'pageSize' => 1000,
+                ];
+
+                if ($pageToken) {
+                    $params['pageToken'] = $pageToken;
+                }
+
+                $response = $this->service->files->listFiles($params);
+                $files = $response->getFiles();
+
+                foreach ($files as $file) {
+                    $allItems[] = [
+                        'id' => $file->getId(),
+                        'name' => $file->getName(),
+                        'mimeType' => $file->getMimeType(),
+                        'createdTime' => $file->getCreatedTime(),
+                        'modifiedTime' => $file->getModifiedTime(),
+                    ];
+                }
+
+                $pageToken = $response->getNextPageToken();
+            } catch (\Exception $e) {
+                LaravelLog::error('Failed to list items in logs folder', [
+                    'error' => $e->getMessage(),
+                ]);
+                break;
+            }
+        } while ($pageToken);
+
+        return $allItems;
+    }
+
+    /**
+     * Get the date of an item (prefer createdTime, fallback to modifiedTime)
+     */
+    private function getItemDate(array $item): ?Carbon
+    {
+        try {
+            // Try to parse date from folder name (format: Y-m-d, e.g., 2026-01-15)
+            $folderName = $item['name'];
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $folderName)) {
+                $parsedDate = Carbon::createFromFormat('Y-m-d', $folderName);
+                if ($parsedDate) {
+                    return $parsedDate;
+                }
+            }
+
+            // Fallback to createdTime
+            if (!empty($item['createdTime'])) {
+                return Carbon::parse($item['createdTime']);
+            }
+
+            // Fallback to modifiedTime
+            if (!empty($item['modifiedTime'])) {
+                return Carbon::parse($item['modifiedTime']);
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            LaravelLog::warning('Failed to parse date for log item', [
+                'item_name' => $item['name'],
+                'error' => $e->getMessage(),
+            ]);
             return null;
         }
     }

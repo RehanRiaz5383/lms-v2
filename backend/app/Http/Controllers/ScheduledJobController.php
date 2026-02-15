@@ -171,6 +171,9 @@ class ScheduledJobController extends ApiController
                 case 'VoucherAutoBlockJob':
                     $this->executeVoucherAutoBlockJob($job);
                     break;
+                case 'ClearLogFilesJob':
+                    $this->executeClearLogFilesJob($job);
+                    break;
                 default:
                     throw new \Exception("Unknown job class: {$job->job_class}");
             }
@@ -812,6 +815,58 @@ class ScheduledJobController extends ApiController
                 'metadata' => $metadata,
                 'message' => "Blocked {$blockedCount} students, {$alreadyBlockedCount} were already blocked",
             ]);
+        }
+    }
+
+    /**
+     * Execute Clear Log Files Job
+     * Runs daily to remove log files and directories older than 30 days from Google Drive
+     */
+    private function executeClearLogFilesJob(ScheduledJob $job): void
+    {
+        $daysOld = $job->metadata['days_old'] ?? 30;
+        
+        try {
+            $logService = new \App\Services\GoogleDriveLogService();
+            $result = $logService->clearOldLogs($daysOld);
+
+            $metadata = [
+                'days_old' => $daysOld,
+                'deleted_files' => $result['deleted_files'],
+                'deleted_folders' => $result['deleted_folders'],
+                'errors_count' => count($result['errors']),
+                'cutoff_date' => $result['cutoff_date'],
+            ];
+
+            if (!empty($result['errors'])) {
+                $metadata['errors'] = $result['errors'];
+            }
+
+            Log::info("Clear log files job completed", $metadata);
+
+            // Store metadata in job log if available
+            if (isset($this->currentJobLog)) {
+                $this->currentJobLog->update([
+                    'metadata' => $metadata,
+                    'message' => "Deleted {$result['deleted_files']} files and {$result['deleted_folders']} folders older than {$daysOld} days",
+                ]);
+            }
+        } catch (\Exception $e) {
+            $errorMessage = "Failed to clear old log files: " . $e->getMessage();
+            Log::error($errorMessage, [
+                'exception' => $e,
+                'days_old' => $daysOld,
+            ]);
+
+            // Store error in job log if available
+            if (isset($this->currentJobLog)) {
+                $this->currentJobLog->update([
+                    'status' => 'failed',
+                    'message' => $errorMessage,
+                ]);
+            }
+
+            throw $e;
         }
     }
 
