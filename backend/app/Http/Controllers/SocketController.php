@@ -16,7 +16,22 @@ class SocketController extends ApiController
      */
     public function getConfig(): JsonResponse
     {
-        $socketUrl = env('SOCKET_URL', 'http://localhost:8080');
+        $socketUrl = env('SOCKET_URL');
+        
+        // If SOCKET_URL is not set, construct it from APP_URL
+        if (empty($socketUrl)) {
+            $appUrl = env('APP_URL', 'http://localhost');
+            $appUrl = rtrim($appUrl, '/');
+            
+            // Remove port from APP_URL if present, then add :8080 for socket
+            $appUrl = preg_replace('/:\d+$/', '', $appUrl);
+            
+            // Use https if APP_URL uses https, otherwise http
+            $protocol = parse_url($appUrl, PHP_URL_SCHEME) ?: 'http';
+            $host = parse_url($appUrl, PHP_URL_HOST) ?: parse_url($appUrl, PHP_URL_PATH);
+            
+            $socketUrl = "{$protocol}://{$host}:8080";
+        }
         
         return $this->success([
             'socket_url' => $socketUrl,

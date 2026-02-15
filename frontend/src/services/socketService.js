@@ -53,6 +53,9 @@ class SocketService {
       }
 
       this.socketUrl = config.data.socket_url || 'http://localhost:8080';
+      
+      // Log the socket URL being used (for debugging)
+      console.log('Connecting to socket server:', this.socketUrl);
 
       // Create socket connection
       this.socket = io(this.socketUrl, {
