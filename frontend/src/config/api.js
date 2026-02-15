@@ -283,6 +283,12 @@ export const API_ENDPOINTS = {
     update: '/google-drive-folders/:id',
     delete: '/google-drive-folders/:id',
   },
+
+  // Socket Configuration
+  socket: {
+    config: '/socket/config',
+    verifyToken: '/socket/verify-token',
+  },
 };
 
 /**
