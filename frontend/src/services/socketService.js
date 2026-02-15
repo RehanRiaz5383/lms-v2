@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { API_BASE_URL } from '../config/api';
+import { API_BASE_URL, APP_MODE } from '../config/api';
 import { storage } from '../utils/storage';
 
 class SocketService {
@@ -57,7 +57,10 @@ class SocketService {
       // Log the socket URL being used (for debugging)
       console.log('Connecting to socket server:', this.socketUrl);
 
-      // Create socket connection
+      // Create socket connection with increased timeout for production
+      // Use longer timeout in production due to network latency
+      const connectionTimeout = APP_MODE === 'production' ? 30000 : 20000; // 30s production, 20s dev
+      
       this.socket = io(this.socketUrl, {
         auth: {
           token: token,
@@ -65,8 +68,15 @@ class SocketService {
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
+        reconnectionDelayMax: 10000, // Increased max delay
+        reconnectionAttempts: 10, // Increased attempts
+        timeout: connectionTimeout,
+        forceNew: false,
+        upgrade: true,
+        rememberUpgrade: true,
+        // Additional options for better connection handling
+        withCredentials: false,
+        autoConnect: true,
       });
 
       // Connection event handlers
@@ -83,9 +93,26 @@ class SocketService {
       });
 
       this.socket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
+        console.error('Socket connection error:', {
+          message: error.message,
+          type: error.type,
+          description: error.description,
+          context: error.context,
+          socketUrl: this.socketUrl,
+        });
         this.isConnected = false;
         this.emit('socket_error', error);
+      });
+
+      // Handle timeout specifically
+      this.socket.on('connect_timeout', (timeout) => {
+        console.error('Socket connection timeout:', {
+          timeout,
+          socketUrl: this.socketUrl,
+          message: 'Connection to socket server timed out. Please check if the server is running and accessible.',
+        });
+        this.isConnected = false;
+        this.emit('socket_error', new Error('Connection timeout'));
       });
 
       // Handle connected event from server

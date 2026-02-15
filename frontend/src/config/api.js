@@ -12,6 +12,9 @@
  */
 const APP_MODE = 'production'; // Change to 'production' when deploying 
 //final updated code
+
+// Export APP_MODE for use in other modules
+export { APP_MODE };
 /**
  * Get the API base URL based on application mode
  */

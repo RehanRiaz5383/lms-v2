@@ -19,6 +19,10 @@ const io = new Server(httpServer, {
     credentials: true,
   },
   transports: ['websocket', 'polling'],
+  pingTimeout: 60000, // 60 seconds - time to wait for pong before considering connection closed
+  pingInterval: 25000, // 25 seconds - interval between pings
+  connectTimeout: 30000, // 30 seconds - time to wait for connection
+  allowEIO3: true, // Allow Engine.IO v3 clients
 });
 
 // Store online users
@@ -35,14 +39,30 @@ async function verifyToken(token) {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/json',
       },
+      timeout: 10000, // 10 second timeout for token verification
+      validateStatus: function (status) {
+        return status >= 200 && status < 500; // Don't throw on 4xx errors
+      },
     });
     
-    if (response.data && response.data.data) {
+    if (response.status === 200 && response.data && response.data.data) {
       return response.data.data;
+    }
+    
+    if (response.status === 401) {
+      console.error('Token verification failed: Unauthorized');
+    } else {
+      console.error('Token verification failed: Unexpected response', response.status);
     }
     return null;
   } catch (error) {
-    console.error('Token verification failed:', error.message);
+    if (error.code === 'ECONNABORTED') {
+      console.error('Token verification timeout:', error.message);
+    } else if (error.code === 'ECONNREFUSED') {
+      console.error('Token verification failed: Cannot connect to Laravel API at', LARAVEL_API_URL);
+    } else {
+      console.error('Token verification failed:', error.message);
+    }
     return null;
   }
 }
@@ -96,7 +116,7 @@ function broadcastOnlineUsers() {
   console.log(`=== End broadcast ===\n`);
 }
 
-// Socket.IO connection handling
+// Socket.IO connection handling with timeout
 io.use(async (socket, next) => {
   const token = socket.handshake.auth.token;
   
@@ -104,17 +124,28 @@ io.use(async (socket, next) => {
     return next(new Error('Authentication token required'));
   }
 
-  const user = await verifyToken(token);
-  
-  if (!user) {
-    return next(new Error('Authentication failed'));
-  }
+  try {
+    // Set a timeout for token verification
+    const verificationPromise = verifyToken(token);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Token verification timeout')), 10000)
+    );
 
-  // Attach user data to socket
-  socket.userId = user.id;
-  socket.userData = user;
-  
-  next();
+    const user = await Promise.race([verificationPromise, timeoutPromise]);
+    
+    if (!user) {
+      return next(new Error('Authentication failed'));
+    }
+
+    // Attach user data to socket
+    socket.userId = user.id;
+    socket.userData = user;
+    
+    next();
+  } catch (error) {
+    console.error('Socket authentication error:', error.message);
+    return next(new Error('Authentication failed: ' + error.message));
+  }
 });
 
 io.on('connection', (socket) => {
