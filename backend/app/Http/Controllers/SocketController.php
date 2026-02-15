@@ -26,11 +26,25 @@ class SocketController extends ApiController
             // Remove port from APP_URL if present, then add :8080 for socket
             $appUrl = preg_replace('/:\d+$/', '', $appUrl);
             
-            // Use https if APP_URL uses https, otherwise http
-            $protocol = parse_url($appUrl, PHP_URL_SCHEME) ?: 'http';
+            // Determine protocol: prefer HTTPS if request is secure or APP_URL uses HTTPS
+            $request = request();
+            $isSecure = $request->secure() || $request->header('X-Forwarded-Proto') === 'https';
+            $appUrlProtocol = parse_url($appUrl, PHP_URL_SCHEME) ?: 'http';
+            
+            // Use HTTPS if request is secure OR APP_URL uses HTTPS
+            $protocol = ($isSecure || $appUrlProtocol === 'https') ? 'https' : 'http';
             $host = parse_url($appUrl, PHP_URL_HOST) ?: parse_url($appUrl, PHP_URL_PATH);
             
             $socketUrl = "{$protocol}://{$host}:8080";
+        } else {
+            // Even if SOCKET_URL is set, ensure it uses HTTPS if request is secure
+            $request = request();
+            $isSecure = $request->secure() || $request->header('X-Forwarded-Proto') === 'https';
+            
+            if ($isSecure) {
+                // Replace http:// with https:// in socket URL if request is secure
+                $socketUrl = preg_replace('/^http:\/\//', 'https://', $socketUrl);
+            }
         }
         
         return $this->success([

@@ -81,10 +81,11 @@ After setting the environment variable:
 
 ## Important Notes
 
-- **HTTPS vs HTTP**: If your main site uses HTTPS, the socket URL should also use HTTPS (or WSS for WebSocket)
+- **HTTPS vs HTTP**: If your main site uses HTTPS, the socket URL should also use HTTPS (or WSS for WebSocket). **Mixed Content Error Fix**: The backend automatically detects if the request is secure (HTTPS) and will convert `http://` to `https://` in the socket URL to prevent mixed content errors. However, it's best to explicitly set `SOCKET_URL` with `https://` in production.
 - **Port 8080**: Make sure port 8080 is open in your firewall
 - **CORS**: The chatbot server's `FRONTEND_URL` in `.env` should match your frontend domain
 - **Same-Origin Policy**: If socket is on a different domain, ensure CORS is properly configured
+- **Automatic HTTPS Detection**: If your page is loaded over HTTPS, the backend will automatically ensure the socket URL uses `https://` to avoid browser mixed content blocking
 
 ## Troubleshooting
 

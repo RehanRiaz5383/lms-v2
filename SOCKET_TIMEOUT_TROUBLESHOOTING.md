@@ -1,6 +1,15 @@
 # Socket Timeout Error Troubleshooting Guide
 
-If you're experiencing socket timeout errors on the live server, follow these steps to diagnose and fix the issue.
+If you're experiencing socket timeout errors or mixed content errors on the live server, follow these steps to diagnose and fix the issue.
+
+## Mixed Content Error (HTTPS/HTTP Mismatch)
+
+**Error**: `Mixed Content: The page at 'https://...' was loaded over HTTPS, but attempted to connect to the insecure WebSocket endpoint 'ws://...'`
+
+**Solution**: 
+1. Ensure `SOCKET_URL` in your Laravel `.env` uses `https://` (not `http://`)
+2. The backend will automatically convert `http://` to `https://` if the request is secure, but it's best to explicitly set it
+3. Clear Laravel config cache: `php artisan config:clear`
 
 ## Changes Made
 
