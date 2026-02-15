@@ -202,13 +202,17 @@ class StudentPerformanceController extends ApiController
                                 $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : null;
                                 if ($obtainedMarks !== null) {
                                     $totalMarksObtained += $obtainedMarks;
+                                } else {
+                                    // Treat pending/unmarked as 0
+                                    $totalMarksObtained += 0;
                                 }
+                            } else {
+                                // Task not submitted, treat as 0 marks
+                                $totalMarksObtained += 0;
                             }
                             
-                            // Add to total possible marks only if task is submitted
-                            if ($submittedTask) {
-                                $totalMarksPossible += $taskTotalMarks;
-                            }
+                            // Add to total possible marks for ALL tasks (not just submitted ones)
+                            $totalMarksPossible += $taskTotalMarks;
                             
                             // Get batch information for this task
                             $batchInfo = null;
@@ -354,11 +358,10 @@ class StudentPerformanceController extends ApiController
                         }
                         
                         $participationMarks = $participationMarksQuery->get()->keyBy('class_participation_id');
-                        $classParticipationsData['completed'] = $participationMarks->count();
-                        $classParticipationsData['pending'] = max(0, $classParticipationsData['total'] - $classParticipationsData['completed']);
                         
                         $totalMarksObtained = 0;
                         $totalMarksPossible = 0;
+                        $completedCount = 0; // Count only participations with marks > 0
                         
                         // Get batch information for class participations
                         $batchInfoMap = [];
@@ -378,13 +381,26 @@ class StudentPerformanceController extends ApiController
                         
                         foreach ($allParticipations as $participation) {
                             $mark = $participationMarks->get($participation->id);
-                            $obtainedMarks = $mark ? (float)($mark->obtained_marks ?? 0) : null;
-                            $totalMarks = (float)($mark->total_marks ?? $participation->total_marks ?? 0);
+                            // Get total marks from participation record (not from mark record)
+                            $totalMarks = (float)($participation->total_marks ?? 0);
                             
-                            if ($obtainedMarks !== null) {
-                                $totalMarksObtained += $obtainedMarks;
-                                $totalMarksPossible += $totalMarks;
+                            // Get obtained marks (treat null/pending as 0)
+                            $obtainedMarks = null;
+                            if ($mark && isset($mark->obtained_marks)) {
+                                $obtainedMarks = (float)($mark->obtained_marks ?? 0);
+                            } else {
+                                // No mark record or pending, treat as 0
+                                $obtainedMarks = 0;
                             }
+                            
+                            // Count as completed only if obtained marks > 0
+                            if ($obtainedMarks > 0) {
+                                $completedCount++;
+                            }
+                            
+                            // Always add to totals (treat pending as 0 marks)
+                            $totalMarksObtained += $obtainedMarks;
+                            $totalMarksPossible += $totalMarks;
                             
                             // Get batch information for this participation
                             $batchInfo = null;
@@ -404,6 +420,8 @@ class StudentPerformanceController extends ApiController
                             ];
                         }
                         
+                        $classParticipationsData['completed'] = $completedCount;
+                        $classParticipationsData['pending'] = max(0, $classParticipationsData['total'] - $classParticipationsData['completed']);
                         $classParticipationsData['total_marks_obtained'] = $totalMarksObtained;
                         $classParticipationsData['total_marks_possible'] = $totalMarksPossible;
                         $classParticipationsData['average_marks'] = $totalMarksPossible > 0 
@@ -649,31 +667,21 @@ class StudentPerformanceController extends ApiController
             }
 
             // Calculate Overall Performance
-            // Use weighted average of percentages (each already a percentage 0-100)
-            // Tasks weight: 40%, Quizzes weight: 30%, Attendance weight: 30%
-            $overallScore = 0;
-            $weightedTotal = 0;
+            // Simple average of three percentages: (task% + quiz% + class_participation%) / 3
+            $taskPercentage = round($tasksData['average_marks'], 2);
+            $quizPercentage = round($quizzesData['average_marks'], 2);
+            $classParticipationPercentage = round($classParticipationsData['average_marks'], 2);
             
-            // Tasks weight: 40% - use average_marks (which is already a percentage)
-            if ($tasksData['average_marks'] > 0) {
-                $overallScore += $tasksData['average_marks'] * 0.4;
-                $weightedTotal += 0.4;
-            }
+            $percentages = [
+                $taskPercentage,
+                $quizPercentage,
+                $classParticipationPercentage,
+            ];
             
-            // Quizzes weight: 30% - use average_marks (which is already a percentage)
-            if ($quizzesData['average_marks'] > 0) {
-                $overallScore += $quizzesData['average_marks'] * 0.3;
-                $weightedTotal += 0.3;
-            }
-            
-            // Attendance weight: 30% - use attendance_rate (which is already a percentage)
-            if ($attendanceData['attendance_rate'] > 0) {
-                $overallScore += $attendanceData['attendance_rate'] * 0.3;
-                $weightedTotal += 0.3;
-            }
-            
-            // Calculate weighted average
-            $overallPercentage = $weightedTotal > 0 ? round($overallScore / $weightedTotal, 2) : 0;
+            // Calculate simple average
+            $overallPercentage = count($percentages) > 0 
+                ? round(array_sum($percentages) / count($percentages), 2) 
+                : 0;
             
             // Ensure percentage doesn't exceed 100%
             $overallPercentage = min(100, max(0, $overallPercentage));
@@ -736,6 +744,24 @@ class StudentPerformanceController extends ApiController
                     'percentage' => $overallPercentage,
                     'grade' => $grade,
                     'remarks' => $remarks,
+                    'breakdown' => [
+                        'tasks' => [
+                            'label' => 'Tasks',
+                            'percentage' => $taskPercentage,
+                        ],
+                        'quizzes' => [
+                            'label' => 'Quizzes',
+                            'percentage' => $quizPercentage,
+                        ],
+                        'class_participations' => [
+                            'label' => 'Class Participations',
+                            'percentage' => $classParticipationPercentage,
+                        ],
+                        'calculation' => [
+                            'formula' => "({$taskPercentage}% + {$quizPercentage}% + {$classParticipationPercentage}%) / 3",
+                            'result' => $overallPercentage . '%',
+                        ],
+                    ],
                 ],
                 'generated_at' => now()->setTimezone('Asia/Karachi')->format('Y-m-d H:i:s'),
             ];

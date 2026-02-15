@@ -515,28 +515,83 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
             <CardTitle className="text-xl print:text-lg">Overall Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center space-y-4 print:space-y-2">
-              <div>
-                <p className="text-sm text-muted-foreground print:text-xs mb-2">
-                  Overall Percentage
-                </p>
-                <p className="text-5xl font-bold text-primary print:text-4xl">
-                  {reportData.overall_performance.percentage}%
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground print:text-xs mb-2">Grade</p>
-                <p className="text-4xl font-bold text-foreground print:text-3xl">
-                  {reportData.overall_performance.grade}
-                </p>
-              </div>
-              <div className="mt-6 p-4 bg-muted rounded-lg print:mt-4 print:p-2">
-                <p className="text-sm font-semibold text-foreground mb-2 print:text-xs">
-                  Remarks
-                </p>
-                <p className="text-foreground print:text-sm">
-                  {reportData.overall_performance.remarks}
-                </p>
+            <div className="space-y-6 print:space-y-4">
+              {/* Detailed Breakdown Table */}
+              {reportData.overall_performance.breakdown && (
+                <div className="border border-border rounded-lg overflow-hidden print:border-gray-300">
+                  <table className="w-full text-sm print:text-xs">
+                    <thead className="bg-muted print:bg-gray-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-foreground print:px-2 print:py-2">
+                          Category
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-foreground print:px-2 print:py-2">
+                          Percentage
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border print:divide-gray-300">
+                      <tr>
+                        <td className="px-4 py-3 text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.tasks.label}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.tasks.percentage}%
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.quizzes.label}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.quizzes.percentage}%
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.class_participations.label}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.class_participations.percentage}%
+                        </td>
+                      </tr>
+                      <tr className="bg-muted/50 print:bg-gray-50">
+                        <td className="px-4 py-3 font-semibold text-foreground print:px-2 print:py-2">
+                          Calculation
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-foreground print:px-2 print:py-2">
+                          {reportData.overall_performance.breakdown.calculation.formula}
+                        </td>
+                      </tr>
+                      <tr className="bg-primary/10 print:bg-blue-50 border-t-2 border-primary print:border-blue-300">
+                        <td className="px-4 py-3 font-bold text-lg text-foreground print:px-2 print:py-2 print:text-base">
+                          Overall Performance
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-lg text-primary print:px-2 print:py-2 print:text-base">
+                          {reportData.overall_performance.breakdown.calculation.result}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Grade and Remarks */}
+              <div className="text-center space-y-4 print:space-y-2">
+                <div>
+                  <p className="text-sm text-muted-foreground print:text-xs mb-2">Grade</p>
+                  <p className="text-4xl font-bold text-foreground print:text-3xl">
+                    {reportData.overall_performance.grade}
+                  </p>
+                </div>
+                <div className="mt-6 p-4 bg-muted rounded-lg print:mt-4 print:p-2">
+                  <p className="text-sm font-semibold text-foreground mb-2 print:text-xs">
+                    Remarks
+                  </p>
+                  <p className="text-foreground print:text-sm">
+                    {reportData.overall_performance.remarks}
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
