@@ -9,6 +9,14 @@ const ChatNotificationBubble = ({ onOpenChat }) => {
   const [notifications, setNotifications] = useState([]); // Array of { conversation_id, sender, message, timestamp }
   const [openConversationIds, setOpenConversationIds] = useState(new Set());
 
+  // Clear all notifications when user logs out
+  useEffect(() => {
+    if (!currentUser) {
+      setNotifications([]);
+      setOpenConversationIds(new Set());
+    }
+  }, [currentUser]);
+
   // Track which conversations are currently open
   useEffect(() => {
     const handleChatOpened = (event) => {
@@ -35,13 +43,23 @@ const ChatNotificationBubble = ({ onOpenChat }) => {
   }, []);
 
   useEffect(() => {
+    // Don't listen if user is not authenticated
+    if (!currentUser) {
+      return;
+    }
+
     // Listen for new messages
     const unsubscribe = socketService.on('new_message', (message) => {
+      // Only process if user is still authenticated
+      if (!currentUser) {
+        return;
+      }
+
       // Only show notification if:
       // 1. Message is not from current user
       // 2. Conversation is not currently open
       if (
-        message.sender_id !== currentUser?.id &&
+        message.sender_id !== currentUser.id &&
         !openConversationIds.has(message.conversation_id)
       ) {
         setNotifications((prev) => {
@@ -143,6 +161,11 @@ const ChatNotificationBubble = ({ onOpenChat }) => {
     // More than 24 hours
     return date.toLocaleDateString();
   };
+
+  // Don't render if user is not authenticated
+  if (!currentUser) {
+    return null;
+  }
 
   if (notifications.length === 0) return null;
 

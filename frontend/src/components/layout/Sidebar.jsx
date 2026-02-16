@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { cn } from '../../utils/cn';
 import { apiService } from '../../services/api';
 import { API_ENDPOINTS } from '../../config/api';
+import { chatService } from '../../services/chatService';
 import { Tooltip } from '../ui/tooltip';
 import logo from '../../assets/icons/logo.png';
 import {
@@ -29,6 +30,7 @@ import {
   DollarSign,
   Plug,
   RefreshCw,
+  Inbox,
 } from 'lucide-react';
 
 // Submenu Button Component
@@ -128,6 +130,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const [expandedMenus, setExpandedMenus] = useState([]); // Start with all collapsed
   const [pendingTasksCount, setPendingTasksCount] = useState(0);
   const [pendingVouchersCount, setPendingVouchersCount] = useState(0);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
 
   // Get user roles - prioritize user_roles table, use user_type only for backward compatibility
   const getUserRoles = () => {
@@ -196,6 +199,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       path: '/dashboard',
     },
     {
+      title: 'Inbox',
+      icon: Inbox,
+      path: '/dashboard/inbox',
+    },
+    {
       title: 'Lecture Videos',
       icon: Video,
       path: '/dashboard/lecture-videos',
@@ -241,6 +249,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       title: 'Dashboard',
       icon: LayoutDashboard,
       path: '/dashboard',
+    },
+    {
+      title: 'Inbox',
+      icon: Inbox,
+      path: '/dashboard/inbox',
     },
     // Management menu with submenu (Admin only)
     {
@@ -519,6 +532,23 @@ const Sidebar = ({ isOpen, onClose }) => {
     }
   }, [hasStudentRole]);
 
+  // Fetch unread messages count for all users
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await chatService.getUnreadCount();
+        setUnreadMessagesCount(response.data?.unread_count || 0);
+      } catch (err) {
+        // Silently fail - don't show error for badge count
+        setUnreadMessagesCount(0);
+      }
+    };
+    fetchUnreadCount();
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const menuGroups = buildMenuItems();
   
   // Helper to render menu items (avoid duplicates like Dashboard)
@@ -566,6 +596,8 @@ const Sidebar = ({ isOpen, onClose }) => {
         badgeCount = pendingTasksCount;
       } else if (item.path === '/dashboard/account-book' && hasStudentRole && pendingVouchersCount > 0) {
         badgeCount = pendingVouchersCount;
+      } else if (item.path === '/dashboard/inbox' && unreadMessagesCount > 0) {
+        badgeCount = unreadMessagesCount;
       }
       const showBadge = badgeCount !== null && badgeCount > 0;
 

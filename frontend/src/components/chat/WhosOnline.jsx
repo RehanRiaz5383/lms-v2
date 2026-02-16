@@ -16,8 +16,16 @@ const WhosOnline = () => {
       socketService.disconnect();
     }
 
+    // Listen for explicit logout event
+    const handleLogout = () => {
+      socketService.disconnect();
+    };
+
+    window.addEventListener('userLoggedOut', handleLogout);
+
     // Cleanup on unmount
     return () => {
+      window.removeEventListener('userLoggedOut', handleLogout);
       // Don't disconnect on unmount, keep connection alive
       // socketService.disconnect();
     };

@@ -106,6 +106,25 @@ class ChatService {
 
     return response.json();
   }
+
+  /**
+   * Get total unread message count
+   */
+  async getUnreadCount() {
+    const token = storage.getToken();
+    const response = await fetch(`${API_BASE_URL}/chat/unread-count`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get unread count');
+    }
+
+    return response.json();
+  }
 }
 
 export const chatService = new ChatService();

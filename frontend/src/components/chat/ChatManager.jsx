@@ -8,6 +8,13 @@ const ChatManager = () => {
   const { user: currentUser } = useAppSelector((state) => state.auth);
   const [openChats, setOpenChats] = useState([]); // Array of { conversation, otherUser, minimized }
 
+  // Clear all chats when user logs out
+  useEffect(() => {
+    if (!currentUser) {
+      setOpenChats([]);
+    }
+  }, [currentUser]);
+
   const openChat = useCallback(async (userId = null, conversationId = null) => {
     try {
       // If conversationId is provided, use it to find existing chat
@@ -87,14 +94,24 @@ const ChatManager = () => {
 
   // Listen for chat open requests from other components
   useEffect(() => {
+    // Don't listen if user is not authenticated
+    if (!currentUser) {
+      return;
+    }
+
     const handleOpenChat = async (event) => {
+      // Only process if user is still authenticated
+      if (!currentUser) {
+        return;
+      }
+
       const { userId, conversationId } = event.detail;
       await openChat(userId, conversationId);
     };
 
     window.addEventListener('openChat', handleOpenChat);
     return () => window.removeEventListener('openChat', handleOpenChat);
-  }, [openChat]);
+  }, [openChat, currentUser]);
 
   const closeChat = (conversationId) => {
     setOpenChats((prev) => prev.filter((chat) => chat.conversation.id !== conversationId));
@@ -114,7 +131,17 @@ const ChatManager = () => {
 
   // Update conversations when new messages arrive
   useEffect(() => {
+    // Don't listen if user is not authenticated
+    if (!currentUser) {
+      return;
+    }
+
     const unsubscribe = socketService.on('new_message', (message) => {
+      // Only process if user is still authenticated
+      if (!currentUser) {
+        return;
+      }
+
       setOpenChats((prev) =>
         prev.map((chat) => {
           if (chat.conversation.id === message.conversation_id) {
@@ -132,7 +159,7 @@ const ChatManager = () => {
     });
 
     return unsubscribe;
-  }, []);
+  }, [currentUser]);
 
   // Position chat windows (stack them)
   const getChatPosition = (index) => {
@@ -145,6 +172,11 @@ const ChatManager = () => {
       bottom: `${baseBottom}px`,
     };
   };
+
+  // Don't render if user is not authenticated
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <>

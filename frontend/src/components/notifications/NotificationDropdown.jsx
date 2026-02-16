@@ -105,10 +105,18 @@ const NotificationDropdown = () => {
     }
   };
 
-  // Navigate to notification detail page
-  const handleNotificationClick = (notificationId) => {
+  // Navigate to notification detail page or inbox for chat notifications
+  const handleNotificationClick = (notification) => {
     setIsOpen(false);
-    navigate(`/dashboard/notifications/${notificationId}`);
+    
+    // Check if this is a chat notification
+    if (notification.type === 'chat_message' && notification.data?.conversation_id) {
+      // Redirect to inbox with conversation
+      navigate(`/dashboard/inbox/${notification.data.conversation_id}`);
+    } else {
+      // Regular notification, go to detail page
+      navigate(`/dashboard/notifications/${notification.id}`);
+    }
   };
 
   // Mark all as read
@@ -220,7 +228,7 @@ const NotificationDropdown = () => {
                     <div className="flex items-start gap-2">
                       <div
                         className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => handleNotificationClick(notification.id)}
+                        onClick={() => handleNotificationClick(notification)}
                       >
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-sm font-medium text-foreground">

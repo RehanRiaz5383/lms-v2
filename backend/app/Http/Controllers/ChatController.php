@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Conversation;
 use App\Models\ChatMessage;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -151,6 +152,31 @@ class ChatController extends ApiController
     }
 
     /**
+     * Get total unread message count for the current user
+     */
+    public function getUnreadCount(Request $request): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+
+            // Get total unread count across all conversations
+            $totalUnread = ChatMessage::whereHas('conversation', function ($query) use ($currentUser) {
+                $query->where(function ($q) use ($currentUser) {
+                    $q->where('user_one_id', $currentUser->id)
+                        ->orWhere('user_two_id', $currentUser->id);
+                });
+            })
+                ->where('sender_id', '!=', $currentUser->id)
+                ->where('is_read', false)
+                ->count();
+
+            return $this->success(['unread_count' => $totalUnread], 'Unread count retrieved successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to get unread count', 500);
+        }
+    }
+
+    /**
      * Get messages for a conversation
      */
     public function getMessages(Request $request, int $conversationId): JsonResponse
@@ -289,6 +315,76 @@ class ChatController extends ApiController
             ], 'Message sent successfully', 201);
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to send message', 500);
+        }
+    }
+
+    /**
+     * Create notifications for offline message recipients
+     */
+    public function notifyOfflineRecipients(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'conversation_id' => 'required|exists:conversations,id',
+                'message_id' => 'required|exists:chat_messages,id',
+                'recipient_ids' => 'required|array',
+                'recipient_ids.*' => 'required|integer|exists:users,id',
+                'sender_id' => 'required|exists:users,id',
+                'sender_name' => 'required|string',
+                'message' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->validationError($validator->errors()->toArray());
+            }
+
+            $recipientIds = $request->input('recipient_ids');
+            $senderId = $request->input('sender_id');
+            $senderName = $request->input('sender_name');
+            $message = $request->input('message');
+            $conversationId = $request->input('conversation_id');
+
+            // Truncate message for notification (max 100 chars)
+            $messagePreview = strlen($message) > 100
+                ? substr($message, 0, 100) . '...'
+                : $message;
+
+            $createdCount = 0;
+            foreach ($recipientIds as $recipientId) {
+                try {
+                    // Format notification message: "Mr. A sent you a message, please check your inbox"
+                    $notificationMessage = $senderName . ' sent you a message, please check your inbox';
+                    
+                    \App\Models\Notification::createNotification(
+                        $recipientId,
+                        'chat_message',
+                        'New Message',
+                        $notificationMessage,
+                        [
+                            'conversation_id' => $conversationId,
+                            'message_id' => $request->input('message_id'),
+                            'sender_id' => $senderId,
+                            'sender_name' => $senderName,
+                            'type' => 'chat',
+                            'url' => "/dashboard/inbox/{$conversationId}",
+                            'redirect_to' => 'inbox',
+                        ]
+                    );
+                    $createdCount++;
+                } catch (\Exception $e) {
+                    \Log::error('Failed to create notification for recipient', [
+                        'recipient_id' => $recipientId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return $this->success(
+                ['created_count' => $createdCount],
+                'Notifications created for offline recipients'
+            );
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to create notifications', 500);
         }
     }
 

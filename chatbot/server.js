@@ -303,12 +303,16 @@ io.on('connection', (socket) => {
         participantIds.push(conversation.user_two_id);
       }
 
+      // Track which participants are online
+      const onlineParticipantIds = new Set();
+      
       // Send message only to participants who are online
       let sentCount = 0;
       io.sockets.sockets.forEach((otherSocket) => {
         const otherUser = onlineUsers.get(otherSocket.id);
         if (otherUser && participantIds.includes(otherUser.id)) {
           otherSocket.emit('new_message', savedMessage);
+          onlineParticipantIds.add(otherUser.id);
           sentCount++;
           console.log(`[chat_message] Sent to ${otherUser.name} (ID: ${otherUser.id})`);
         }
@@ -316,8 +320,49 @@ io.on('connection', (socket) => {
 
       // Also send to sender (in case they have multiple tabs/devices)
       socket.emit('new_message', savedMessage);
+      onlineParticipantIds.add(user.id);
 
-      console.log(`[chat_message] Message sent in conversation ${conversation_id} by ${user.name} to ${sentCount} participant(s): ${participantIds.join(', ')}`);
+      // Find offline participants and notify backend to create notifications
+      const offlineParticipantIds = participantIds.filter(
+        (id) => !onlineParticipantIds.has(id) && id !== user.id
+      );
+
+      if (offlineParticipantIds.length > 0) {
+        // Notify backend about offline recipients
+        axios
+          .post(
+            `${LARAVEL_API_URL}/chat/notify-offline-recipients`,
+            {
+              conversation_id: conversation_id,
+              message_id: savedMessage.id,
+              recipient_ids: offlineParticipantIds,
+              sender_id: user.id,
+              sender_name: user.name,
+              message: savedMessage.message,
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${socket.handshake.auth.token}`,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+              },
+              timeout: 10000,
+            }
+          )
+          .then(() => {
+            console.log(
+              `[chat_message] Notifications created for offline recipients: ${offlineParticipantIds.join(', ')}`
+            );
+          })
+          .catch((err) => {
+            console.error('[chat_message] Error creating notifications for offline recipients:', {
+              message: err.message,
+              status: err.response?.status,
+            });
+          });
+      }
+
+      console.log(`[chat_message] Message sent in conversation ${conversation_id} by ${user.name} to ${sentCount} online participant(s), ${offlineParticipantIds.length} offline participant(s)`);
     } catch (error) {
       console.error('[chat_message] Error saving message:', {
         message: error.message,

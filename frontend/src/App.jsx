@@ -33,6 +33,7 @@ import IncomeExpenseReport from './pages/IncomeExpenseReport';
 import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
 import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
+import Inbox from './pages/Inbox';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import WhosOnline from './components/chat/WhosOnline';
@@ -226,6 +227,16 @@ function App() {
             <Route path="profile" element={
               <BlockedRoute>
                 <Profile />
+              </BlockedRoute>
+            } />
+            <Route path="inbox" element={
+              <BlockedRoute>
+                <Inbox />
+              </BlockedRoute>
+            } />
+            <Route path="inbox/:conversationId" element={
+              <BlockedRoute>
+                <Inbox />
               </BlockedRoute>
             } />
             {/* Student routes */}

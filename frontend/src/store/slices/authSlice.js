@@ -215,8 +215,17 @@ const authSlice = createSlice({
         state.user = null;
         state.token = null;
         state.error = null;
+        // Dispatch event to disconnect socket (handled by WhosOnline component)
+        window.dispatchEvent(new CustomEvent('userLoggedOut'));
       })
       .addCase(logout.rejected, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = false;
+        state.user = null;
+        state.token = null;
+        state.error = action.payload;
+        // Dispatch event to disconnect socket even if logout API call fails
+        window.dispatchEvent(new CustomEvent('userLoggedOut'));
         state.loading = false;
         state.isAuthenticated = false;
         state.user = null;

@@ -70,10 +70,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Chat routes
     Route::prefix('chat')->group(function () {
         Route::get('/conversations', [ChatController::class, 'getConversations']);
+        Route::get('/unread-count', [ChatController::class, 'getUnreadCount']);
         Route::post('/conversations', [ChatController::class, 'getOrCreateConversation']);
         Route::get('/conversations/{id}/messages', [ChatController::class, 'getMessages']);
         Route::post('/messages', [ChatController::class, 'storeMessage']);
         Route::post('/conversations/{id}/read', [ChatController::class, 'markAsRead']);
+        Route::post('/notify-offline-recipients', [ChatController::class, 'notifyOfflineRecipients']);
     });
 
     // Dashboard
