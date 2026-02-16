@@ -93,10 +93,9 @@ const WhosOnlineSidebar = ({ isOpen, onClose }) => {
 
     // Request current online users when sidebar opens (if socket is connected)
     // This ensures we get the latest list immediately
-    if (status.connected && status.socket) {
+    if (status.connected) {
       // Request current online users from server
-      status.socket.emit('get_online_users');
-      console.log('Requested online users from server');
+      socketService.requestOnlineUsers();
     }
 
     return () => {

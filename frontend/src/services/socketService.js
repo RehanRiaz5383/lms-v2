@@ -204,6 +204,18 @@ class SocketService {
       socket: this.socket,
     };
   }
+
+  /**
+   * Request current online users from server
+   */
+  requestOnlineUsers() {
+    if (this.socket?.connected) {
+      this.socket.emit('get_online_users');
+      console.log('Requested online users from server');
+    } else {
+      console.warn('Cannot request online users: socket not connected');
+    }
+  }
 }
 
 // Export singleton instance

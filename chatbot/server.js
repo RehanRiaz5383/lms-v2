@@ -1,8 +1,8 @@
 import { Server } from 'socket.io';
 import { createServer as createHttpServer } from 'http';
-import { createServer as createHttpsServer } from 'https'; // Add this
-import fs from 'fs'; // Add this
-import cors from 'cors';
+import { createServer as createHttpsServer } from 'https';
+import fs from 'fs';
+import axios from 'axios';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -47,7 +47,183 @@ const io = new Server(httpServer, {
   allowEIO3: true,
 });
 
-// ... [Rest of your verifyToken and onlineUsers logic remains exactly the same] ...
+// Store online users: socketId -> user data
+const onlineUsers = new Map();
+
+/**
+ * Verify token with Laravel backend
+ */
+async function verifyToken(token) {
+  try {
+    const response = await axios.get(`${LARAVEL_API_URL}/socket/verify-token`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json',
+      },
+      timeout: 10000, // 10 second timeout
+    });
+
+    if (response.data && response.data.data) {
+      return response.data.data;
+    }
+    return null;
+  } catch (error) {
+    console.error('Token verification error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    return null;
+  }
+}
+
+/**
+ * Get list of online users, deduplicated by userId
+ * @param {string} excludeSocketId - Socket ID to exclude from the list
+ * @returns {Array} Array of unique user objects
+ */
+function getOnlineUsers(excludeSocketId = null) {
+  const userMap = new Map();
+  
+  onlineUsers.forEach((user, socketId) => {
+    // Skip excluded socket
+    if (socketId === excludeSocketId) {
+      return;
+    }
+    
+    // Deduplicate by userId (in case same user has multiple connections)
+    const userId = user.id;
+    if (!userMap.has(userId)) {
+      userMap.set(userId, user);
+    }
+  });
+  
+  return Array.from(userMap.values());
+}
+
+/**
+ * Broadcast online users list to all connected clients
+ * Each client receives a personalized list (excluding themselves)
+ */
+function broadcastOnlineUsers() {
+  const totalSockets = io.sockets.sockets.size;
+  const totalUsers = onlineUsers.size;
+  console.log(`[broadcastOnlineUsers] Broadcasting to ${totalSockets} sockets, ${totalUsers} users in map`);
+  
+  io.sockets.sockets.forEach((socket) => {
+    const currentUser = onlineUsers.get(socket.id);
+    if (!currentUser) {
+      console.log(`[broadcastOnlineUsers] No user found for socket ${socket.id}, skipping`);
+      return;
+    }
+    
+    // Get all online users except the current socket's user
+    const otherUsers = getOnlineUsers(socket.id);
+    
+    // Send personalized list to this socket
+    socket.emit('online_users', otherUsers);
+    console.log(`[broadcastOnlineUsers] Sent ${otherUsers.length} users to ${currentUser.name} (ID: ${currentUser.id})`);
+  });
+}
+
+// Authentication middleware
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  
+  if (!token) {
+    console.error('No token provided');
+    return next(new Error('Authentication error: No token provided'));
+  }
+
+  try {
+    const user = await verifyToken(token);
+    
+    if (!user) {
+      console.error('Token verification failed');
+      return next(new Error('Authentication error: Invalid token'));
+    }
+
+    // Attach user to socket for later use
+    socket.user = user;
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error.message);
+    next(new Error('Authentication error'));
+  }
+});
+
+// Handle socket connections
+io.on('connection', (socket) => {
+  const user = socket.user;
+  
+  if (!user) {
+    console.error('No user attached to socket');
+    socket.disconnect();
+    return;
+  }
+
+  console.log(`[connection] User connected: ${user.name} (ID: ${user.id}, Socket: ${socket.id})`);
+  console.log(`[connection] Total users before add: ${onlineUsers.size}`);
+
+  // Add user to online users map
+  onlineUsers.set(socket.id, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    picture: user.picture,
+    picture_url: user.picture_url,
+    role: user.roles?.[0]?.title || null,
+    user_type: user.user_type_title || null,
+  });
+
+  console.log(`[connection] Total users after add: ${onlineUsers.size}`);
+
+  // Get all online users except current user
+  const otherUsers = getOnlineUsers(socket.id);
+  console.log(`[connection] Other users count for ${user.name}: ${otherUsers.length}`);
+
+  // Send connection confirmation with online users list
+  socket.emit('connected', {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      picture: user.picture,
+      picture_url: user.picture_url,
+      role: user.roles?.[0]?.title || null,
+      user_type: user.user_type_title || null,
+    },
+    onlineUsers: otherUsers,
+  });
+
+  // Broadcast updated online users list to all clients
+  broadcastOnlineUsers();
+
+  // Handle ping (keep-alive)
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+
+  // Handle request for current online users
+  socket.on('get_online_users', () => {
+    const otherUsers = getOnlineUsers(socket.id);
+    socket.emit('online_users', otherUsers);
+    console.log(`[get_online_users] Sent ${otherUsers.length} online users to ${user.name} (ID: ${user.id})`);
+    console.log(`[get_online_users] Total online users in map: ${onlineUsers.size}`);
+    console.log(`[get_online_users] Users sent:`, otherUsers.map(u => ({ id: u.id, name: u.name })));
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', (reason) => {
+    console.log(`User disconnected: ${user.name} (ID: ${user.id}, Socket: ${socket.id}, Reason: ${reason})`);
+    
+    // Remove user from online users map
+    onlineUsers.delete(socket.id);
+    
+    // Broadcast updated list to remaining clients
+    broadcastOnlineUsers();
+  });
+});
 
 // HTTP/HTTPS endpoint for health check
 httpServer.on('request', (req, res) => {
@@ -62,10 +238,26 @@ httpServer.on('request', (req, res) => {
 });
 
 // Start server
-httpServer.listen(PORT, '0.0.0.0', () => { // Explicitly bind to 0.0.0.0
+httpServer.listen(PORT, '0.0.0.0', () => {
   const protocol = IS_PRODUCTION ? 'https' : 'http';
   console.log(`🚀 Socket.IO server running on ${protocol}://0.0.0.0:${PORT}`);
   console.log(`✅ Health check available at ${protocol}://techinnsolutions.net:${PORT}/`);
+  console.log(`📡 Waiting for connections...`);
 });
 
-// ... [Keep your existing socket connection logic and graceful shutdown] ...
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  httpServer.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
