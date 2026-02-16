@@ -48,7 +48,7 @@ const WhosOnlineButton = ({ onClick }) => {
     <button
       onClick={onClick}
       className="fixed bottom-4 z-[9999] flex items-center gap-2 bg-primary text-primary-foreground px-4 py-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-      style={{ left: '50px' }}
+      style={{ right: '50px' }}
       title="Who's Online"
     >
       <div className="relative">

@@ -269,21 +269,33 @@ io.on('connection', (socket) => {
 
   // Handle chat message
   socket.on('chat_message', async (data) => {
-    const { conversation_id, message } = data;
+    const { conversation_id, message, attachment_path, attachment_name, attachment_type, attachment_size, google_drive_file_id } = data;
 
-    if (!conversation_id || !message || !message.trim()) {
+    if (!conversation_id || (!message && !attachment_path)) {
       socket.emit('chat_error', { message: 'Invalid message data' });
       return;
     }
 
     try {
+      // Prepare message data
+      const messageData = {
+        conversation_id,
+        message: message ? message.trim() : '',
+      };
+
+      // Add attachment data if present
+      if (attachment_path) {
+        messageData.attachment_path = attachment_path;
+        messageData.attachment_name = attachment_name;
+        messageData.attachment_type = attachment_type;
+        messageData.attachment_size = attachment_size;
+        messageData.google_drive_file_id = google_drive_file_id;
+      }
+
       // Save message to database via API
       const response = await axios.post(
         `${LARAVEL_API_URL}/chat/messages`,
-        {
-          conversation_id,
-          message: message.trim(),
-        },
+        messageData,
         {
           headers: {
             'Authorization': `Bearer ${socket.handshake.auth.token}`,

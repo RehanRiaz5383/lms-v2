@@ -5,14 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Conversation;
 use App\Models\ChatMessage;
 use App\Models\Notification;
+use App\Models\User;
+use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class ChatController extends ApiController
 {
+    use UploadsToGoogleDrive;
     /**
      * Get or create a conversation with a user (or self for notes)
      */
@@ -217,6 +221,11 @@ class ChatController extends ApiController
                         'picture_url' => $message->sender->picture_url,
                     ],
                     'message' => $message->message,
+                    'attachment_path' => $message->attachment_path,
+                    'attachment_name' => $message->attachment_name,
+                    'attachment_type' => $message->attachment_type,
+                    'attachment_size' => $message->attachment_size,
+                    'google_drive_file_id' => $message->google_drive_file_id,
                     'is_read' => $message->is_read,
                     'read_at' => $message->read_at,
                     'is_own' => $message->sender_id === $currentUser->id,
@@ -248,8 +257,18 @@ class ChatController extends ApiController
         try {
             $validator = Validator::make($request->all(), [
                 'conversation_id' => 'required|exists:conversations,id',
-                'message' => 'required|string|max:5000',
+                'message' => 'nullable|string|max:5000',
+                'attachment_path' => 'nullable|string',
+                'attachment_name' => 'nullable|string|max:255',
+                'attachment_type' => 'nullable|string|max:100',
+                'attachment_size' => 'nullable|integer',
+                'google_drive_file_id' => 'nullable|string|max:255',
             ]);
+
+            // Message or attachment must be provided
+            if (empty($request->input('message')) && empty($request->input('attachment_path'))) {
+                return $this->validationError(['message' => ['Either message or attachment is required']]);
+            }
 
             if ($validator->fails()) {
                 return $this->validationError($validator->errors()->toArray());
@@ -271,12 +290,23 @@ class ChatController extends ApiController
             }
 
             // Create message
-            $message = ChatMessage::create([
+            $messageData = [
                 'conversation_id' => $conversation->id,
                 'sender_id' => $currentUser->id,
-                'message' => $request->input('message'),
+                'message' => $request->input('message') ?? '',
                 'is_read' => false,
-            ]);
+            ];
+
+            // Add attachment data if provided
+            if ($request->has('attachment_path')) {
+                $messageData['attachment_path'] = $request->input('attachment_path');
+                $messageData['attachment_name'] = $request->input('attachment_name');
+                $messageData['attachment_type'] = $request->input('attachment_type');
+                $messageData['attachment_size'] = $request->input('attachment_size');
+                $messageData['google_drive_file_id'] = $request->input('google_drive_file_id');
+            }
+
+            $message = ChatMessage::create($messageData);
 
             // Update conversation's last_message_at
             $conversation->update([
@@ -302,6 +332,11 @@ class ChatController extends ApiController
                         'picture_url' => $message->sender->picture_url,
                     ],
                     'message' => $message->message,
+                    'attachment_path' => $message->attachment_path,
+                    'attachment_name' => $message->attachment_name,
+                    'attachment_type' => $message->attachment_type,
+                    'attachment_size' => $message->attachment_size,
+                    'google_drive_file_id' => $message->google_drive_file_id,
                     'is_read' => $message->is_read,
                     'is_own' => true,
                     'created_at' => $message->created_at,
@@ -421,6 +456,189 @@ class ChatController extends ApiController
             return $this->success(['updated_count' => $updated], 'Messages marked as read');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to mark messages as read', 500);
+        }
+    }
+
+    /**
+     * Get users that can be messaged (for inbox "Send a new message" feature)
+     * - Students: Only admin, teachers, and CR users
+     * - Admin: All users
+     */
+    public function getMessageableUsers(Request $request): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+            
+            $query = User::with(['userType', 'roles'])
+                ->where('id', '!=', $currentUser->id) // Exclude current user
+                ->where('block', 0); // Only active users
+
+            // If current user is a student, only show admin, teachers, and CR users
+            if ($currentUser->isStudent() && !$currentUser->isAdmin()) {
+                $query->where(function ($q) {
+                    // Users with admin role (ID 1)
+                    $q->whereHas('roles', function ($roleQuery) {
+                        $roleQuery->where('user_types.id', 1)
+                            ->orWhere('user_types.title', 'Admin');
+                    })
+                    // Users with teacher role (ID 3) or CR
+                    ->orWhereHas('roles', function ($roleQuery) {
+                        $roleQuery->where('user_types.id', 3)
+                            ->orWhere('user_types.title', 'Teacher')
+                            ->orWhere('user_types.title', 'Class Representative (CR)')
+                            ->orWhere('user_types.title', 'CR');
+                    })
+                    // Fallback: check user_type for users without roles (admin = 1, teacher = 3)
+                    ->orWhere(function ($q2) {
+                        $q2->where('user_type', 1) // Admin
+                           ->whereDoesntHave('roles') // Only if no roles exist
+                           ->orWhere(function ($q3) {
+                               $q3->where('user_type', 3) // Teacher
+                                  ->whereDoesntHave('roles'); // Only if no roles exist
+                           });
+                    });
+                });
+            }
+            // For admin, show all users (no additional filtering)
+
+            $users = $query->orderBy('name', 'asc')->get();
+
+            // Format users
+            $formattedUsers = $users->map(function ($user) {
+                // Ensure roles are loaded
+                if (!$user->relationLoaded('roles')) {
+                    $user->load('roles');
+                }
+                
+                // Set user_type_title for backward compatibility
+                $user->setAttribute('user_type_title', $user->userType?->title ?? 'N/A');
+                
+                // Set roles_titles as array
+                $rolesTitles = $user->roles->pluck('title')->toArray();
+                if (empty($rolesTitles) && $user->userType) {
+                    $rolesTitles = [$user->userType->title];
+                }
+                $user->setAttribute('roles_titles', $rolesTitles);
+                
+                // Set picture_url if picture exists
+                if ($user->picture) {
+                    $user->setAttribute('picture_url', url('/load-storage/' . $user->picture));
+                }
+                
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'picture' => $user->picture,
+                    'picture_url' => $user->picture_url,
+                    'user_type' => $user->user_type,
+                    'user_type_title' => $user->user_type_title,
+                    'roles' => $user->roles->map(function ($role) {
+                        return [
+                            'id' => $role->id,
+                            'title' => $role->title,
+                        ];
+                    }),
+                    'roles_titles' => $rolesTitles,
+                ];
+            });
+
+            return $this->success($formattedUsers, 'Users retrieved successfully');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to get users', 500);
+        }
+    }
+
+    /**
+     * Upload file attachment for chat message
+     */
+    public function uploadAttachment(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|file|max:102400', // Max 100MB
+            ]);
+
+            if ($validator->fails()) {
+                return $this->validationError($validator->errors()->toArray());
+            }
+
+            $currentUser = $request->user();
+            $file = $request->file('file');
+
+            // Upload to Google Drive in chat_attachments folder
+            $attachmentPath = $this->uploadToGoogleDrive($file, 'chat_attachments');
+            
+            if (!$attachmentPath) {
+                return $this->error('Failed to upload file to Google Drive', 'Upload failed', 500);
+            }
+
+            // Get the file ID from the trait's static property
+            $fileId = static::$lastUploadedFileId;
+
+            return $this->success([
+                'attachment_path' => $attachmentPath,
+                'attachment_name' => $file->getClientOriginalName(),
+                'attachment_type' => $file->getMimeType(),
+                'attachment_size' => $file->getSize(),
+                'google_drive_file_id' => $fileId,
+            ], 'File uploaded successfully', 201);
+        } catch (\Exception $e) {
+            Log::error('Failed to upload chat attachment', [
+                'error' => $e->getMessage(),
+                'user_id' => $request->user()?->id,
+            ]);
+            return $this->error($e->getMessage(), 'Failed to upload file', 500);
+        }
+    }
+
+    /**
+     * Download chat attachment from Google Drive
+     */
+    public function downloadAttachment(Request $request, int $messageId): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+
+            // Get message and verify user has access
+            $message = ChatMessage::with('conversation')->find($messageId);
+            
+            if (!$message) {
+                return $this->notFound('Message not found');
+            }
+
+            // Verify user has access to this conversation
+            $conversation = $message->conversation;
+            if ($conversation->user_one_id !== $currentUser->id && $conversation->user_two_id !== $currentUser->id) {
+                return $this->forbidden('You do not have access to this message');
+            }
+
+            if (!$message->attachment_path || !$message->google_drive_file_id) {
+                return $this->notFound('Attachment not found');
+            }
+
+            // Get download URL from Google Drive
+            $downloadUrl = $this->getGoogleDriveDownloadUrl($message->google_drive_file_id, true);
+
+            if (!$downloadUrl) {
+                return $this->error('Failed to get download URL', 'Download failed', 500);
+            }
+
+            return $this->success([
+                'download_url' => $downloadUrl,
+                'file_name' => $message->attachment_name,
+                'file_type' => $message->attachment_type,
+                'file_size' => $message->attachment_size,
+            ], 'Download URL retrieved successfully');
+        } catch (\Exception $e) {
+            Log::error('Failed to get chat attachment download URL', [
+                'error' => $e->getMessage(),
+                'message_id' => $messageId,
+                'user_id' => $request->user()?->id,
+            ]);
+            return $this->error($e->getMessage(), 'Failed to get download URL', 500);
         }
     }
 }

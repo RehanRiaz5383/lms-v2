@@ -76,6 +76,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/messages', [ChatController::class, 'storeMessage']);
         Route::post('/conversations/{id}/read', [ChatController::class, 'markAsRead']);
         Route::post('/notify-offline-recipients', [ChatController::class, 'notifyOfflineRecipients']);
+        Route::get('/messageable-users', [ChatController::class, 'getMessageableUsers']);
+        Route::post('/upload-attachment', [ChatController::class, 'uploadAttachment']);
+        Route::get('/messages/{id}/download-attachment', [ChatController::class, 'downloadAttachment']);
     });
 
     // Dashboard

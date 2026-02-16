@@ -4,9 +4,68 @@ import { useAppSelector } from '../hooks/redux';
 import { chatService } from '../services/chatService';
 import { socketService } from '../services/socketService';
 import { getStorageUrl } from '../config/api';
-import { MessageSquare, Search, Send, Smile } from 'lucide-react';
+import { MessageSquare, Search, Send, Smile, UserPlus, Paperclip, X, Loader2, Download } from 'lucide-react';
 import { useToast } from '../components/ui/toast';
+import { Dialog } from '../components/ui/dialog';
+import { Button } from '../components/ui/button';
+import EmojiPicker from '../components/chat/EmojiPicker';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+
+const AttachmentLink = ({ message, isOwn }) => {
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    
+    setDownloading(true);
+    try {
+      const response = await chatService.downloadAttachment(message.id);
+      if (response.data?.download_url) {
+        // Open download URL in new tab
+        window.open(response.data.download_url, '_blank');
+      }
+    } catch (error) {
+      console.error('Failed to download attachment:', error);
+      alert('Failed to download file. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={downloading}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+        isOwn
+          ? 'bg-white/20 hover:bg-white/30 text-white'
+          : 'bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'
+      } ${downloading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      {downloading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Paperclip className="h-4 w-4" />
+      )}
+      <span className="text-sm font-medium truncate max-w-[200px]">
+        {message.attachment_name || 'Attachment'}
+      </span>
+      {message.attachment_size && (
+        <span className="text-xs opacity-75">
+          ({formatFileSize(message.attachment_size)})
+        </span>
+      )}
+      <Download className="h-4 w-4 ml-auto" />
+    </button>
+  );
+};
 
 const Inbox = () => {
   const { conversationId: urlConversationId } = useParams();
@@ -20,11 +79,45 @@ const Inbox = () => {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
+  const conversationsLoadedRef = useRef(false);
+  const emojiPickerRef = useRef(null);
+  const fileInputRef = useRef(null);
   const { error: showError, success: showSuccess } = useToast();
+  
+  // Admin-only: Send message to any user
+  const [showUserSelectDialog, setShowUserSelectDialog] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // Check if user is admin
+  const isAdmin = () => {
+    if (!currentUser) return false;
+    // Check roles array (primary method)
+    if (currentUser.roles && Array.isArray(currentUser.roles)) {
+      return currentUser.roles.some(role => role.title?.toLowerCase() === 'admin');
+    }
+    // Fallback to user_type (backward compatibility)
+    return currentUser.user_type === 1 || currentUser.user_type_title?.toLowerCase() === 'admin';
+  };
+
+  // Check if user is student
+  const isStudent = () => {
+    if (!currentUser) return false;
+    // Check roles array (primary method)
+    if (currentUser.roles && Array.isArray(currentUser.roles)) {
+      return currentUser.roles.some(role => role.title?.toLowerCase() === 'student');
+    }
+    // Fallback to user_type (backward compatibility)
+    return currentUser.user_type === 2 || currentUser.user_type_title?.toLowerCase() === 'student';
+  };
 
   // Load conversations
   const loadConversations = async () => {
@@ -42,8 +135,107 @@ const Inbox = () => {
     }
   };
 
+  // Load all users that can be messaged
+  const loadAllUsers = async () => {
+    try {
+      setUsersLoading(true);
+      // Use the chat-specific endpoint that handles role-based filtering on the backend
+      const response = await chatService.getMessageableUsers();
+      if (response.data) {
+        setAllUsers(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      showError('Failed to load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  // Handle user selection from dialog
+  const handleUserSelect = async (selectedUser) => {
+    try {
+      // Close dialog immediately for better UX
+      setShowUserSelectDialog(false);
+      setUserSearchQuery('');
+      
+      // Format conversation immediately with user data (optimistic update)
+      const tempConversation = {
+        id: null, // Will be set after API call
+        is_self_chat: false,
+        other_user: {
+          id: selectedUser.id,
+          name: selectedUser.name,
+          email: selectedUser.email,
+          picture: selectedUser.picture,
+          picture_url: selectedUser.picture_url,
+        },
+        last_message_at: null,
+        unread_count: 0,
+      };
+      
+      // Show conversation immediately (optimistic)
+      setSelectedConversation(tempConversation);
+      setMessages([]); // Clear previous messages
+      navigate(`/dashboard/inbox`, { replace: true }); // Navigate first
+      
+      // Create or get conversation with selected user (in background)
+      const response = await chatService.getOrCreateConversation(selectedUser.id);
+      if (response.data) {
+        // The response structure is: { data: { conversation: {...} } }
+        const conversation = response.data.conversation || response.data;
+        
+        // Format conversation to match the structure from getConversations
+        const formattedConversation = {
+          id: conversation.id,
+          is_self_chat: conversation.is_self_chat || false,
+          other_user: conversation.other_user || tempConversation.other_user,
+          last_message_at: conversation.last_message_at || null,
+          unread_count: 0,
+        };
+        
+        // Check if conversation already exists in list
+        const existingIndex = conversations.findIndex((c) => c.id === conversation.id);
+        if (existingIndex >= 0) {
+          // Update existing conversation
+          setConversations((prev) => {
+            const updated = [...prev];
+            updated[existingIndex] = formattedConversation;
+            return updated;
+          });
+        } else {
+          // Add new conversation to the beginning of the list
+          setConversations((prev) => [formattedConversation, ...prev]);
+        }
+        
+        // Update selected conversation with real data and load messages
+        setSelectedConversation(formattedConversation);
+        navigate(`/dashboard/inbox/${conversation.id}`, { replace: true });
+        // Load messages (this will happen in background)
+        loadMessages(conversation.id);
+      }
+    } catch (err) {
+      console.error('Failed to open conversation:', err);
+      showError('Failed to open conversation');
+      // Reset on error
+      setSelectedConversation(null);
+    }
+  };
+
+  // Filter users based on search query
+  const filteredUsers = allUsers.filter((user) => {
+    if (!userSearchQuery.trim()) return true;
+    const query = userSearchQuery.toLowerCase();
+    return (
+      user.name?.toLowerCase().includes(query) ||
+      user.email?.toLowerCase().includes(query) ||
+      user.first_name?.toLowerCase().includes(query) ||
+      user.last_name?.toLowerCase().includes(query)
+    );
+  });
+
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !conversationsLoadedRef.current) {
       // Connect socket if not already connected
       const status = socketService.getConnectionStatus();
       if (!status.connected) {
@@ -51,50 +243,80 @@ const Inbox = () => {
           console.error('Failed to connect socket:', err);
         });
       }
+      // Only load conversations once on initial mount
+      conversationsLoadedRef.current = true;
       loadConversations();
     }
-  }, [currentUser, showError]);
+    // Reset flag when user changes
+    if (!currentUser) {
+      conversationsLoadedRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
-  // Handle URL-based conversation selection
+  // Handle URL-based conversation selection (only when URL changes, not when conversations update)
   useEffect(() => {
     if (conversations.length === 0) return;
 
     const userId = searchParams.get('user');
     const convId = urlConversationId || searchParams.get('conversation');
 
+    // Only process if we have a URL parameter and it's different from current selection
     if (convId) {
-      const conversation = conversations.find((c) => c.id === parseInt(convId));
-      if (conversation && conversation.id !== selectedConversation?.id) {
-        setSelectedConversation(conversation);
-        loadMessages(conversation.id);
+      const conversationId = parseInt(convId);
+      // Only load if it's a different conversation than currently selected
+      if (selectedConversation?.id !== conversationId) {
+        const conversation = conversations.find((c) => c.id === conversationId);
+        if (conversation) {
+          setSelectedConversation(conversation);
+          loadMessages(conversation.id);
+        }
       }
     } else if (userId) {
+      const userIdInt = parseInt(userId);
       const conversation = conversations.find(
-        (c) => c.other_user?.id === parseInt(userId)
+        (c) => c.other_user?.id === userIdInt
       );
       if (conversation) {
-        setSelectedConversation(conversation);
-        loadMessages(conversation.id);
-        // Update URL to use conversation ID
-        navigate(`/dashboard/inbox/${conversation.id}`, { replace: true });
+        // Only load if it's a different conversation than currently selected
+        if (selectedConversation?.id !== conversation.id) {
+          setSelectedConversation(conversation);
+          loadMessages(conversation.id);
+          // Update URL to use conversation ID
+          navigate(`/dashboard/inbox/${conversation.id}`, { replace: true });
+        }
       } else {
         // Conversation doesn't exist yet, create it
         const createAndOpenConversation = async () => {
           try {
-            const response = await chatService.getOrCreateConversation(parseInt(userId));
-            const newConversation = response.data.conversation;
-            // Reload conversations to get the new one
-            const convsResponse = await chatService.getConversations();
-            if (convsResponse.data) {
-              setConversations(convsResponse.data);
-              const foundConv = convsResponse.data.find(
-                (c) => c.id === newConversation.id
-              );
-              if (foundConv) {
-                setSelectedConversation(foundConv);
-                loadMessages(foundConv.id);
-                navigate(`/dashboard/inbox/${foundConv.id}`, { replace: true });
+            const response = await chatService.getOrCreateConversation(userIdInt);
+            if (response.data) {
+              const newConversation = response.data.conversation || response.data;
+              
+              // Format conversation to match structure
+              const formattedConversation = {
+                id: newConversation.id,
+                is_self_chat: newConversation.is_self_chat || false,
+                other_user: newConversation.other_user || null,
+                last_message_at: newConversation.last_message_at || null,
+                unread_count: 0,
+              };
+              
+              // Add to conversations list if not exists
+              const existingIndex = conversations.findIndex((c) => c.id === formattedConversation.id);
+              if (existingIndex >= 0) {
+                setConversations((prev) => {
+                  const updated = [...prev];
+                  updated[existingIndex] = formattedConversation;
+                  return updated;
+                });
+              } else {
+                setConversations((prev) => [formattedConversation, ...prev]);
               }
+              
+              setSelectedConversation(formattedConversation);
+              loadMessages(formattedConversation.id);
+              navigate(`/dashboard/inbox/${formattedConversation.id}`, { replace: true });
             }
           } catch (err) {
             console.error('Failed to create conversation:', err);
@@ -104,7 +326,9 @@ const Inbox = () => {
         createAndOpenConversation();
       }
     }
-  }, [urlConversationId, searchParams, conversations, navigate, selectedConversation, showError]);
+    // Only depend on URL params, not on conversations or selectedConversation to avoid unnecessary re-runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlConversationId, searchParams]);
 
   // Load messages for selected conversation
   const loadMessages = async (convId) => {
@@ -142,14 +366,19 @@ const Inbox = () => {
 
   // Handle conversation selection
   const handleConversationClick = (conversation) => {
-    setSelectedConversation(conversation);
-    loadMessages(conversation.id);
-    // Update URL
-    navigate(`/dashboard/inbox/${conversation.id}`, { replace: true });
-    // Refresh conversations to update unread counts after marking as read
-    setTimeout(() => {
-      loadConversations();
-    }, 500);
+    // Only update if it's a different conversation
+    if (selectedConversation?.id !== conversation.id) {
+      setSelectedConversation(conversation);
+      loadMessages(conversation.id);
+      // Update URL
+      navigate(`/dashboard/inbox/${conversation.id}`, { replace: true });
+      // Update unread count for this conversation locally (no need to reload all conversations)
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === conversation.id ? { ...conv, unread_count: 0 } : conv
+        )
+      );
+    }
   };
 
   // Listen for new messages
@@ -201,7 +430,7 @@ const Inbox = () => {
         }, 150);
       }
 
-      // Update conversations list to show latest message and unread count
+      // Update conversations list to show latest message and unread count (optimistic update)
       setConversations((prev) =>
         prev.map((conv) => {
           if (conv.id === newMessage.conversation_id) {
@@ -224,15 +453,15 @@ const Inbox = () => {
         })
       );
 
-      // Refresh conversations list from backend to get accurate unread counts
-      // This ensures consistency with backend state (debounced to avoid too many calls)
+      // Only refresh conversations list from backend if message is from another user
+      // Use debounce to avoid excessive API calls (increased timeout to reduce calls)
       if (newMessage.sender_id !== currentUser.id) {
         if (refreshTimeoutRef.current) {
           clearTimeout(refreshTimeoutRef.current);
         }
         refreshTimeoutRef.current = setTimeout(() => {
           loadConversations();
-        }, 1000);
+        }, 2000); // Increased from 1000ms to 2000ms to reduce API calls
       }
     });
 
@@ -269,12 +498,50 @@ const Inbox = () => {
     return unsubscribe;
   }, [selectedConversation, currentUser?.id]);
 
+  // Handle file select
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file size (100MB max)
+    if (file.size > 100 * 1024 * 1024) {
+      showError('File size must be less than 100MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const response = await chatService.uploadAttachment(file);
+      setAttachment({
+        attachment_path: response.data.attachment_path,
+        attachment_name: response.data.attachment_name,
+        attachment_type: response.data.attachment_type,
+        attachment_size: response.data.attachment_size,
+        google_drive_file_id: response.data.google_drive_file_id,
+      });
+    } catch (error) {
+      showError(error.message || 'Failed to upload file');
+    } finally {
+      setUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveAttachment = () => {
+    setAttachment(null);
+  };
+
   // Handle send message
   const handleSendMessage = async () => {
-    if (!message.trim() || sending || !selectedConversation) return;
+    if ((!message.trim() && !attachment) || sending || uploading || !selectedConversation) return;
 
     const messageText = message.trim();
+    const attachmentData = attachment;
     setMessage('');
+    setAttachment(null);
 
     // Optimistically add message to UI immediately
     const tempMessage = {
@@ -289,6 +556,11 @@ const Inbox = () => {
         picture_url: currentUser.picture_url,
       },
       message: messageText,
+      attachment_path: attachmentData?.attachment_path,
+      attachment_name: attachmentData?.attachment_name,
+      attachment_type: attachmentData?.attachment_type,
+      attachment_size: attachmentData?.attachment_size,
+      google_drive_file_id: attachmentData?.google_drive_file_id,
       is_read: false,
       is_own: true,
       created_at: new Date().toISOString(),
@@ -301,12 +573,20 @@ const Inbox = () => {
       setSending(true);
       const status = socketService.getConnectionStatus();
       if (status.connected && status.socket) {
-        status.socket.emit('chat_message', {
+        const messageData = {
           conversation_id: selectedConversation.id,
-          message: messageText,
-        });
+          message: messageText || '',
+        };
+        if (attachmentData) {
+          messageData.attachment_path = attachmentData.attachment_path;
+          messageData.attachment_name = attachmentData.attachment_name;
+          messageData.attachment_type = attachmentData.attachment_type;
+          messageData.attachment_size = attachmentData.attachment_size;
+          messageData.google_drive_file_id = attachmentData.google_drive_file_id;
+        }
+        status.socket.emit('chat_message', messageData);
       } else {
-        const response = await chatService.sendMessage(selectedConversation.id, messageText);
+        const response = await chatService.sendMessage(selectedConversation.id, messageText, attachmentData);
         // Replace temp message with real message
         if (response.data?.message) {
           setMessages((prev) =>
@@ -352,6 +632,33 @@ const Inbox = () => {
       }
     }
   };
+
+  // Handle emoji selection
+  const handleEmojiSelect = (emoji) => {
+    setMessage((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        // Check if click is not on the emoji button
+        const emojiButton = event.target.closest('button[title="Add emoji"]');
+        if (!emojiButton) {
+          setShowEmojiPicker(false);
+        }
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showEmojiPicker]);
 
   // Filter conversations by search
   const filteredConversations = conversations.filter((conv) => {
@@ -401,7 +708,20 @@ const Inbox = () => {
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-xl font-semibold mb-3">Inbox</h1>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-xl font-semibold">Inbox</h1>
+            <Button
+              onClick={() => {
+                setShowUserSelectDialog(true);
+                loadAllUsers();
+              }}
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <UserPlus className="h-4 w-4" />
+              Send a new message
+            </Button>
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -586,12 +906,17 @@ const Inbox = () => {
                               className={`rounded-2xl px-4 py-2 ${
                                 isOwn
                                   ? 'bg-primary text-primary-foreground rounded-br-sm'
-                                  : 'bg-white text-gray-900 rounded-bl-sm border border-gray-200'
+                                  : 'bg-white text-gray-900 rounded-bl-sm border border-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700'
                               }`}
                             >
-                              <p className="text-sm whitespace-pre-wrap break-words">
-                                {msg.message}
-                              </p>
+                              {msg.message && (
+                                <p className="text-sm whitespace-pre-wrap break-words mb-2">
+                                  {msg.message}
+                                </p>
+                              )}
+                              {msg.attachment_path && (
+                                <AttachmentLink message={msg} isOwn={isOwn} />
+                              )}
                             </div>
                             <span className="text-xs text-gray-400 mt-1 px-2">
                               {formatMessageTime(msg.created_at)}
@@ -610,8 +935,59 @@ const Inbox = () => {
             </div>
 
             {/* Message Input */}
-            <div className="bg-white border-t border-gray-200 p-4">
+            <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 relative">
+              {showEmojiPicker && (
+                <div ref={emojiPickerRef} className="absolute bottom-full right-4 mb-2 z-50">
+                  <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
+                </div>
+              )}
+              {attachment && (
+                <div className="mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Paperclip className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                      {attachment.attachment_name}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                      ({(attachment.attachment_size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleRemoveAttachment}
+                    className="p-1 text-gray-500 hover:text-red-500 transition-colors"
+                    title="Remove attachment"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               <div className="flex items-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  disabled={uploading || sending}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || sending}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Attach file"
+                >
+                  {uploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Paperclip className="h-5 w-5" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  title="Add emoji"
+                >
+                  <Smile className="h-5 w-5" />
+                </button>
                 <textarea
                   value={message}
                   onChange={handleInputChange}
@@ -619,11 +995,12 @@ const Inbox = () => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSendMessage();
+                      setShowEmojiPicker(false);
                     }
                   }}
                   placeholder="Type a message..."
                   rows={1}
-                  className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+                  className="flex-1 resize-none border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                   style={{ minHeight: '44px', maxHeight: '120px' }}
                   onInput={(e) => {
                     e.target.style.height = 'auto';
@@ -631,8 +1008,11 @@ const Inbox = () => {
                   }}
                 />
                 <button
-                  onClick={handleSendMessage}
-                  disabled={!message.trim() || sending}
+                  onClick={() => {
+                    handleSendMessage();
+                    setShowEmojiPicker(false);
+                  }}
+                  disabled={(!message.trim() && !attachment) || sending || uploading}
                   className="p-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {sending ? (
@@ -653,6 +1033,87 @@ const Inbox = () => {
           </div>
         )}
       </div>
+
+      {/* User Selection Dialog */}
+      <Dialog
+          isOpen={showUserSelectDialog}
+          onClose={() => {
+            setShowUserSelectDialog(false);
+            setUserSearchQuery('');
+          }}
+          title="Select User to Send Message"
+          size="md"
+        >
+          <div className="space-y-4">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
+                autoFocus
+              />
+            </div>
+
+            {/* Users List */}
+            <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg dark:border-gray-700">
+              {usersLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  {userSearchQuery ? 'No users found' : 'No users available'}
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {filteredUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      onClick={() => handleUserSelect(user)}
+                      className="p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center gap-3"
+                    >
+                      <div className="relative">
+                        {user.picture ? (
+                          <img
+                            src={getStorageUrl(user.picture)}
+                            alt={user.name}
+                            className="h-10 w-10 rounded-full object-cover"
+                            onError={(e) => {
+                              e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                user.name || 'User'
+                              )}&background=6366f1&color=fff`;
+                            }}
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-white font-semibold">
+                            {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                          {user.name || 'Unknown'}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          {user.email}
+                        </p>
+                        {user.roles_titles && user.roles_titles.length > 0 && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            {Array.isArray(user.roles_titles) ? user.roles_titles.join(', ') : user.roles_titles}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Dialog>
     </div>
   );
 };

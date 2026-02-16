@@ -11,6 +11,11 @@ class ChatMessage extends Model
         'conversation_id',
         'sender_id',
         'message',
+        'attachment_path',
+        'attachment_name',
+        'attachment_type',
+        'attachment_size',
+        'google_drive_file_id',
         'is_read',
         'read_at',
     ];

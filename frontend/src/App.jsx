@@ -35,7 +35,6 @@ import InternalIntegrations from './pages/InternalIntegrations';
 import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
 import Inbox from './pages/Inbox';
 import DashboardLayout from './components/layout/DashboardLayout';
-import PWAInstallPrompt from './components/PWAInstallPrompt';
 import WhosOnline from './components/chat/WhosOnline';
 import ChatManager from './components/chat/ChatManager';
 import ChatNotificationBubble from './components/chat/ChatNotificationBubble';
@@ -280,7 +279,6 @@ function App() {
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
-          <PWAInstallPrompt />
           <WhosOnline />
           <ChatManager />
           <ChatNotificationBubble />

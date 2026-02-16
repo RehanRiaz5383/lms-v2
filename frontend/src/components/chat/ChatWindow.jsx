@@ -93,8 +93,8 @@ const ChatWindow = ({ conversation, otherUser, onClose, onMinimize, isMinimized:
     return unsubscribe;
   }, [conversation?.id, currentUser?.id]);
 
-  const handleSendMessage = async (message) => {
-    if (!message.trim() || sending) return;
+  const handleSendMessage = async (message, attachment = null) => {
+    if ((!message.trim() && !attachment) || sending) return;
 
     try {
       setSending(true);
@@ -102,13 +102,21 @@ const ChatWindow = ({ conversation, otherUser, onClose, onMinimize, isMinimized:
       // Send via socket
       const status = socketService.getConnectionStatus();
       if (status.connected && status.socket) {
-        status.socket.emit('chat_message', {
+        const messageData = {
           conversation_id: conversation.id,
-          message: message.trim(),
-        });
+          message: message.trim() || '',
+        };
+        if (attachment) {
+          messageData.attachment_path = attachment.attachment_path;
+          messageData.attachment_name = attachment.attachment_name;
+          messageData.attachment_type = attachment.attachment_type;
+          messageData.attachment_size = attachment.attachment_size;
+          messageData.google_drive_file_id = attachment.google_drive_file_id;
+        }
+        status.socket.emit('chat_message', messageData);
       } else {
         // Fallback to API if socket not connected
-        await chatService.sendMessage(conversation.id, message);
+        await chatService.sendMessage(conversation.id, message, attachment);
       }
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -215,7 +223,7 @@ const ChatWindow = ({ conversation, otherUser, onClose, onMinimize, isMinimized:
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 bg-gray-50">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-2">
