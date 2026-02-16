@@ -36,6 +36,8 @@ import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import WhosOnline from './components/chat/WhosOnline';
+import ChatManager from './components/chat/ChatManager';
+import ChatNotificationBubble from './components/chat/ChatNotificationBubble';
 import { useUserStatusPolling } from './hooks/useUserStatusPolling';
 
 // Inner component to handle message listener
@@ -269,6 +271,8 @@ function App() {
           </Routes>
           <PWAInstallPrompt />
           <WhosOnline />
+          <ChatManager />
+          <ChatNotificationBubble />
         </BrowserRouter>
       </ToastProvider>
     </Provider>

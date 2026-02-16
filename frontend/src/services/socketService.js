@@ -125,6 +125,21 @@ class SocketService {
         this.emit('online_users_updated', users);
       });
 
+      // Handle new chat message
+      this.socket.on('new_message', (message) => {
+        this.emit('new_message', message);
+      });
+
+      // Handle user typing indicator
+      this.socket.on('user_typing', (data) => {
+        this.emit('user_typing', data);
+      });
+
+      // Handle chat errors
+      this.socket.on('chat_error', (error) => {
+        this.emit('chat_error', error);
+      });
+
       // Handle pong
       this.socket.on('pong', () => {
         // Keep-alive response

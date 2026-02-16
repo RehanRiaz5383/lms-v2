@@ -108,7 +108,9 @@ const WhosOnlineSidebar = ({ isOpen, onClose }) => {
   }, [isOpen, currentUserFromStore?.id]); // Only depend on user ID to avoid unnecessary re-renders
 
   const handleUserClick = (user) => {
-    info('Area under construction');
+    // Open chat window for this user
+    window.dispatchEvent(new CustomEvent('openChat', { detail: { userId: user.id } }));
+    onClose(); // Close the sidebar
   };
 
   if (!isOpen) return null;
@@ -161,7 +163,11 @@ const WhosOnlineSidebar = ({ isOpen, onClose }) => {
                 You
               </h3>
               <div
-                onClick={() => handleUserClick(currentUser || currentUserFromStore)}
+                onClick={() => {
+                  // Open self-chat (notes)
+                  window.dispatchEvent(new CustomEvent('openChat', { detail: { userId: null } }));
+                  onClose();
+                }}
                 className="flex items-center gap-3 p-3 bg-primary/5 rounded-lg cursor-pointer hover:bg-primary/10 transition-colors"
               >
                 <div className="relative">

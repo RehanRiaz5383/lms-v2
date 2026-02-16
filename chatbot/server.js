@@ -50,6 +50,9 @@ const io = new Server(httpServer, {
 // Store online users: socketId -> user data
 const onlineUsers = new Map();
 
+// Store typing users: conversationId -> Set of user IDs who are typing
+const typingUsers = new Map();
+
 /**
  * Verify token with Laravel backend
  */
@@ -211,6 +214,121 @@ io.on('connection', (socket) => {
     console.log(`[get_online_users] Sent ${otherUsers.length} online users to ${user.name} (ID: ${user.id})`);
     console.log(`[get_online_users] Total online users in map: ${onlineUsers.size}`);
     console.log(`[get_online_users] Users sent:`, otherUsers.map(u => ({ id: u.id, name: u.name })));
+  });
+
+  // Chat message handlers
+
+  // Handle typing indicator
+  socket.on('typing_start', (data) => {
+    const { conversation_id } = data;
+    if (!conversation_id) return;
+
+    if (!typingUsers.has(conversation_id)) {
+      typingUsers.set(conversation_id, new Set());
+    }
+    typingUsers.get(conversation_id).add(user.id);
+
+    // Broadcast typing status to other users in the conversation
+    io.sockets.sockets.forEach((otherSocket) => {
+      const otherUser = onlineUsers.get(otherSocket.id);
+      if (otherUser && otherUser.id !== user.id) {
+        otherSocket.emit('user_typing', {
+          conversation_id,
+          user_id: user.id,
+          user_name: user.name,
+          is_typing: true,
+        });
+      }
+    });
+  });
+
+  socket.on('typing_stop', (data) => {
+    const { conversation_id } = data;
+    if (!conversation_id) return;
+
+    if (typingUsers.has(conversation_id)) {
+      typingUsers.get(conversation_id).delete(user.id);
+      if (typingUsers.get(conversation_id).size === 0) {
+        typingUsers.delete(conversation_id);
+      }
+    }
+
+    // Broadcast typing stop to other users
+    io.sockets.sockets.forEach((otherSocket) => {
+      const otherUser = onlineUsers.get(otherSocket.id);
+      if (otherUser && otherUser.id !== user.id) {
+        otherSocket.emit('user_typing', {
+          conversation_id,
+          user_id: user.id,
+          user_name: user.name,
+          is_typing: false,
+        });
+      }
+    });
+  });
+
+  // Handle chat message
+  socket.on('chat_message', async (data) => {
+    const { conversation_id, message } = data;
+
+    if (!conversation_id || !message || !message.trim()) {
+      socket.emit('chat_error', { message: 'Invalid message data' });
+      return;
+    }
+
+    try {
+      // Save message to database via API
+      const response = await axios.post(
+        `${LARAVEL_API_URL}/chat/messages`,
+        {
+          conversation_id,
+          message: message.trim(),
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${socket.handshake.auth.token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      const savedMessage = response.data.data.message;
+      const conversation = response.data.data.conversation;
+
+      // Get participant IDs from conversation
+      const participantIds = [conversation.user_one_id];
+      if (conversation.user_two_id) {
+        participantIds.push(conversation.user_two_id);
+      }
+
+      // Send message only to participants who are online
+      let sentCount = 0;
+      io.sockets.sockets.forEach((otherSocket) => {
+        const otherUser = onlineUsers.get(otherSocket.id);
+        if (otherUser && participantIds.includes(otherUser.id)) {
+          otherSocket.emit('new_message', savedMessage);
+          sentCount++;
+          console.log(`[chat_message] Sent to ${otherUser.name} (ID: ${otherUser.id})`);
+        }
+      });
+
+      // Also send to sender (in case they have multiple tabs/devices)
+      socket.emit('new_message', savedMessage);
+
+      console.log(`[chat_message] Message sent in conversation ${conversation_id} by ${user.name} to ${sentCount} participant(s): ${participantIds.join(', ')}`);
+    } catch (error) {
+      console.error('[chat_message] Error saving message:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      socket.emit('chat_error', {
+        message: 'Failed to send message',
+        error: error.message,
+      });
+    }
   });
 
   // Handle disconnect

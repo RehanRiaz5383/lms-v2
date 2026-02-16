@@ -24,6 +24,7 @@ use App\Http\Controllers\ClassParticipationController;
 use App\Http\Controllers\PushNotificationController;
 use App\Http\Controllers\GoogleDriveTestController;
 use App\Http\Controllers\SocketController;
+use App\Http\Controllers\ChatController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -64,6 +65,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('socket')->group(function () {
         Route::get('/config', [SocketController::class, 'getConfig']);
         Route::get('/verify-token', [SocketController::class, 'verifyToken']);
+    });
+
+    // Chat routes
+    Route::prefix('chat')->group(function () {
+        Route::get('/conversations', [ChatController::class, 'getConversations']);
+        Route::post('/conversations', [ChatController::class, 'getOrCreateConversation']);
+        Route::get('/conversations/{id}/messages', [ChatController::class, 'getMessages']);
+        Route::post('/messages', [ChatController::class, 'storeMessage']);
+        Route::post('/conversations/{id}/read', [ChatController::class, 'markAsRead']);
     });
 
     // Dashboard
