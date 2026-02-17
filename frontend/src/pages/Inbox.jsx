@@ -540,6 +540,11 @@ const Inbox = () => {
     }
   };
 
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    await handleFileUpload(file);
+  };
+
   const handleRemoveAttachment = () => {
     setAttachment(null);
   };
