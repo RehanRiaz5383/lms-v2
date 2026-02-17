@@ -10,6 +10,7 @@ import { Dialog } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
 import EmojiPicker from '../components/chat/EmojiPicker';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import { playNotificationSound } from '../utils/notificationSound';
 
 const AttachmentLink = ({ message, isOwn }) => {
   const [downloading, setDownloading] = useState(false);
@@ -428,6 +429,14 @@ const Inbox = () => {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' });
           }
         }, 150);
+      }
+
+      // Play notification sound if message is not from current user and not from selected conversation
+      if (
+        newMessage.sender_id !== currentUser.id &&
+        (!selectedConversation || newMessage.conversation_id !== selectedConversation.id)
+      ) {
+        playNotificationSound();
       }
 
       // Update conversations list to show latest message and unread count (optimistic update)

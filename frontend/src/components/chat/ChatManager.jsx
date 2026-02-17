@@ -3,6 +3,7 @@ import { useAppSelector } from '../../hooks/redux';
 import { chatService } from '../../services/chatService';
 import { socketService } from '../../services/socketService';
 import ChatWindow from './ChatWindow';
+import { playNotificationSound } from '../../utils/notificationSound';
 
 const ChatManager = () => {
   const { user: currentUser } = useAppSelector((state) => state.auth);
@@ -142,6 +143,16 @@ const ChatManager = () => {
         return;
       }
 
+      // Play notification sound if message is not from current user and not from any open chat window
+      if (message.sender_id !== currentUser.id) {
+        const isFromOpenChat = openChats.some(
+          (chat) => chat.conversation.id === message.conversation_id && !chat.minimized
+        );
+        if (!isFromOpenChat) {
+          playNotificationSound();
+        }
+      }
+
       setOpenChats((prev) =>
         prev.map((chat) => {
           if (chat.conversation.id === message.conversation_id) {
@@ -159,7 +170,7 @@ const ChatManager = () => {
     });
 
     return unsubscribe;
-  }, [currentUser]);
+  }, [currentUser, openChats]);
 
   // Position chat windows (stack them)
   const getChatPosition = (index) => {
