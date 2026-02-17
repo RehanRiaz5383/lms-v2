@@ -10,9 +10,11 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const dropZoneRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -62,8 +64,7 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
     }
   };
 
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = async (file) => {
     if (!file) return;
 
     // Validate file size (100MB max)
@@ -93,6 +94,11 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
     }
   };
 
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    await handleFileUpload(file);
+  };
+
   const handleRemoveAttachment = () => {
     setAttachment(null);
   };
@@ -120,8 +126,54 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
     inputRef.current?.focus();
   };
 
+  // Drag and drop handlers
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!uploading && !sending) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragging to false if we're leaving the drop zone entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (uploading || sending) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      // Only handle the first file
+      await handleFileUpload(files[0]);
+    }
+  };
+
   return (
-    <div className="p-4 bg-white border-t border-gray-200 relative dark:bg-gray-800 dark:border-gray-700">
+    <div
+      ref={dropZoneRef}
+      className={`p-4 bg-white border-t border-gray-200 relative dark:bg-gray-800 dark:border-gray-700 ${
+        isDragging ? 'border-primary border-2 border-dashed bg-primary/5' : ''
+      }`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {showEmojiPicker && (
         <div className="absolute bottom-full right-4 mb-2">
           <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />

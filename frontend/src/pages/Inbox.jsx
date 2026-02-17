@@ -85,11 +85,13 @@ const Inbox = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef(null);
   const refreshTimeoutRef = useRef(null);
   const conversationsLoadedRef = useRef(false);
   const emojiPickerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const dropZoneRef = useRef(null);
   const { error: showError, success: showSuccess } = useToast();
   
   // Admin-only: Send message to any user
@@ -508,8 +510,7 @@ const Inbox = () => {
   }, [selectedConversation, currentUser?.id]);
 
   // Handle file select
-  const handleFileSelect = async (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = async (file) => {
     if (!file) return;
 
     // Validate file size (100MB max)
@@ -541,6 +542,43 @@ const Inbox = () => {
 
   const handleRemoveAttachment = () => {
     setAttachment(null);
+  };
+
+  // Drag and drop handlers
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!uploading && !sending) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragging to false if we're leaving the drop zone entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (uploading || sending) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      // Only handle the first file
+      await handleFileUpload(files[0]);
+    }
   };
 
   // Handle send message
@@ -944,7 +982,16 @@ const Inbox = () => {
             </div>
 
             {/* Message Input */}
-            <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 relative">
+            <div
+              ref={dropZoneRef}
+              className={`bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 relative ${
+                isDragging ? 'border-primary border-2 border-dashed bg-primary/5' : ''
+              }`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               {showEmojiPicker && (
                 <div ref={emojiPickerRef} className="absolute bottom-full right-4 mb-2 z-50">
                   <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
