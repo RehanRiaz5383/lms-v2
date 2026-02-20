@@ -186,6 +186,7 @@ class StudentPerformanceController extends ApiController
                         }
                         
                         // Build task details array
+                        $now = now()->setTimezone('Asia/Karachi');
                         foreach ($allTasks as $task) {
                             $taskId = $task->id;
                             $submittedTask = $submittedTasks->firstWhere('task_id', $taskId);
@@ -196,22 +197,43 @@ class StudentPerformanceController extends ApiController
                                 $taskTotalMarks = (float) $task->{$taskMarksColumn};
                             }
                             
+                            // Check if expiry_date has passed (only count past tasks in performance)
+                            $isPastTask = true;
+                            if (isset($task->expiry_date) && $task->expiry_date) {
+                                try {
+                                    $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')->endOfDay();
+                                    $isPastTask = $now->gt($expiryDate); // Only count if date has passed
+                                } catch (\Exception $e) {
+                                    // If date parsing fails, treat as past (include in calculation)
+                                    $isPastTask = true;
+                                }
+                            }
+                            
                             $obtainedMarks = null;
                             if ($submittedTask && $marksColumn) {
                                 $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : null;
                                 if ($obtainedMarks !== null) {
-                                    $totalMarksObtained += $obtainedMarks;
+                                    // Only add to totals if task date has passed
+                                    if ($isPastTask) {
+                                        $totalMarksObtained += $obtainedMarks;
+                                    }
                                 } else {
                                     // Treat pending/unmarked as 0
-                                    $totalMarksObtained += 0;
+                                    if ($isPastTask) {
+                                        $totalMarksObtained += 0;
+                                    }
                                 }
                             } else {
                                 // Task not submitted, treat as 0 marks
-                                $totalMarksObtained += 0;
+                                if ($isPastTask) {
+                                    $totalMarksObtained += 0;
+                                }
                             }
                             
-                            // Add to total possible marks for ALL tasks (not just submitted ones)
-                            $totalMarksPossible += $taskTotalMarks;
+                            // Only add to total possible marks if task date has passed (don't count future tasks)
+                            if ($isPastTask) {
+                                $totalMarksPossible += $taskTotalMarks;
+                            }
                             
                             // Get batch information for this task
                             $batchInfo = null;
@@ -408,10 +430,23 @@ class StudentPerformanceController extends ApiController
                             }
                         }
                         
+                        $now = now()->setTimezone('Asia/Karachi');
                         foreach ($allParticipations as $participation) {
                             $mark = $participationMarks->get($participation->id);
                             // Get total marks from participation record (not from mark record)
                             $totalMarks = (float)($participation->total_marks ?? 0);
+                            
+                            // Check if participation_date has passed (only count past participations in performance)
+                            $isPastParticipation = true;
+                            if (isset($participation->participation_date) && $participation->participation_date) {
+                                try {
+                                    $participationDate = \Carbon\Carbon::parse($participation->participation_date, 'Asia/Karachi')->endOfDay();
+                                    $isPastParticipation = $now->gt($participationDate); // Only count if date has passed
+                                } catch (\Exception $e) {
+                                    // If date parsing fails, treat as past (include in calculation)
+                                    $isPastParticipation = true;
+                                }
+                            }
                             
                             // Get obtained marks (treat null/pending as 0)
                             $obtainedMarks = null;
@@ -427,9 +462,11 @@ class StudentPerformanceController extends ApiController
                                 $completedCount++;
                             }
                             
-                            // Always add to totals (treat pending as 0 marks)
-                            $totalMarksObtained += $obtainedMarks;
-                            $totalMarksPossible += $totalMarks;
+                            // Only add to totals if participation date has passed (don't count future participations)
+                            if ($isPastParticipation) {
+                                $totalMarksObtained += $obtainedMarks;
+                                $totalMarksPossible += $totalMarks;
+                            }
                             
                             // Get batch information for this participation
                             $batchInfo = null;
@@ -571,6 +608,7 @@ class StudentPerformanceController extends ApiController
                         }
                         
                         // Build quiz details array
+                        $now = now()->setTimezone('Asia/Karachi');
                         foreach ($allQuizzes as $quiz) {
                             $quizId = $quiz->id;
                             $quizMark = $quizMarks->firstWhere('quiz_id', $quizId);
@@ -579,6 +617,18 @@ class StudentPerformanceController extends ApiController
                             $quizTotalMarks = 100; // Default
                             if (DB::getSchemaBuilder()->hasColumn('quizzes', 'total_marks') && isset($quiz->total_marks) && $quiz->total_marks > 0) {
                                 $quizTotalMarks = (float) $quiz->total_marks;
+                            }
+                            
+                            // Check if quiz_date has passed (only count past quizzes in performance)
+                            $isPastQuiz = true;
+                            if (isset($quiz->quiz_date) && $quiz->quiz_date) {
+                                try {
+                                    $quizDate = \Carbon\Carbon::parse($quiz->quiz_date, 'Asia/Karachi')->endOfDay();
+                                    $isPastQuiz = $now->gt($quizDate); // Only count if date has passed
+                                } catch (\Exception $e) {
+                                    // If date parsing fails, treat as past (include in calculation)
+                                    $isPastQuiz = true;
+                                }
                             }
                             
                             $obtainedMarks = null;
@@ -590,10 +640,19 @@ class StudentPerformanceController extends ApiController
                                     $obtainedMarks = (float) $quizMark->marks;
                                 }
                                 
-                                if ($obtainedMarks !== null) {
-                                    $totalMarksObtained += $obtainedMarks;
+                                // Only add to totals if quiz date has passed
+                                if ($isPastQuiz) {
+                                    if ($obtainedMarks !== null) {
+                                        $totalMarksObtained += $obtainedMarks;
+                                    }
+                                    $totalMarksPossible += $quizTotalMarks;
                                 }
-                                $totalMarksPossible += $quizTotalMarks;
+                            } else {
+                                // Quiz not completed, treat as 0 marks, but only if date has passed
+                                if ($isPastQuiz) {
+                                    $totalMarksObtained += 0;
+                                    $totalMarksPossible += $quizTotalMarks;
+                                }
                             }
                             
                             // Get batch information for this quiz
