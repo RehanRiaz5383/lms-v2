@@ -49,7 +49,8 @@ class StudentDashboardController extends ApiController
                     $tasksQuery->where('user_id', $userId);
                 }
                 
-                $totalTasks = $tasksQuery->count();
+                $allTasks = $tasksQuery->get();
+                $totalTasks = $allTasks->count();
 
                 // Get submitted task IDs - use the same logic as StudentTaskController
                 $submittedTaskIds = [];
@@ -70,12 +71,32 @@ class StudentDashboardController extends ApiController
 
                 $submittedTasks = count($submittedTaskIds);
 
-                // Calculate pending tasks (all tasks minus submitted)
-                $pendingTasks = max(0, $totalTasks - $submittedTasks);
+                // Calculate pending tasks (only overdue tasks, not all unsubmitted)
+                $pendingTasks = 0;
 
-                // Get nearest task due date (earliest expiry_date for pending tasks that can still be submitted)
+                // Count overdue tasks (pending = only overdue items, not all unsubmitted)
                 $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
                 if ($hasExpiryDateColumn) {
+                    $now = now()->setTimezone('Asia/Karachi');
+                    $overdueTasks = collect($allTasks)
+                        ->filter(function($task) use ($now, $submittedTaskIds) {
+                            if (in_array($task->id, $submittedTaskIds)) {
+                                return false; // Already submitted
+                            }
+                            if (isset($task->expiry_date) && $task->expiry_date) {
+                                try {
+                                    $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')->endOfDay();
+                                    return $now->gt($expiryDate); // Overdue if current time is after end of due date
+                                } catch (\Exception $e) {
+                                    return false;
+                                }
+                            }
+                            return false;
+                        })
+                        ->count();
+                    $pendingTasks = $overdueTasks;
+                    
+                    // Get nearest task due date (earliest expiry_date for tasks that can still be submitted)
                     $nearestTaskQuery = DB::table('tasks');
                     
                     if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
@@ -95,16 +116,10 @@ class StudentDashboardController extends ApiController
                         $nearestTaskQuery->whereNotIn('id', $submittedTaskIds);
                     }
                     
-                    // Get current date/time in Asia/Karachi timezone for comparison
-                    $now = now()->setTimezone('Asia/Karachi');
                     $todayStart = $now->copy()->startOfDay();
                     
                     // Filter by expiry_date >= today (tasks that can still be submitted)
-                    // Compare dates properly - expiry_date should be >= today (end of day)
                     $nearestTaskQuery->where(function($q) use ($todayStart) {
-                        // Get expiry_date and compare with today's date
-                        // If expiry_date is a date-only field, compare dates
-                        // If expiry_date is datetime, compare with end of today
                         $q->whereRaw("DATE(expiry_date) >= ?", [$todayStart->format('Y-m-d')]);
                     });
                     
@@ -154,19 +169,50 @@ class StudentDashboardController extends ApiController
                     $quizzesQuery->where('user_id', $userId);
                 }
                 
-                $totalQuizzes = $quizzesQuery->count();
+                $allQuizzes = $quizzesQuery->get();
+                $totalQuizzes = $allQuizzes->count();
 
                 if (DB::getSchemaBuilder()->hasTable('quiz_marks')) {
-                    $completedQuizzes = DB::table('quiz_marks')
-                        ->where('user_id', $userId)
-                        ->count();
+                    $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'student_id');
+                    $quizMarksQuery = DB::table('quiz_marks');
+                    if ($hasStudentIdColumn) {
+                        $quizMarksQuery->where('student_id', $userId);
+                    } else {
+                        $quizMarksQuery->where('user_id', $userId);
+                    }
+                    $quizMarks = $quizMarksQuery->get();
+                    $completedQuizIds = $quizMarks->pluck('quiz_id')->toArray();
+                    $completedQuizzes = count($completedQuizIds);
                     
-                    $averageQuizScore = DB::table('quiz_marks')
-                        ->where('user_id', $userId)
-                        ->avg('marks') ?? 0;
+                    $averageQuizScore = $quizMarks->avg('marks') ?? 0;
+                } else {
+                    $completedQuizzes = 0;
+                    $completedQuizIds = [];
+                    $averageQuizScore = 0;
                 }
 
-                $pendingQuizzes = max(0, $totalQuizzes - $completedQuizzes);
+                // Count overdue quizzes (pending = only overdue items, not all uncompleted)
+                $pendingQuizzes = 0;
+                if (DB::getSchemaBuilder()->hasColumn('quizzes', 'quiz_date')) {
+                    $now = now()->setTimezone('Asia/Karachi');
+                    $overdueQuizzes = collect($allQuizzes)
+                        ->filter(function($quiz) use ($now, $completedQuizIds) {
+                            if (in_array($quiz->id, $completedQuizIds)) {
+                                return false; // Already completed
+                            }
+                            if (isset($quiz->quiz_date) && $quiz->quiz_date) {
+                                try {
+                                    $quizDate = \Carbon\Carbon::parse($quiz->quiz_date, 'Asia/Karachi')->endOfDay();
+                                    return $now->gt($quizDate); // Overdue if current time is after end of quiz date
+                                } catch (\Exception $e) {
+                                    return false;
+                                }
+                            }
+                            return false;
+                        })
+                        ->count();
+                    $pendingQuizzes = $overdueQuizzes;
+                }
                 $quizCompletionRate = $totalQuizzes > 0 ? round(($completedQuizzes / $totalQuizzes) * 100, 1) : 0;
             }
         } catch (\Exception $e) {

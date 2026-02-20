@@ -154,7 +154,6 @@ class StudentPerformanceController extends ApiController
                         $submittedTasks = $submittedQuery->get();
                         $submittedTaskIds = $submittedTasks->pluck('task_id')->toArray();
                         $tasksData['submitted'] = count($submittedTaskIds);
-                        $tasksData['pending'] = max(0, $tasksData['total'] - $tasksData['submitted']);
 
                         // Get marks columns
                         $hasObtainedMarks = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'obtained_marks');
@@ -244,7 +243,7 @@ class StudentPerformanceController extends ApiController
                             $tasksData['average_marks'] = 100; // If tasks exist but have no marks, treat as 100%
                         }
 
-                        // Count overdue tasks
+                        // Count overdue tasks (pending = only overdue items, not all unsubmitted)
                         $now = now()->setTimezone('Asia/Karachi');
                         if (DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date')) {
                             $overdueTasks = collect($allTasks)
@@ -253,15 +252,42 @@ class StudentPerformanceController extends ApiController
                                         return false; // Already submitted
                                     }
                                     if (isset($task->expiry_date) && $task->expiry_date) {
-                                        return strtotime($task->expiry_date) < $now->timestamp;
+                                        try {
+                                            $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')->endOfDay();
+                                            return $now->gt($expiryDate); // Overdue if current time is after end of due date
+                                        } catch (\Exception $e) {
+                                            return false;
+                                        }
                                     }
                                     return false;
                                 })
                                 ->count();
+                            $tasksData['pending'] = $overdueTasks;
                             $tasksData['overdue'] = $overdueTasks;
+                        } else {
+                            $tasksData['pending'] = 0; // No expiry_date column, can't determine overdue
                         }
                     } else {
-                        $tasksData['pending'] = $tasksData['total'];
+                        // No submitted_tasks table, count overdue tasks
+                        $now = now()->setTimezone('Asia/Karachi');
+                        if (DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date')) {
+                            $overdueTasks = collect($allTasks)
+                                ->filter(function($task) use ($now) {
+                                    if (isset($task->expiry_date) && $task->expiry_date) {
+                                        try {
+                                            $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')->endOfDay();
+                                            return $now->gt($expiryDate); // Overdue if current time is after end of due date
+                                        } catch (\Exception $e) {
+                                            return false;
+                                        }
+                                    }
+                                    return false;
+                                })
+                                ->count();
+                            $tasksData['pending'] = $overdueTasks;
+                        } else {
+                            $tasksData['pending'] = 0;
+                        }
                         
                         // Get batch information for tasks
                         $batchInfoMap = [];
@@ -424,7 +450,31 @@ class StudentPerformanceController extends ApiController
                         }
                         
                         $classParticipationsData['completed'] = $completedCount;
-                        $classParticipationsData['pending'] = max(0, $classParticipationsData['total'] - $classParticipationsData['completed']);
+                        
+                        // Count overdue class participations (pending = only overdue items, not all uncompleted)
+                        $now = now()->setTimezone('Asia/Karachi');
+                        if (DB::getSchemaBuilder()->hasColumn('class_participations', 'participation_date')) {
+                            $completedParticipationIds = $participationMarks->keys()->toArray();
+                            $overdueParticipations = collect($allParticipations)
+                                ->filter(function($participation) use ($now, $completedParticipationIds) {
+                                    if (in_array($participation->id, $completedParticipationIds)) {
+                                        return false; // Already completed
+                                    }
+                                    if (isset($participation->participation_date) && $participation->participation_date) {
+                                        try {
+                                            $participationDate = \Carbon\Carbon::parse($participation->participation_date, 'Asia/Karachi')->endOfDay();
+                                            return $now->gt($participationDate); // Overdue if current time is after end of participation date
+                                        } catch (\Exception $e) {
+                                            return false;
+                                        }
+                                    }
+                                    return false;
+                                })
+                                ->count();
+                            $classParticipationsData['pending'] = $overdueParticipations;
+                        } else {
+                            $classParticipationsData['pending'] = 0; // No participation_date column, can't determine overdue
+                        }
                         $classParticipationsData['total_marks_obtained'] = $totalMarksObtained;
                         $classParticipationsData['total_marks_possible'] = $totalMarksPossible;
                         // If no class participations assigned (total = 0), set to 100% so it doesn't affect overall average
@@ -495,7 +545,6 @@ class StudentPerformanceController extends ApiController
                         $quizMarks = $quizMarksQuery->get();
                         $quizMarkIds = $quizMarks->pluck('quiz_id')->toArray();
                         $quizzesData['completed'] = count($quizMarkIds);
-                        $quizzesData['pending'] = max(0, $quizzesData['total'] - $quizzesData['completed']);
                         
                         // Calculate total marks obtained and total possible marks
                         $totalMarksObtained = 0;
@@ -577,8 +626,51 @@ class StudentPerformanceController extends ApiController
                         } else {
                             $quizzesData['average_marks'] = 100; // If quizzes exist but have no marks, treat as 100%
                         }
+                        
+                        // Count overdue quizzes (pending = only overdue items, not all uncompleted)
+                        $now = now()->setTimezone('Asia/Karachi');
+                        if (DB::getSchemaBuilder()->hasColumn('quizzes', 'quiz_date')) {
+                            $overdueQuizzes = collect($allQuizzes)
+                                ->filter(function($quiz) use ($now, $quizMarkIds) {
+                                    if (in_array($quiz->id, $quizMarkIds)) {
+                                        return false; // Already completed
+                                    }
+                                    if (isset($quiz->quiz_date) && $quiz->quiz_date) {
+                                        try {
+                                            $quizDate = \Carbon\Carbon::parse($quiz->quiz_date, 'Asia/Karachi')->endOfDay();
+                                            return $now->gt($quizDate); // Overdue if current time is after end of quiz date
+                                        } catch (\Exception $e) {
+                                            return false;
+                                        }
+                                    }
+                                    return false;
+                                })
+                                ->count();
+                            $quizzesData['pending'] = $overdueQuizzes;
+                        } else {
+                            $quizzesData['pending'] = 0; // No quiz_date column, can't determine overdue
+                        }
                     } else {
-                        $quizzesData['pending'] = $quizzesData['total'];
+                        // No quiz_marks table, count overdue quizzes
+                        $now = now()->setTimezone('Asia/Karachi');
+                        if (DB::getSchemaBuilder()->hasColumn('quizzes', 'quiz_date')) {
+                            $overdueQuizzes = collect($allQuizzes)
+                                ->filter(function($quiz) use ($now) {
+                                    if (isset($quiz->quiz_date) && $quiz->quiz_date) {
+                                        try {
+                                            $quizDate = \Carbon\Carbon::parse($quiz->quiz_date, 'Asia/Karachi')->endOfDay();
+                                            return $now->gt($quizDate); // Overdue if current time is after end of quiz date
+                                        } catch (\Exception $e) {
+                                            return false;
+                                        }
+                                    }
+                                    return false;
+                                })
+                                ->count();
+                            $quizzesData['pending'] = $overdueQuizzes;
+                        } else {
+                            $quizzesData['pending'] = 0;
+                        }
                         
                         // Get batch information for quizzes
                         $batchInfoMap = [];
