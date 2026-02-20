@@ -235,10 +235,13 @@ class StudentPerformanceController extends ApiController
                         $tasksData['total_marks_possible'] = $totalMarksPossible;
                         
                         // Calculate percentage: (obtained / possible) * 100
-                        if ($totalMarksPossible > 0) {
+                        // If no tasks assigned (total = 0), set to 100% so it doesn't affect overall average
+                        if ($tasksData['total'] == 0) {
+                            $tasksData['average_marks'] = 100;
+                        } else if ($totalMarksPossible > 0) {
                             $tasksData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
                         } else {
-                            $tasksData['average_marks'] = 0;
+                            $tasksData['average_marks'] = 100; // If tasks exist but have no marks, treat as 100%
                         }
 
                         // Count overdue tasks
@@ -424,9 +427,14 @@ class StudentPerformanceController extends ApiController
                         $classParticipationsData['pending'] = max(0, $classParticipationsData['total'] - $classParticipationsData['completed']);
                         $classParticipationsData['total_marks_obtained'] = $totalMarksObtained;
                         $classParticipationsData['total_marks_possible'] = $totalMarksPossible;
-                        $classParticipationsData['average_marks'] = $totalMarksPossible > 0 
-                            ? round(($totalMarksObtained / $totalMarksPossible) * 100, 2) 
-                            : 0;
+                        // If no class participations assigned (total = 0), set to 100% so it doesn't affect overall average
+                        if ($classParticipationsData['total'] == 0) {
+                            $classParticipationsData['average_marks'] = 100;
+                        } else if ($totalMarksPossible > 0) {
+                            $classParticipationsData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
+                        } else {
+                            $classParticipationsData['average_marks'] = 100; // If participations exist but have no marks, treat as 100%
+                        }
                         $classParticipationsData['completion_rate'] = $classParticipationsData['total'] > 0 
                             ? round(($classParticipationsData['completed'] / $classParticipationsData['total']) * 100, 2) 
                             : 0;
@@ -561,10 +569,13 @@ class StudentPerformanceController extends ApiController
                         $quizzesData['total_marks_possible'] = $totalMarksPossible;
                         
                         // Calculate percentage: (obtained / possible) * 100
-                        if ($totalMarksPossible > 0) {
+                        // If no quizzes assigned (total = 0), set to 100% so it doesn't affect overall average
+                        if ($quizzesData['total'] == 0) {
+                            $quizzesData['average_marks'] = 100;
+                        } else if ($totalMarksPossible > 0) {
                             $quizzesData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
                         } else {
-                            $quizzesData['average_marks'] = 0;
+                            $quizzesData['average_marks'] = 100; // If quizzes exist but have no marks, treat as 100%
                         }
                     } else {
                         $quizzesData['pending'] = $quizzesData['total'];

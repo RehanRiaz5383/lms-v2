@@ -391,24 +391,32 @@ class StudentDashboardController extends ApiController
                 $hasTaskMarks = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
                 $taskMarksColumn = $hasTaskTotalMarks ? 'total_marks' : ($hasTaskMarks ? 'marks' : null);
                 
-                foreach ($allTasks as $task) {
-                    $taskTotalMarks = 100;
-                    if ($taskMarksColumn && isset($task->{$taskMarksColumn}) && $task->{$taskMarksColumn} > 0) {
-                        $taskTotalMarks = (float) $task->{$taskMarksColumn};
+                // If no tasks assigned, set to 100% so it doesn't affect overall average
+                if ($allTasks->count() == 0) {
+                    $taskPercentage = 100;
+                } else {
+                    foreach ($allTasks as $task) {
+                        $taskTotalMarks = 100;
+                        if ($taskMarksColumn && isset($task->{$taskMarksColumn}) && $task->{$taskMarksColumn} > 0) {
+                            $taskTotalMarks = (float) $task->{$taskMarksColumn};
+                        }
+                        
+                        $submittedTask = $submittedTasks->firstWhere('task_id', $task->id);
+                        $obtainedMarks = 0;
+                        if ($submittedTask && $marksColumn) {
+                            $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : 0;
+                        }
+                        
+                        $taskTotalMarksObtained += $obtainedMarks;
+                        $taskTotalMarksPossible += $taskTotalMarks;
                     }
                     
-                    $submittedTask = $submittedTasks->firstWhere('task_id', $task->id);
-                    $obtainedMarks = 0;
-                    if ($submittedTask && $marksColumn) {
-                        $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : 0;
+                    if ($taskTotalMarksPossible > 0) {
+                        $taskPercentage = round(($taskTotalMarksObtained / $taskTotalMarksPossible) * 100, 2);
+                    } else {
+                        // If tasks exist but have no marks, treat as 100%
+                        $taskPercentage = 100;
                     }
-                    
-                    $taskTotalMarksObtained += $obtainedMarks;
-                    $taskTotalMarksPossible += $taskTotalMarks;
-                }
-                
-                if ($taskTotalMarksPossible > 0) {
-                    $taskPercentage = round(($taskTotalMarksObtained / $taskTotalMarksPossible) * 100, 2);
                 }
             }
         } catch (\Exception $e) {
@@ -433,36 +441,44 @@ class StudentDashboardController extends ApiController
                 
                 $allQuizzes = $quizzesQuery->get();
                 
-                $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'student_id');
-                $quizMarksQuery = DB::table('quiz_marks')
-                    ->where($hasStudentIdColumn ? 'student_id' : 'user_id', $userId);
-                $quizMarks = $quizMarksQuery->get();
-                
-                $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'obtained_marks');
-                $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'marks');
-                
-                foreach ($allQuizzes as $quiz) {
-                    $quizTotalMarks = 100;
-                    if (DB::getSchemaBuilder()->hasColumn('quizzes', 'total_marks') && isset($quiz->total_marks) && $quiz->total_marks > 0) {
-                        $quizTotalMarks = (float) $quiz->total_marks;
-                    }
+                // If no quizzes assigned, set to 100% so it doesn't affect overall average
+                if ($allQuizzes->count() == 0) {
+                    $quizPercentage = 100;
+                } else {
+                    $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'student_id');
+                    $quizMarksQuery = DB::table('quiz_marks')
+                        ->where($hasStudentIdColumn ? 'student_id' : 'user_id', $userId);
+                    $quizMarks = $quizMarksQuery->get();
                     
-                    $quizMark = $quizMarks->firstWhere('quiz_id', $quiz->id);
-                    $obtainedMarks = 0;
-                    if ($quizMark) {
-                        if ($hasObtainedMarksColumn && isset($quizMark->obtained_marks)) {
-                            $obtainedMarks = is_numeric($quizMark->obtained_marks) ? (float) $quizMark->obtained_marks : 0;
-                        } else if ($hasMarksColumn && isset($quizMark->marks)) {
-                            $obtainedMarks = (float) $quizMark->marks;
+                    $hasObtainedMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'obtained_marks');
+                    $hasMarksColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'marks');
+                    
+                    foreach ($allQuizzes as $quiz) {
+                        $quizTotalMarks = 100;
+                        if (DB::getSchemaBuilder()->hasColumn('quizzes', 'total_marks') && isset($quiz->total_marks) && $quiz->total_marks > 0) {
+                            $quizTotalMarks = (float) $quiz->total_marks;
                         }
+                        
+                        $quizMark = $quizMarks->firstWhere('quiz_id', $quiz->id);
+                        $obtainedMarks = 0;
+                        if ($quizMark) {
+                            if ($hasObtainedMarksColumn && isset($quizMark->obtained_marks)) {
+                                $obtainedMarks = is_numeric($quizMark->obtained_marks) ? (float) $quizMark->obtained_marks : 0;
+                            } else if ($hasMarksColumn && isset($quizMark->marks)) {
+                                $obtainedMarks = (float) $quizMark->marks;
+                            }
+                        }
+                        
+                        $quizTotalMarksObtained += $obtainedMarks;
+                        $quizTotalMarksPossible += $quizTotalMarks;
                     }
                     
-                    $quizTotalMarksObtained += $obtainedMarks;
-                    $quizTotalMarksPossible += $quizTotalMarks;
-                }
-                
-                if ($quizTotalMarksPossible > 0) {
-                    $quizPercentage = round(($quizTotalMarksObtained / $quizTotalMarksPossible) * 100, 2);
+                    if ($quizTotalMarksPossible > 0) {
+                        $quizPercentage = round(($quizTotalMarksObtained / $quizTotalMarksPossible) * 100, 2);
+                    } else {
+                        // If quizzes exist but have no marks, treat as 100%
+                        $quizPercentage = 100;
+                    }
                 }
             }
         } catch (\Exception $e) {
@@ -487,32 +503,40 @@ class StudentDashboardController extends ApiController
                 
                 $allParticipations = $participationsQuery->get();
                 
-                $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
-                $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
-                $participationMarksQuery = DB::table('class_participation_marks');
-                if ($hasStudentIdColumn) {
-                    $participationMarksQuery->where('student_id', $userId);
-                } else if ($hasUserIdColumn) {
-                    $participationMarksQuery->where('user_id', $userId);
-                }
-                
-                $participationMarks = $participationMarksQuery->get()->keyBy('class_participation_id');
-                
-                foreach ($allParticipations as $participation) {
-                    $totalMarks = (float)($participation->total_marks ?? 0);
-                    
-                    $mark = $participationMarks->get($participation->id);
-                    $obtainedMarks = 0;
-                    if ($mark && isset($mark->obtained_marks)) {
-                        $obtainedMarks = (float)($mark->obtained_marks ?? 0);
+                // If no class participations assigned, set to 100% so it doesn't affect overall average
+                if ($allParticipations->count() == 0) {
+                    $classParticipationPercentage = 100;
+                } else {
+                    $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
+                    $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
+                    $participationMarksQuery = DB::table('class_participation_marks');
+                    if ($hasStudentIdColumn) {
+                        $participationMarksQuery->where('student_id', $userId);
+                    } else if ($hasUserIdColumn) {
+                        $participationMarksQuery->where('user_id', $userId);
                     }
                     
-                    $cpTotalMarksObtained += $obtainedMarks;
-                    $cpTotalMarksPossible += $totalMarks;
-                }
-                
-                if ($cpTotalMarksPossible > 0) {
-                    $classParticipationPercentage = round(($cpTotalMarksObtained / $cpTotalMarksPossible) * 100, 2);
+                    $participationMarks = $participationMarksQuery->get()->keyBy('class_participation_id');
+                    
+                    foreach ($allParticipations as $participation) {
+                        $totalMarks = (float)($participation->total_marks ?? 0);
+                        
+                        $mark = $participationMarks->get($participation->id);
+                        $obtainedMarks = 0;
+                        if ($mark && isset($mark->obtained_marks)) {
+                            $obtainedMarks = (float)($mark->obtained_marks ?? 0);
+                        }
+                        
+                        $cpTotalMarksObtained += $obtainedMarks;
+                        $cpTotalMarksPossible += $totalMarks;
+                    }
+                    
+                    if ($cpTotalMarksPossible > 0) {
+                        $classParticipationPercentage = round(($cpTotalMarksObtained / $cpTotalMarksPossible) * 100, 2);
+                    } else {
+                        // If participations exist but have no marks, treat as 100%
+                        $classParticipationPercentage = 100;
+                    }
                 }
             }
         } catch (\Exception $e) {
