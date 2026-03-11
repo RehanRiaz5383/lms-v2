@@ -68,6 +68,9 @@ class StudentVideoController extends ApiController
             ->orderBy('videos.updated_at', 'asc')
             ->get();
 
+        // Load resource (ZIP attachment) for each video so students can download
+        $videos->load('resource');
+
         // Get available batches for filter
         $availableBatches = DB::table('batches')
             ->whereIn('id', $userBatchIds)

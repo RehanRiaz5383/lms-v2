@@ -14,7 +14,7 @@ import { Label } from '../components/ui/label';
 import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
-import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion, UserCheck } from 'lucide-react';
+import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plus, Users, Edit, Trash2, Ban, CheckCircle, Search, ClipboardList, Calendar, CheckCircle2, Clock, AlertCircle, Download, MessageSquare, Award, Eye, Upload, FileQuestion, UserCheck, FileArchive } from 'lucide-react';
 import { cn } from '../utils/cn';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -43,6 +43,18 @@ const BatchExplore = () => {
   const [submittingTask, setSubmittingTask] = useState(false);
   const [draggedVideo, setDraggedVideo] = useState(null);
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+  const [showEditVideoDrawer, setShowEditVideoDrawer] = useState(false);
+  const [editingVideo, setEditingVideo] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    short_description: '',
+    source_type: 'internal',
+    video_file: null,
+    external_url: '',
+  });
+  const [editVideoPreview, setEditVideoPreview] = useState(null);
+  const [resourceFile, setResourceFile] = useState(null);
+  const [uploadingResource, setUploadingResource] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
   const [showQuizzes, setShowQuizzes] = useState(false);
   const [showClassParticipations, setShowClassParticipations] = useState(false);
@@ -890,6 +902,75 @@ const BatchExplore = () => {
     });
     setVideoPreview(null);
     setShowCreateDrawer(true);
+  };
+
+  const handleEditVideo = (video) => {
+    setEditingVideo(video);
+    setEditFormData({
+      title: video.title || '',
+      short_description: video.short_description || '',
+      source_type: video.source_type || 'internal',
+      video_file: null,
+      external_url: video.external_url || '',
+    });
+    setEditVideoPreview(null);
+    setResourceFile(null);
+    setShowEditVideoDrawer(true);
+  };
+
+  const handleEditVideoSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingVideo) return;
+    const submitData = new FormData();
+    submitData.append('title', editFormData.title);
+    submitData.append('short_description', editFormData.short_description);
+    submitData.append('source_type', editFormData.source_type);
+    if (editFormData.source_type === 'external') {
+      submitData.append('external_url', editFormData.external_url);
+    }
+    if (editFormData.video_file) {
+      submitData.append('video_file', editFormData.video_file);
+    }
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.videos.update, { id: editingVideo.id });
+      await apiService.put(endpoint, submitData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      success('Video updated successfully');
+      setShowEditVideoDrawer(false);
+      setEditingVideo(null);
+      if (selectedSubject) await loadVideos(selectedSubject.id);
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to update video');
+    }
+  };
+
+  const handleUploadResource = async () => {
+    if (!editingVideo || !resourceFile) {
+      showError('Please select a ZIP file to upload');
+      return;
+    }
+    setUploadingResource(true);
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.videos.uploadResource, { id: editingVideo.id });
+      const formData = new FormData();
+      formData.append('resource_file', resourceFile);
+      await apiService.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      success('Resource uploaded successfully');
+      setResourceFile(null);
+      if (selectedSubject) await loadVideos(selectedSubject.id);
+      setEditingVideo((prev) => {
+        if (!prev) return prev;
+        const res = { id: Date.now(), original_name: resourceFile.name, download_url: '' };
+        return { ...prev, resource: res };
+      });
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to upload resource');
+    } finally {
+      setUploadingResource(false);
+    }
   };
 
   const handleVideoSubmit = async (e) => {
@@ -1866,39 +1947,50 @@ const BatchExplore = () => {
                         onDrop={(e) => handleDrop(e, video)}
                         onDragEnd={handleDragEnd}
                         className={cn(
-                          "flex items-center gap-4 p-4 border border-border rounded-lg cursor-move transition-colors",
+                          "flex items-center gap-4 p-4 border border-border rounded-lg cursor-move transition-colors min-h-[72px]",
                           draggedVideo?.id === video.id
                             ? "opacity-50 bg-muted"
                             : "hover:bg-accent/50"
                         )}
                       >
-                        <GripVertical className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-muted-foreground">
+                        <GripVertical className="h-5 w-5 text-muted-foreground flex-shrink-0 w-6" />
+                        <div className="flex-1 min-w-0 pl-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="text-sm font-medium text-muted-foreground flex-shrink-0">
                               #{index + 1}
                             </span>
-                            <h3 className="text-sm font-semibold text-foreground">
+                            <h3 className="text-sm font-semibold text-foreground break-words">
                               {video.title}
                             </h3>
                             {video.source_type === 'internal' ? (
-                              <span className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded flex-shrink-0">
                                 Internal
                               </span>
                             ) : (
-                              <span className="text-xs bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded">
+                              <span className="text-xs bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded flex-shrink-0">
                                 External
                               </span>
                             )}
                           </div>
                           {video.short_description && (
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-xs text-muted-foreground mt-1.5 break-words">
                               {video.short_description}
                             </p>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          Sort Order: {video.sort_order ?? 'N/A'}
+                        <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            Sort: {video.sort_order ?? '—'}
+                          </span>
+                          <Tooltip content="Edit Video">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditVideo(video)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
                         </div>
                       </div>
                     ))}
@@ -2098,6 +2190,150 @@ const BatchExplore = () => {
             </Button>
           </div>
         </form>
+      </Drawer>
+
+      {/* Edit Video Drawer */}
+      <Drawer
+        isOpen={showEditVideoDrawer}
+        onClose={() => {
+          setShowEditVideoDrawer(false);
+          setEditingVideo(null);
+          setEditVideoPreview(null);
+          setResourceFile(null);
+          if (editVideoPreview && editVideoPreview.startsWith('blob:')) {
+            URL.revokeObjectURL(editVideoPreview);
+          }
+        }}
+        title="Edit Video"
+      >
+        {editingVideo && (
+          <form onSubmit={handleEditVideoSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="edit_title">Title *</Label>
+              <Input
+                id="edit_title"
+                value={editFormData.title}
+                onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit_short_description">Short Description (Keywords for search)</Label>
+              <textarea
+                id="edit_short_description"
+                value={editFormData.short_description}
+                onChange={(e) => setEditFormData({ ...editFormData, short_description: e.target.value })}
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <Label>Video Source *</Label>
+              <div className="flex gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="edit_source_type"
+                    value="internal"
+                    checked={editFormData.source_type === 'internal'}
+                    onChange={(e) => setEditFormData({ ...editFormData, source_type: e.target.value, external_url: '' })}
+                    className="h-4 w-4"
+                  />
+                  <span>Internal Server</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="edit_source_type"
+                    value="external"
+                    checked={editFormData.source_type === 'external'}
+                    onChange={(e) => setEditFormData({ ...editFormData, source_type: e.target.value, video_file: null })}
+                    className="h-4 w-4"
+                  />
+                  <span>External Link</span>
+                </label>
+              </div>
+            </div>
+            {editFormData.source_type === 'internal' ? (
+              <div>
+                <Label htmlFor="edit_video_file">Replace Video (optional)</Label>
+                <Input
+                  id="edit_video_file"
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    setEditFormData({ ...editFormData, video_file: file });
+                    setEditVideoPreview(file ? URL.createObjectURL(file) : null);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Leave empty to keep current video</p>
+                {editVideoPreview && (
+                  <div className="mt-2 rounded-md border overflow-hidden bg-muted">
+                    <video src={editVideoPreview} controls className="w-full max-h-48" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="edit_external_url">External Video URL *</Label>
+                <Input
+                  id="edit_external_url"
+                  type="url"
+                  value={editFormData.external_url}
+                  onChange={(e) => setEditFormData({ ...editFormData, external_url: e.target.value })}
+                  required
+                />
+              </div>
+            )}
+
+            {/* Attach Resource (ZIP) */}
+            <div className="border-t border-border pt-4">
+              <Label className="flex items-center gap-2">
+                <FileArchive className="h-4 w-4" />
+                Attach Resource (ZIP)
+              </Label>
+              {editingVideo.resource && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Current: {editingVideo.resource.original_name || 'Resource attached'}
+                </p>
+              )}
+              <div className="flex gap-2 mt-2">
+                <Input
+                  type="file"
+                  accept=".zip"
+                  onChange={(e) => setResourceFile(e.target.files[0] || null)}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleUploadResource}
+                  disabled={!resourceFile || uploadingResource}
+                >
+                  {uploadingResource ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploadingResource ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">ZIP only, max 100MB. Students can download from their lecture videos page.</p>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button type="submit" className="flex-1">
+                Save Changes
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowEditVideoDrawer(false);
+                  setEditingVideo(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
       </Drawer>
 
       {/* Edit Student Drawer */}

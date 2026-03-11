@@ -90,6 +90,8 @@ Route::get('/load-storage/{path}', function ($path) {
             'lms/voucher_submissions/',
             'lms/videos/',
             'lms/feed/',
+            'resources/',
+            'lms/resources/',
         ];
         
         foreach ($googleDrivePaths as $googlePath) {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Tooltip } from '../components/ui/tooltip';
-import { Video, Eye, ExternalLink, Loader2 } from 'lucide-react';
+import { Video, Eye, ExternalLink, Loader2, Download, FileArchive } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, getStorageUrl } from '../config/api';
 import { useToast } from '../components/ui/toast';
@@ -143,6 +143,7 @@ const StudentLectureVideos = () => {
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Batch</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Subject</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Type</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Resource</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
@@ -177,6 +178,23 @@ const StudentLectureVideos = () => {
                             <ExternalLink className="h-3 w-3" />
                             External
                           </span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {video.resource ? (
+                          <Tooltip content={video.resource.original_name || 'Download resource'}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(video.resource.download_url, '_blank')}
+                              className="gap-1"
+                            >
+                              <FileArchive className="h-4 w-4" />
+                              Download
+                            </Button>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="p-4">

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Video extends Model
@@ -70,5 +71,13 @@ class Video extends Model
     public function getInternalVideoPathAttribute(): ?string
     {
         return $this->path ?? $this->internal_path;
+    }
+
+    /**
+     * Get the resource (ZIP attachment) for this video.
+     */
+    public function resource(): HasOne
+    {
+        return $this->hasOne(VideoResource::class);
     }
 }

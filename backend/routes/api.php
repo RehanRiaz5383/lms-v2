@@ -189,6 +189,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [VideoController::class, 'show']);
         // Note: direct-download route is public (moved above, outside auth middleware)
         Route::put('/{id}', [VideoController::class, 'update']);
+        Route::post('/{id}/resource', [VideoController::class, 'uploadResource']);
         Route::delete('/{id}', [VideoController::class, 'destroy']);
         Route::post('/{id}/assign-batch-subject', [VideoController::class, 'assignToBatchSubject']);
         Route::get('/batch/{batchId}/subject/{subjectId}', [VideoController::class, 'getBatchSubjectVideos']);

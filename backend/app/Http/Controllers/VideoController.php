@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Video;
+use App\Models\VideoResource;
 use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -233,6 +234,72 @@ class VideoController extends ApiController
     }
 
     /**
+     * Upload or replace a resource (ZIP file) for a video.
+     * Stores in Google Drive under the "resources" folder (lms/resources).
+     *
+     * @param Request $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function uploadResource(Request $request, int $id): JsonResponse
+    {
+        $video = Video::find($id);
+
+        if (!$video) {
+            return $this->notFound('Video not found');
+        }
+
+        try {
+            $request->validate([
+                'resource_file' => 'required|file|mimes:zip|max:102400', // 100MB max for ZIP
+            ]);
+        } catch (ValidationException $e) {
+            return $this->validationError($e->errors(), 'Validation failed');
+        }
+
+        $file = $request->file('resource_file');
+        $originalName = $file->getClientOriginalName();
+
+        try {
+            // Upload to Google Drive in "resources" folder (mapped in dashboard/settings/google-drive-folders)
+            $path = $this->uploadToGoogleDrive($file, 'resources');
+
+            if (!$path) {
+                return $this->error('Failed to upload resource to Google Drive', 500);
+            }
+
+            // Ensure path is stored consistently (e.g. lms/resources/...)
+            $path = ltrim($path, '/');
+
+            $resource = VideoResource::where('video_id', $id)->first();
+            if ($resource) {
+                $resource->update([
+                    'file_path' => $path,
+                    'original_name' => $originalName,
+                ]);
+            } else {
+                $resource = VideoResource::create([
+                    'video_id' => $id,
+                    'file_path' => $path,
+                    'original_name' => $originalName,
+                ]);
+            }
+
+            $resource->load('video');
+            return $this->success([
+                'resource' => [
+                    'id' => $resource->id,
+                    'file_path' => $resource->file_path,
+                    'original_name' => $resource->original_name,
+                    'download_url' => $resource->download_url,
+                ],
+            ], 'Resource uploaded successfully');
+        } catch (\Exception $e) {
+            return $this->error('Failed to upload resource: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Delete a video.
      *
      * @param int $id
@@ -279,6 +346,21 @@ class VideoController extends ApiController
             ->orderByRaw('COALESCE(batch_subjects_video.sort_order, 999999) ASC')
             ->orderBy('videos.updated_at', 'asc')
             ->get();
+
+        // Load resources for these videos and attach to each video object
+        $videoIds = $videos->pluck('id')->toArray();
+        $resources = VideoResource::whereIn('video_id', $videoIds)->get()->keyBy('video_id');
+        $videos = $videos->map(function ($video) use ($resources) {
+            $video = (object) (array) $video;
+            $resource = $resources->get($video->id);
+            $video->resource = $resource ? [
+                'id' => $resource->id,
+                'file_path' => $resource->file_path,
+                'original_name' => $resource->original_name,
+                'download_url' => $resource->download_url,
+            ] : null;
+            return $video;
+        });
 
         return $this->success($videos, 'Videos retrieved successfully');
     }
