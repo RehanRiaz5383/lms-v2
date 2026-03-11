@@ -513,6 +513,7 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
         <Card className="print:border-0 print:shadow-none border-2 border-primary" style={{ pageBreakInside: 'avoid' }}>
           <CardHeader className="print:pb-2">
             <CardTitle className="text-xl print:text-lg">Overall Performance</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1 print:text-xs">(Total Obtained ÷ Total Possible) × 100 — not an average of the three categories</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-6 print:space-y-4">
@@ -576,23 +577,31 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
                 </div>
               )}
 
-              {/* Grade and Remarks */}
-              <div className="text-center space-y-4 print:space-y-2">
-                <div>
-                  <p className="text-sm text-muted-foreground print:text-xs mb-2">Grade</p>
-                  <p className="text-4xl font-bold text-foreground print:text-3xl">
-                    {reportData.overall_performance.grade}
-                  </p>
+              {/* Grade and Remarks - only when student has graded activities */}
+              {reportData.overall_performance?.breakdown?.has_graded_activities ? (
+                <div className="text-center space-y-4 print:space-y-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground print:text-xs mb-2">Grade</p>
+                    <p className="text-4xl font-bold text-foreground print:text-3xl">
+                      {reportData.overall_performance.grade}
+                    </p>
+                  </div>
+                  <div className="mt-6 p-4 bg-muted rounded-lg print:mt-4 print:p-2">
+                    <p className="text-sm font-semibold text-foreground mb-2 print:text-xs">
+                      Remarks
+                    </p>
+                    <p className="text-foreground print:text-sm">
+                      {reportData.overall_performance.remarks}
+                    </p>
+                  </div>
                 </div>
-                <div className="mt-6 p-4 bg-muted rounded-lg print:mt-4 print:p-2">
-                  <p className="text-sm font-semibold text-foreground mb-2 print:text-xs">
-                    Remarks
-                  </p>
+              ) : (
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
                   <p className="text-foreground print:text-sm">
-                    {reportData.overall_performance.remarks}
+                    {reportData.overall_performance?.remarks || 'No graded activities (tasks, quizzes, or class participations) yet.'}
                   </p>
                 </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>

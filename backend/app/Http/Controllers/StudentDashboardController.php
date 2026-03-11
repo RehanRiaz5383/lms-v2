@@ -36,7 +36,9 @@ class StudentDashboardController extends ApiController
             $tasksTableExists = DB::getSchemaBuilder()->hasTable('tasks');
             if ($tasksTableExists) {
                 $tasksQuery = DB::table('tasks');
-                
+                if (DB::getSchemaBuilder()->hasColumn('tasks', 'deleted_at')) {
+                    $tasksQuery->whereNull('tasks.deleted_at');
+                }
                 // Check if batch_id column exists
                 if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                     if (!empty($userBatchIds)) {
@@ -98,7 +100,9 @@ class StudentDashboardController extends ApiController
                     
                     // Get nearest task due date (earliest expiry_date for tasks that can still be submitted)
                     $nearestTaskQuery = DB::table('tasks');
-                    
+                    if (DB::getSchemaBuilder()->hasColumn('tasks', 'deleted_at')) {
+                        $nearestTaskQuery->whereNull('tasks.deleted_at');
+                    }
                     if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                         if (!empty($userBatchIds)) {
                             // Only get tasks from student's assigned batches
@@ -343,7 +347,9 @@ class StudentDashboardController extends ApiController
         try {
             if (DB::getSchemaBuilder()->hasTable('tasks')) {
                 $tasksQuery = DB::table('tasks');
-                
+                if (DB::getSchemaBuilder()->hasColumn('tasks', 'deleted_at')) {
+                    $tasksQuery->whereNull('tasks.deleted_at');
+                }
                 if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id') && !empty($userBatchIds)) {
                     $tasksQuery->whereIn('batch_id', $userBatchIds)
                                ->orWhereNull('batch_id');
@@ -376,7 +382,9 @@ class StudentDashboardController extends ApiController
         try {
             if (DB::getSchemaBuilder()->hasTable('quizzes')) {
                 $quizzesQuery = DB::table('quizzes');
-                
+                if (DB::getSchemaBuilder()->hasColumn('quizzes', 'deleted_at')) {
+                    $quizzesQuery->whereNull('quizzes.deleted_at');
+                }
                 if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id') && !empty($userBatchIds)) {
                     $quizzesQuery->whereIn('batch_id', $userBatchIds)
                                  ->orWhereNull('batch_id');
@@ -414,6 +422,9 @@ class StudentDashboardController extends ApiController
         try {
             if (DB::getSchemaBuilder()->hasTable('tasks') && DB::getSchemaBuilder()->hasTable('submitted_tasks')) {
                 $tasksQuery = DB::table('tasks');
+                if (DB::getSchemaBuilder()->hasColumn('tasks', 'deleted_at')) {
+                    $tasksQuery->whereNull('tasks.deleted_at');
+                }
                 if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                     if (!empty($userBatchIds)) {
                         $tasksQuery->whereIn('batch_id', $userBatchIds);
@@ -437,10 +448,7 @@ class StudentDashboardController extends ApiController
                 $hasTaskMarks = DB::getSchemaBuilder()->hasColumn('tasks', 'marks');
                 $taskMarksColumn = $hasTaskTotalMarks ? 'total_marks' : ($hasTaskMarks ? 'marks' : null);
                 
-                // If no tasks assigned, set to 100% so it doesn't affect overall average
-                if ($allTasks->count() == 0) {
-                    $taskPercentage = 100;
-                } else {
+                if ($allTasks->count() > 0) {
                     $now = now()->setTimezone('Asia/Karachi');
                     foreach ($allTasks as $task) {
                         $taskTotalMarks = 100;
@@ -455,7 +463,6 @@ class StudentDashboardController extends ApiController
                                 $expiryDate = \Carbon\Carbon::parse($task->expiry_date, 'Asia/Karachi')->endOfDay();
                                 $isPastTask = $now->gt($expiryDate); // Only count if date has passed
                             } catch (\Exception $e) {
-                                // If date parsing fails, treat as past (include in calculation)
                                 $isPastTask = true;
                             }
                         }
@@ -466,7 +473,6 @@ class StudentDashboardController extends ApiController
                             $obtainedMarks = isset($submittedTask->{$marksColumn}) ? (float) $submittedTask->{$marksColumn} : 0;
                         }
                         
-                        // Only add to totals if task date has passed (don't count future tasks)
                         if ($isPastTask) {
                             $taskTotalMarksObtained += $obtainedMarks;
                             $taskTotalMarksPossible += $taskTotalMarks;
@@ -475,9 +481,6 @@ class StudentDashboardController extends ApiController
                     
                     if ($taskTotalMarksPossible > 0) {
                         $taskPercentage = round(($taskTotalMarksObtained / $taskTotalMarksPossible) * 100, 2);
-                    } else {
-                        // If tasks exist but have no marks, treat as 100%
-                        $taskPercentage = 100;
                     }
                 }
             }
@@ -493,6 +496,9 @@ class StudentDashboardController extends ApiController
         try {
             if (DB::getSchemaBuilder()->hasTable('quizzes') && DB::getSchemaBuilder()->hasTable('quiz_marks')) {
                 $quizzesQuery = DB::table('quizzes');
+                if (DB::getSchemaBuilder()->hasColumn('quizzes', 'deleted_at')) {
+                    $quizzesQuery->whereNull('quizzes.deleted_at');
+                }
                 if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id')) {
                     if (!empty($userBatchIds)) {
                         $quizzesQuery->whereIn('batch_id', $userBatchIds);
@@ -503,10 +509,7 @@ class StudentDashboardController extends ApiController
                 
                 $allQuizzes = $quizzesQuery->get();
                 
-                // If no quizzes assigned, set to 100% so it doesn't affect overall average
-                if ($allQuizzes->count() == 0) {
-                    $quizPercentage = 100;
-                } else {
+                if ($allQuizzes->count() > 0) {
                     $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('quiz_marks', 'student_id');
                     $quizMarksQuery = DB::table('quiz_marks')
                         ->where($hasStudentIdColumn ? 'student_id' : 'user_id', $userId);
@@ -522,14 +525,12 @@ class StudentDashboardController extends ApiController
                             $quizTotalMarks = (float) $quiz->total_marks;
                         }
                         
-                        // Check if quiz_date has passed (only count past quizzes in performance)
                         $isPastQuiz = true;
                         if (isset($quiz->quiz_date) && $quiz->quiz_date) {
                             try {
                                 $quizDate = \Carbon\Carbon::parse($quiz->quiz_date, 'Asia/Karachi')->endOfDay();
-                                $isPastQuiz = $now->gt($quizDate); // Only count if date has passed
+                                $isPastQuiz = $now->gt($quizDate);
                             } catch (\Exception $e) {
-                                // If date parsing fails, treat as past (include in calculation)
                                 $isPastQuiz = true;
                             }
                         }
@@ -544,7 +545,6 @@ class StudentDashboardController extends ApiController
                             }
                         }
                         
-                        // Only add to totals if quiz date has passed (don't count future quizzes)
                         if ($isPastQuiz) {
                             $quizTotalMarksObtained += $obtainedMarks;
                             $quizTotalMarksPossible += $quizTotalMarks;
@@ -553,9 +553,6 @@ class StudentDashboardController extends ApiController
                     
                     if ($quizTotalMarksPossible > 0) {
                         $quizPercentage = round(($quizTotalMarksObtained / $quizTotalMarksPossible) * 100, 2);
-                    } else {
-                        // If quizzes exist but have no marks, treat as 100%
-                        $quizPercentage = 100;
                     }
                 }
             }
@@ -571,6 +568,9 @@ class StudentDashboardController extends ApiController
         try {
             if (DB::getSchemaBuilder()->hasTable('class_participations') && DB::getSchemaBuilder()->hasTable('class_participation_marks')) {
                 $participationsQuery = DB::table('class_participations');
+                if (DB::getSchemaBuilder()->hasColumn('class_participations', 'deleted_at')) {
+                    $participationsQuery->whereNull('class_participations.deleted_at');
+                }
                 if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id')) {
                     if (!empty($userBatchIds)) {
                         $participationsQuery->whereIn('batch_id', $userBatchIds);
@@ -581,10 +581,7 @@ class StudentDashboardController extends ApiController
                 
                 $allParticipations = $participationsQuery->get();
                 
-                // If no class participations assigned, set to 100% so it doesn't affect overall average
-                if ($allParticipations->count() == 0) {
-                    $classParticipationPercentage = 100;
-                } else {
+                if ($allParticipations->count() > 0) {
                     $hasStudentIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'student_id');
                     $hasUserIdColumn = DB::getSchemaBuilder()->hasColumn('class_participation_marks', 'user_id');
                     $participationMarksQuery = DB::table('class_participation_marks');
@@ -600,14 +597,12 @@ class StudentDashboardController extends ApiController
                     foreach ($allParticipations as $participation) {
                         $totalMarks = (float)($participation->total_marks ?? 0);
                         
-                        // Check if participation_date has passed (only count past participations in performance)
                         $isPastParticipation = true;
                         if (isset($participation->participation_date) && $participation->participation_date) {
                             try {
                                 $participationDate = \Carbon\Carbon::parse($participation->participation_date, 'Asia/Karachi')->endOfDay();
-                                $isPastParticipation = $now->gt($participationDate); // Only count if date has passed
+                                $isPastParticipation = $now->gt($participationDate);
                             } catch (\Exception $e) {
-                                // If date parsing fails, treat as past (include in calculation)
                                 $isPastParticipation = true;
                             }
                         }
@@ -618,7 +613,6 @@ class StudentDashboardController extends ApiController
                             $obtainedMarks = (float)($mark->obtained_marks ?? 0);
                         }
                         
-                        // Only add to totals if participation date has passed (don't count future participations)
                         if ($isPastParticipation) {
                             $cpTotalMarksObtained += $obtainedMarks;
                             $cpTotalMarksPossible += $totalMarks;
@@ -627,9 +621,6 @@ class StudentDashboardController extends ApiController
                     
                     if ($cpTotalMarksPossible > 0) {
                         $classParticipationPercentage = round(($cpTotalMarksObtained / $cpTotalMarksPossible) * 100, 2);
-                    } else {
-                        // If participations exist but have no marks, treat as 100%
-                        $classParticipationPercentage = 100;
                     }
                 }
             }
@@ -637,49 +628,48 @@ class StudentDashboardController extends ApiController
             \Log::warning('Error calculating class participation percentage in dashboard: ' . $e->getMessage());
         }
         
-        // Calculate Overall Performance
-        // Simple average of three percentages: (task% + quiz% + class_participation%) / 3
-        $percentages = [
-            $taskPercentage,
-            $quizPercentage,
-            $classParticipationPercentage,
-        ];
-        
-        $overallPercentage = count($percentages) > 0 
-            ? round(array_sum($percentages) / count($percentages), 2) 
-            : 0;
-        
-        // Ensure percentage doesn't exceed 100%
-        $overallPercentage = min(100, max(0, $overallPercentage));
-        
-        // Determine Grade
+        // Calculate Overall Performance: (total obtained of expired tasks + quizzes + CPs) / (total marks of expired) * 100
+        $grandTotalObtained = $taskTotalMarksObtained + $quizTotalMarksObtained + $cpTotalMarksObtained;
+        $grandTotalPossible = $taskTotalMarksPossible + $quizTotalMarksPossible + $cpTotalMarksPossible;
+
+        $overallPercentage = 0;
+        if ($grandTotalPossible > 0) {
+            $overallPercentage = round(($grandTotalObtained / $grandTotalPossible) * 100, 2);
+            $overallPercentage = min(100, max(0, $overallPercentage));
+        }
+
+        // Only assign letter grade when there is at least one expired task/quiz/CP
         $grade = 'N/A';
         $remarks = '';
-        
-        if ($overallPercentage >= 90) {
-            $grade = 'A+';
-            $remarks = 'Excellent performance! Keep up the outstanding work.';
-        } else if ($overallPercentage >= 85) {
-            $grade = 'A';
-            $remarks = 'Very good performance. Continue to maintain this level.';
-        } else if ($overallPercentage >= 80) {
-            $grade = 'B+';
-            $remarks = 'Good performance. There is room for improvement.';
-        } else if ($overallPercentage >= 75) {
-            $grade = 'B';
-            $remarks = 'Satisfactory performance. Focus on areas that need improvement.';
-        } else if ($overallPercentage >= 70) {
-            $grade = 'C+';
-            $remarks = 'Average performance. More effort is needed to improve.';
-        } else if ($overallPercentage >= 65) {
-            $grade = 'C';
-            $remarks = 'Below average performance. Significant improvement required.';
-        } else if ($overallPercentage >= 60) {
-            $grade = 'D';
-            $remarks = 'Poor performance. Immediate attention and improvement needed.';
+
+        if ($grandTotalPossible > 0) {
+            if ($overallPercentage >= 90) {
+                $grade = 'A+';
+                $remarks = 'Excellent performance! Keep up the outstanding work.';
+            } else if ($overallPercentage >= 85) {
+                $grade = 'A';
+                $remarks = 'Very good performance. Continue to maintain this level.';
+            } else if ($overallPercentage >= 80) {
+                $grade = 'B+';
+                $remarks = 'Good performance. There is room for improvement.';
+            } else if ($overallPercentage >= 75) {
+                $grade = 'B';
+                $remarks = 'Satisfactory performance. Focus on areas that need improvement.';
+            } else if ($overallPercentage >= 70) {
+                $grade = 'C+';
+                $remarks = 'Average performance. More effort is needed to improve.';
+            } else if ($overallPercentage >= 65) {
+                $grade = 'C';
+                $remarks = 'Below average performance. Significant improvement required.';
+            } else if ($overallPercentage >= 60) {
+                $grade = 'D';
+                $remarks = 'Poor performance. Immediate attention and improvement needed.';
+            } else {
+                $grade = 'F';
+                $remarks = 'Very poor performance. Urgent intervention required.';
+            }
         } else {
-            $grade = 'F';
-            $remarks = 'Very poor performance. Urgent intervention required.';
+            $remarks = 'No graded activities (tasks, quizzes, or class participations) yet.';
         }
 
         $stats = [
@@ -723,6 +713,7 @@ class StudentDashboardController extends ApiController
                 'test_average' => round($averageTestScore, 1),
                 'grade' => $grade,
                 'remarks' => $remarks,
+                'has_graded_activities' => $grandTotalPossible > 0,
                 'breakdown' => [
                     'tasks' => [
                         'label' => 'Tasks',
@@ -737,8 +728,12 @@ class StudentDashboardController extends ApiController
                         'percentage' => $classParticipationPercentage,
                     ],
                     'calculation' => [
-                        'formula' => "({$taskPercentage}% + {$quizPercentage}% + {$classParticipationPercentage}%) / 3",
-                        'result' => $overallPercentage . '%',
+                        'formula' => $grandTotalPossible > 0
+                            ? "Total Obtained ÷ Total Possible × 100 = ({$grandTotalObtained} ÷ {$grandTotalPossible}) × 100"
+                            : 'No expired tasks, quizzes, or class participations',
+                        'result' => $grandTotalPossible > 0 ? $overallPercentage . '%' : 'N/A',
+                        'grand_total_obtained' => $grandTotalObtained,
+                        'grand_total_possible' => $grandTotalPossible,
                     ],
                 ],
             ],

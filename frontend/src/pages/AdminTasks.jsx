@@ -641,9 +641,12 @@ const AdminTasks = () => {
                 </div>
                 <div>
                   <Label className="text-sm font-semibold">Description</Label>
-                  <div className="mt-1 p-2 bg-muted rounded min-h-[60px]">
-                    {selectedTaskDetail.task_description || 'No description provided'}
-                  </div>
+                  <div
+                    className="mt-1 p-2 bg-muted rounded min-h-[60px] prose prose-sm dark:prose-invert max-w-none"
+                    dangerouslySetInnerHTML={{
+                      __html: selectedTaskDetail.task_description || '<span class="text-muted-foreground">No description provided</span>',
+                    }}
+                  />
                 </div>
                 <div>
                   <Label className="text-sm font-semibold">Total Marks</Label>

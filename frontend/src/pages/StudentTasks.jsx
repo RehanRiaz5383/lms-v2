@@ -396,6 +396,7 @@ const StudentTasks = () => {
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Subject</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Due Date</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Marks</th>
+                    <th className="text-left p-4 text-sm font-medium text-muted-foreground">Obtained Marks</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
                   </tr>
@@ -434,6 +435,20 @@ const StudentTasks = () => {
                         {task.marks || task.total_marks ? (
                           <span className="font-medium text-foreground">
                             {task.marks || task.total_marks}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-sm">
+                        {(task.submission?.obtained_marks != null || task.submission?.marks != null) ? (
+                          <span className="font-medium text-foreground">
+                            {task.submission?.obtained_marks ?? task.submission?.marks}
+                            {(task.marks || task.total_marks) && (
+                              <span className="text-muted-foreground font-normal ml-1">
+                                / {task.marks || task.total_marks}
+                              </span>
+                            )}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">-</span>

@@ -128,6 +128,11 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('tasks')) {
                     $tasksQuery = DB::table('tasks');
                     
+                    // Exclude soft-deleted tasks
+                    if (DB::getSchemaBuilder()->hasColumn('tasks', 'deleted_at')) {
+                        $tasksQuery->whereNull('tasks.deleted_at');
+                    }
+                    
                     // Only show tasks from batches assigned in user_batches table
                     if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
                         if (!empty($userBatchIds)) {
@@ -140,7 +145,7 @@ class StudentPerformanceController extends ApiController
                         $tasksQuery->where('user_id', $userId);
                     }
                     
-                    // Get all tasks for this student
+                    // Get all tasks for this student (non-deleted only)
                     $allTasks = $tasksQuery->get();
                     $tasksData['total'] = $allTasks->count();
                     $taskDetails = [];
@@ -255,14 +260,11 @@ class StudentPerformanceController extends ApiController
                         $tasksData['total_marks_obtained'] = $totalMarksObtained;
                         $tasksData['total_marks_possible'] = $totalMarksPossible;
                         
-                        // Calculate percentage: (obtained / possible) * 100
-                        // If no tasks assigned (total = 0), set to 100% so it doesn't affect overall average
-                        if ($tasksData['total'] == 0) {
-                            $tasksData['average_marks'] = 100;
-                        } else if ($totalMarksPossible > 0) {
+                        // Calculate percentage: (obtained / possible) * 100. No expired tasks = 0% (don't inflate).
+                        if ($totalMarksPossible > 0) {
                             $tasksData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
                         } else {
-                            $tasksData['average_marks'] = 100; // If tasks exist but have no marks, treat as 100%
+                            $tasksData['average_marks'] = 0;
                         }
 
                         // Count overdue tasks (pending = only overdue items, not all unsubmitted)
@@ -382,6 +384,11 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('class_participations')) {
                     $participationsQuery = DB::table('class_participations');
                     
+                    // Exclude soft-deleted class participations
+                    if (DB::getSchemaBuilder()->hasColumn('class_participations', 'deleted_at')) {
+                        $participationsQuery->whereNull('class_participations.deleted_at');
+                    }
+                    
                     // Only show class participations from batches assigned in user_batches table
                     if (DB::getSchemaBuilder()->hasColumn('class_participations', 'batch_id')) {
                         if (!empty($userBatchIds)) {
@@ -392,7 +399,7 @@ class StudentPerformanceController extends ApiController
                         }
                     }
                     
-                    // Get all class participations for this student
+                    // Get all class participations for this student (non-deleted only)
                     $allParticipations = $participationsQuery->get();
                     $classParticipationsData['total'] = $allParticipations->count();
                     $participationDetails = [];
@@ -514,13 +521,11 @@ class StudentPerformanceController extends ApiController
                         }
                         $classParticipationsData['total_marks_obtained'] = $totalMarksObtained;
                         $classParticipationsData['total_marks_possible'] = $totalMarksPossible;
-                        // If no class participations assigned (total = 0), set to 100% so it doesn't affect overall average
-                        if ($classParticipationsData['total'] == 0) {
-                            $classParticipationsData['average_marks'] = 100;
-                        } else if ($totalMarksPossible > 0) {
+                        // No expired participations = 0% (don't inflate).
+                        if ($totalMarksPossible > 0) {
                             $classParticipationsData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
                         } else {
-                            $classParticipationsData['average_marks'] = 100; // If participations exist but have no marks, treat as 100%
+                            $classParticipationsData['average_marks'] = 0;
                         }
                         $classParticipationsData['completion_rate'] = $classParticipationsData['total'] > 0 
                             ? round(($classParticipationsData['completed'] / $classParticipationsData['total']) * 100, 2) 
@@ -550,6 +555,11 @@ class StudentPerformanceController extends ApiController
                 if (DB::getSchemaBuilder()->hasTable('quizzes')) {
                     $quizzesQuery = DB::table('quizzes');
                     
+                    // Exclude soft-deleted quizzes
+                    if (DB::getSchemaBuilder()->hasColumn('quizzes', 'deleted_at')) {
+                        $quizzesQuery->whereNull('quizzes.deleted_at');
+                    }
+                    
                     // Only show quizzes from batches assigned in user_batches table
                     if (DB::getSchemaBuilder()->hasColumn('quizzes', 'batch_id')) {
                         if (!empty($userBatchIds)) {
@@ -562,7 +572,7 @@ class StudentPerformanceController extends ApiController
                         $quizzesQuery->where('user_id', $userId);
                     }
                     
-                    // Get all quizzes for this student
+                    // Get all quizzes for this student (non-deleted only)
                     $allQuizzes = $quizzesQuery->get();
                     $quizzesData['total'] = $allQuizzes->count();
                     $quizDetails = [];
@@ -676,14 +686,11 @@ class StudentPerformanceController extends ApiController
                         $quizzesData['total_marks_obtained'] = $totalMarksObtained;
                         $quizzesData['total_marks_possible'] = $totalMarksPossible;
                         
-                        // Calculate percentage: (obtained / possible) * 100
-                        // If no quizzes assigned (total = 0), set to 100% so it doesn't affect overall average
-                        if ($quizzesData['total'] == 0) {
-                            $quizzesData['average_marks'] = 100;
-                        } else if ($totalMarksPossible > 0) {
+                        // No expired quizzes = 0% (don't inflate).
+                        if ($totalMarksPossible > 0) {
                             $quizzesData['average_marks'] = round(($totalMarksObtained / $totalMarksPossible) * 100, 2);
                         } else {
-                            $quizzesData['average_marks'] = 100; // If quizzes exist but have no marks, treat as 100%
+                            $quizzesData['average_marks'] = 0;
                         }
                         
                         // Count overdue quizzes (pending = only overdue items, not all uncompleted)
@@ -828,54 +835,52 @@ class StudentPerformanceController extends ApiController
                 \Log::error('Error fetching attendance data: ' . $e->getMessage());
             }
 
-            // Calculate Overall Performance
-            // Simple average of three percentages: (task% + quiz% + class_participation%) / 3
+            // Calculate Overall Performance: (total obtained of expired tasks + quizzes + CPs) / (total marks of expired tasks + quizzes + CPs) * 100
+            $grandTotalObtained = $tasksData['total_marks_obtained'] + $quizzesData['total_marks_obtained'] + $classParticipationsData['total_marks_obtained'];
+            $grandTotalPossible = $tasksData['total_marks_possible'] + $quizzesData['total_marks_possible'] + $classParticipationsData['total_marks_possible'];
+
             $taskPercentage = round($tasksData['average_marks'], 2);
             $quizPercentage = round($quizzesData['average_marks'], 2);
             $classParticipationPercentage = round($classParticipationsData['average_marks'], 2);
-            
-            $percentages = [
-                $taskPercentage,
-                $quizPercentage,
-                $classParticipationPercentage,
-            ];
-            
-            // Calculate simple average
-            $overallPercentage = count($percentages) > 0 
-                ? round(array_sum($percentages) / count($percentages), 2) 
-                : 0;
-            
-            // Ensure percentage doesn't exceed 100%
-            $overallPercentage = min(100, max(0, $overallPercentage));
 
-            // Determine Grade
+            $overallPercentage = 0;
+            if ($grandTotalPossible > 0) {
+                $overallPercentage = round(($grandTotalObtained / $grandTotalPossible) * 100, 2);
+                $overallPercentage = min(100, max(0, $overallPercentage));
+            }
+
+            // Determine Grade: only assign letter grade when there is at least one expired task/quiz/CP
             $grade = 'N/A';
             $remarks = '';
-            
-            if ($overallPercentage >= 90) {
-                $grade = 'A+';
-                $remarks = 'Excellent performance! Keep up the outstanding work.';
-            } else if ($overallPercentage >= 85) {
-                $grade = 'A';
-                $remarks = 'Very good performance. Continue to maintain this level.';
-            } else if ($overallPercentage >= 80) {
-                $grade = 'B+';
-                $remarks = 'Good performance. There is room for improvement.';
-            } else if ($overallPercentage >= 75) {
-                $grade = 'B';
-                $remarks = 'Satisfactory performance. Focus on areas that need improvement.';
-            } else if ($overallPercentage >= 70) {
-                $grade = 'C+';
-                $remarks = 'Average performance. More effort is needed to improve.';
-            } else if ($overallPercentage >= 65) {
-                $grade = 'C';
-                $remarks = 'Below average performance. Significant improvement required.';
-            } else if ($overallPercentage >= 60) {
-                $grade = 'D';
-                $remarks = 'Poor performance. Immediate attention and improvement needed.';
+
+            if ($grandTotalPossible > 0) {
+                if ($overallPercentage >= 90) {
+                    $grade = 'A+';
+                    $remarks = 'Excellent performance! Keep up the outstanding work.';
+                } else if ($overallPercentage >= 85) {
+                    $grade = 'A';
+                    $remarks = 'Very good performance. Continue to maintain this level.';
+                } else if ($overallPercentage >= 80) {
+                    $grade = 'B+';
+                    $remarks = 'Good performance. There is room for improvement.';
+                } else if ($overallPercentage >= 75) {
+                    $grade = 'B';
+                    $remarks = 'Satisfactory performance. Focus on areas that need improvement.';
+                } else if ($overallPercentage >= 70) {
+                    $grade = 'C+';
+                    $remarks = 'Average performance. More effort is needed to improve.';
+                } else if ($overallPercentage >= 65) {
+                    $grade = 'C';
+                    $remarks = 'Below average performance. Significant improvement required.';
+                } else if ($overallPercentage >= 60) {
+                    $grade = 'D';
+                    $remarks = 'Poor performance. Immediate attention and improvement needed.';
+                } else {
+                    $grade = 'F';
+                    $remarks = 'Very poor performance. Urgent intervention required.';
+                }
             } else {
-                $grade = 'F';
-                $remarks = 'Very poor performance. Urgent intervention required.';
+                $remarks = 'No graded activities (tasks, quizzes, or class participations) yet.';
             }
 
             // Get student picture URL
@@ -920,9 +925,16 @@ class StudentPerformanceController extends ApiController
                             'percentage' => $classParticipationPercentage,
                         ],
                         'calculation' => [
-                            'formula' => "({$taskPercentage}% + {$quizPercentage}% + {$classParticipationPercentage}%) / 3",
-                            'result' => $overallPercentage . '%',
+                            'formula' => $grandTotalPossible > 0
+                                ? "Total Obtained ÷ Total Possible × 100 = ({$grandTotalObtained} ÷ {$grandTotalPossible}) × 100"
+                                : 'No expired tasks, quizzes, or class participations',
+                            'result' => $grandTotalPossible > 0 ? $overallPercentage . '%' : 'N/A',
+                            'grand_total_obtained' => $grandTotalObtained,
+                            'grand_total_possible' => $grandTotalPossible,
                         ],
+                        'grand_total_obtained' => $grandTotalObtained,
+                        'grand_total_possible' => $grandTotalPossible,
+                        'has_graded_activities' => $grandTotalPossible > 0,
                     ],
                 ],
                 'generated_at' => now()->setTimezone('Asia/Karachi')->format('Y-m-d H:i:s'),

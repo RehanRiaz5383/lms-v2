@@ -383,7 +383,7 @@ const Dashboard = () => {
                 <Award className="h-5 w-5 text-yellow-500" />
                 Overall Performance
               </CardTitle>
-              <CardDescription>Your academic performance summary</CardDescription>
+              <CardDescription>Overall = (Total Obtained ÷ Total Possible) × 100 — not an average of the three categories</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -447,8 +447,8 @@ const Dashboard = () => {
                   </div>
                 )}
 
-                {/* Grade and Remarks */}
-                {stats.performance?.grade && (
+                {/* Grade and Remarks - only when student has graded activities */}
+                {stats.performance?.has_graded_activities ? (
                   <div className="space-y-3 pt-2">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground mb-1">Grade</p>
@@ -466,6 +466,12 @@ const Dashboard = () => {
                         </p>
                       </div>
                     )}
+                  </div>
+                ) : stats.performance && (
+                  <div className="p-3 bg-muted/50 rounded-lg text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {stats.performance.remarks || 'No graded activities (tasks, quizzes, or class participations) yet.'}
+                    </p>
                   </div>
                 )}
 
