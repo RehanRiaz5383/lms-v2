@@ -15,18 +15,35 @@ import { API_ENDPOINTS } from '../config/api';
 import { cn } from '../utils/cn';
 import { formatCurrency } from '../utils/currency';
 
+// Format date as YYYY-MM-DD in local time (avoid UTC shift from toISOString)
+const toLocalDateString = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getThisMonthRange = () => {
+  const today = new Date();
+  return {
+    from: toLocalDateString(new Date(today.getFullYear(), today.getMonth(), 1)),
+    to: toLocalDateString(today),
+  };
+};
+
 const IncomeReport = () => {
   const { error: showError } = useToast();
+  const thisMonth = getThisMonthRange();
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalAmount, setTotalAmount] = useState(0);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(thisMonth.from);
+  const [dateTo, setDateTo] = useState(thisMonth.to);
 
   useEffect(() => {
     loadIncomeReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const loadIncomeReport = async () => {
     try {
@@ -85,8 +102,8 @@ const IncomeReport = () => {
         return;
     }
 
-    const fromDateStr = fromDate.toISOString().split('T')[0];
-    const toDateStr = toDate.toISOString().split('T')[0];
+    const fromDateStr = toLocalDateString(fromDate);
+    const toDateStr = toLocalDateString(toDate);
     
     setDateFrom(fromDateStr);
     setDateTo(toDateStr);
@@ -112,21 +129,10 @@ const IncomeReport = () => {
     loadIncomeReport();
   };
 
-  const handleClearFilter = async () => {
-    setDateFrom('');
-    setDateTo('');
-    
-    // Load report without date filters
-    try {
-      setLoading(true);
-      const response = await apiService.get(API_ENDPOINTS.vouchers.incomeReport);
-      setVouchers(response.data.data.vouchers || []);
-      setTotalAmount(response.data.data.total_amount || 0);
-    } catch (err) {
-      showError('Failed to load income report');
-    } finally {
-      setLoading(false);
-    }
+  const handleClearFilter = () => {
+    const { from, to } = getThisMonthRange();
+    setDateFrom(from);
+    setDateTo(to);
   };
 
   const formatDate = (dateString) => {

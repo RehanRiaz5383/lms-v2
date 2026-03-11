@@ -20,8 +20,44 @@ import { API_ENDPOINTS } from '../config/api';
 import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
 
+// Format date as YYYY-MM-DD in local time (avoid UTC shift from toISOString)
+const toLocalDateString = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const getDateRangeForFilter = (filterType) => {
+  const today = new Date();
+  let from;
+  let to;
+  switch (filterType) {
+    case 'last_month':
+      from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      to = new Date(today.getFullYear(), today.getMonth(), 0);
+      break;
+    case 'this_month':
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+      to = new Date(today);
+      break;
+    case 'this_year':
+      from = new Date(today.getFullYear(), 0, 1);
+      to = new Date(today);
+      break;
+    case 'last_year':
+      from = new Date(today.getFullYear() - 1, 0, 1);
+      to = new Date(today.getFullYear() - 1, 11, 31);
+      break;
+    default:
+      return { from: '', to: '' };
+  }
+  return { from: toLocalDateString(from), to: toLocalDateString(to) };
+};
+
 const IncomeExpenseReport = () => {
   const { error: showError } = useToast();
+  const thisMonthRange = getDateRangeForFilter('this_month');
   const [expenses, setExpenses] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,27 +65,23 @@ const IncomeExpenseReport = () => {
   const [totalIncome, setTotalIncome] = useState(0);
   const [profit, setProfit] = useState(0);
   const [filter, setFilter] = useState('this_month');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(thisMonthRange.from);
+  const [dateTo, setDateTo] = useState(thisMonthRange.to);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
 
   useEffect(() => {
     loadReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter, dateFrom, dateTo]);
 
   const loadReport = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       params.append('filter', filter);
-
-      if (dateFrom) {
-        params.append('date_from', dateFrom);
-      }
-      if (dateTo) {
-        params.append('date_to', dateTo);
-      }
+      // Always send explicit date range so backend uses local calendar (only selected month's data)
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
 
       const response = await apiService.get(`${API_ENDPOINTS.expenses.incomeExpenseReport}?${params.toString()}`);
       setExpenses(response.data.data.expenses || []);
@@ -65,9 +97,10 @@ const IncomeExpenseReport = () => {
   };
 
   const handleQuickFilter = (filterType) => {
+    const range = getDateRangeForFilter(filterType);
     setFilter(filterType);
-    setDateFrom('');
-    setDateTo('');
+    setDateFrom(range.from);
+    setDateTo(range.to);
   };
 
   const handleApplyFilter = () => {
@@ -76,9 +109,10 @@ const IncomeExpenseReport = () => {
   };
 
   const handleClearFilter = () => {
+    const range = getDateRangeForFilter('this_month');
     setFilter('this_month');
-    setDateFrom('');
-    setDateTo('');
+    setDateFrom(range.from);
+    setDateTo(range.to);
   };
 
   const formatDate = (dateString) => {
