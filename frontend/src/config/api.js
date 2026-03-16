@@ -201,6 +201,7 @@ export const API_ENDPOINTS = {
     create: '/videos',
     update: '/videos/:id',
     delete: '/videos/:id',
+    uploadResource: '/videos/:id/resource',
     assignToBatchSubject: '/videos/:id/assign-batch-subject',
     getBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId',
     reorderBatchSubjectVideos: '/videos/batch/:batchId/subject/:subjectId/reorder',
