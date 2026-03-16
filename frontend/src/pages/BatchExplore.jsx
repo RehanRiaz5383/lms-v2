@@ -955,9 +955,7 @@ const BatchExplore = () => {
       const endpoint = buildEndpoint(API_ENDPOINTS.videos.uploadResource, { id: editingVideo.id });
       const formData = new FormData();
       formData.append('resource_file', resourceFile);
-      await apiService.post(endpoint, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await apiService.post(endpoint, formData);
       success('Resource uploaded successfully');
       setResourceFile(null);
       if (selectedSubject) await loadVideos(selectedSubject.id);
@@ -967,7 +965,9 @@ const BatchExplore = () => {
         return { ...prev, resource: res };
       });
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to upload resource');
+      const data = err.response?.data;
+      const msg = data?.error ?? data?.message ?? (data?.errors && Object.values(data.errors).flat().length ? Object.values(data.errors).flat().join(' ') : null) ?? 'Failed to upload resource';
+      showError(typeof msg === 'string' ? msg : 'Failed to upload resource');
     } finally {
       setUploadingResource(false);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GoogleDriveFolder;
 use App\Models\Video;
 use App\Models\VideoResource;
 use App\Traits\UploadsToGoogleDrive;
@@ -249,15 +250,29 @@ class VideoController extends ApiController
             return $this->notFound('Video not found');
         }
 
+        // Ensure "resources" folder is configured in Settings > Google Drive Folders (name: resources)
+        $resourcesFolder = GoogleDriveFolder::getByName('resources');
+        if (!$resourcesFolder || empty($resourcesFolder->folder_id)) {
+            return $this->error(
+                'Google Drive folder "resources" is not configured or has no folder ID. Add it in Dashboard > Settings > Google Drive Folders with internal name "resources".',
+                'Resources folder not configured',
+                400
+            );
+        }
+
         try {
             $request->validate([
-                'resource_file' => 'required|file|mimes:zip|max:102400', // 100MB max for ZIP
+                'resource_file' => 'required|file|max:102400', // 100MB
             ]);
         } catch (ValidationException $e) {
             return $this->validationError($e->errors(), 'Validation failed');
         }
 
         $file = $request->file('resource_file');
+        $ext = strtolower($file->getClientOriginalExtension());
+        if ($ext !== 'zip') {
+            return $this->error('Only ZIP files are allowed.', 'Invalid file type', 422);
+        }
         $originalName = $file->getClientOriginalName();
 
         try {
@@ -265,7 +280,7 @@ class VideoController extends ApiController
             $path = $this->uploadToGoogleDrive($file, 'resources');
 
             if (!$path) {
-                return $this->error('Failed to upload resource to Google Drive', 500);
+                return $this->error('Upload returned no path', 'Failed to upload resource to Google Drive', 500);
             }
 
             // Ensure path is stored consistently (e.g. lms/resources/...)
@@ -295,7 +310,11 @@ class VideoController extends ApiController
                 ],
             ], 'Resource uploaded successfully');
         } catch (\Exception $e) {
-            return $this->error('Failed to upload resource: ' . $e->getMessage(), 500);
+            return $this->error(
+                $e->getMessage(),
+                'Failed to upload resource',
+                500
+            );
         }
     }
 
