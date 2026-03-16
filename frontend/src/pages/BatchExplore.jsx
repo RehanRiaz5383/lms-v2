@@ -950,9 +950,15 @@ const BatchExplore = () => {
       showError('Please select a ZIP file to upload');
       return;
     }
+    const videoId = editingVideo.id;
+    const uploadEndpoint = API_ENDPOINTS.videos?.uploadResource;
+    if (!uploadEndpoint) {
+      showError('Upload endpoint not configured. Check API config.');
+      return;
+    }
     setUploadingResource(true);
     try {
-      const endpoint = buildEndpoint(API_ENDPOINTS.videos.uploadResource, { id: editingVideo.id });
+      const endpoint = buildEndpoint(uploadEndpoint, { id: videoId });
       const formData = new FormData();
       formData.append('resource_file', resourceFile);
       await apiService.post(endpoint, formData);
@@ -965,8 +971,15 @@ const BatchExplore = () => {
         return { ...prev, resource: res };
       });
     } catch (err) {
+      // No err.response = request never reached server (CORS, network, or thrown before send)
       const data = err.response?.data;
-      const msg = data?.error ?? data?.message ?? (data?.errors && Object.values(data.errors).flat().length ? Object.values(data.errors).flat().join(' ') : null) ?? 'Failed to upload resource';
+      let msg = 'Failed to upload resource';
+      if (data) {
+        msg = (typeof data.error === 'string' ? data.error : null) ?? data.message ?? (data.errors && Object.values(data.errors).flat().length ? Object.values(data.errors).flat().join(' ') : null) ?? msg;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      console.error('[Upload resource]', { message: err.message, response: err.response, code: err.code, endpoint: uploadEndpoint, videoId });
       showError(typeof msg === 'string' ? msg : 'Failed to upload resource');
     } finally {
       setUploadingResource(false);
