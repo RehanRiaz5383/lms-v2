@@ -20,6 +20,7 @@ import StudentLectureVideos from './pages/StudentLectureVideos';
 import StudentTasks from './pages/StudentTasks';
 import StudentQuizzes from './pages/StudentQuizzes';
 import StudentClassParticipations from './pages/StudentClassParticipations';
+import AcademicCalendar from './pages/AcademicCalendar';
 import BatchExplore from './pages/BatchExplore';
 import NotificationDetail from './pages/NotificationDetail';
 import StudentPerformanceReportPage from './pages/StudentPerformanceReportPage';
@@ -38,6 +39,7 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import WhosOnline from './components/chat/WhosOnline';
 import ChatManager from './components/chat/ChatManager';
 import ChatNotificationBubble from './components/chat/ChatNotificationBubble';
+import DeployVersionSync from './components/DeployVersionSync';
 import { useUserStatusPolling } from './hooks/useUserStatusPolling';
 
 // Inner component to handle message listener
@@ -126,6 +128,7 @@ function App() {
     <Provider store={store}>
       <ToastProvider>
         <BrowserRouter>
+          <DeployVersionSync />
           <AppContent />
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -272,6 +275,11 @@ function App() {
             <Route path="class-participations" element={
               <BlockedRoute>
                 <StudentClassParticipations />
+              </BlockedRoute>
+            } />
+            <Route path="academic-calendar" element={
+              <BlockedRoute>
+                <AcademicCalendar />
               </BlockedRoute>
             } />
             {/* Add more dashboard routes here */}

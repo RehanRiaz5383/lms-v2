@@ -10,7 +10,7 @@
  * Set to 'development' for local development or 'production' for live server
  * Options: 'development' | 'production'
  */
-const APP_MODE = 'production'; // Change to 'production' when deploying 
+const APP_MODE = 'development'; // Change to 'production' when deploying 
 //final updated code
 
 // Export APP_MODE for use in other modules
@@ -58,6 +58,8 @@ export const API_CONFIG = {
 
 // API Endpoints
 export const API_ENDPOINTS = {
+  /** Public — SPA deploy / cache busting */
+  appVersion: '/app-version',
   // Authentication
   auth: {
     login: '/login',

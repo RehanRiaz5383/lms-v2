@@ -25,6 +25,7 @@ use App\Http\Controllers\PushNotificationController;
 use App\Http\Controllers\GoogleDriveTestController;
 use App\Http\Controllers\SocketController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\AppVersionController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -42,6 +43,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/signup', [AuthController::class, 'signup']);
 Route::get('/turnstile-settings', [CloudflareTurnstileController::class, 'getSettings']); // Public endpoint to get site key
+// SPA deploy version — public, used to trigger hard reload when backend bumps version after deploy
+Route::get('/app-version', [AppVersionController::class, 'show']);
 // Public video creation route for testing (excluded from auth)
 Route::post('/videos', [VideoController::class, 'store']);
 // Public direct download route (no authentication required - file will be made public on Google Drive)

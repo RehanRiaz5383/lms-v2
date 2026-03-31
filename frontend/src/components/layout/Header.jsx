@@ -4,7 +4,7 @@ import { logout } from '../../store/slices/authSlice';
 import { fetchProfile } from '../../store/slices/profileSlice';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../ui/button';
-import { Menu, Moon, Sun, LogOut, User, BarChart3, BookOpen, RefreshCw } from 'lucide-react';
+import { Menu, Moon, Sun, LogOut, BarChart3, BookOpen, CalendarDays } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
 import NotificationDropdown from '../notifications/NotificationDropdown';
@@ -51,26 +51,6 @@ const Header = ({ onMenuClick }) => {
     navigate('/login');
   };
 
-  const handleHardRefresh = () => {
-    // Clear browser cache
-    if ('caches' in window) {
-      caches.keys().then((names) => {
-        names.forEach((name) => {
-          caches.delete(name);
-        });
-      });
-    }
-    
-    // Force a hard refresh by adding a cache-busting parameter and reloading
-    const url = new URL(window.location.href);
-    // Remove existing refresh parameter if present
-    url.searchParams.delete('_refresh');
-    // Add new timestamp to force cache bypass
-    url.searchParams.set('_refresh', Date.now().toString());
-    // Reload with cache-busting parameter
-    window.location.href = url.toString();
-  };
-
   // Check if user is a student
   const isStudent = () => {
     if (!user) return false;
@@ -104,15 +84,15 @@ const Header = ({ onMenuClick }) => {
         {/* Notifications */}
         <NotificationDropdown />
 
-        {/* Hard Refresh Button (All users) */}
+        {/* Academic calendar */}
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleHardRefresh}
-          aria-label="Hard Refresh"
-          title="Hard Refresh (Clear Cache)"
+          onClick={() => navigate('/dashboard/academic-calendar')}
+          aria-label="Academic calendar"
+          title="Academic calendar"
         >
-          <RefreshCw className="h-5 w-5" />
+          <CalendarDays className="h-5 w-5" />
         </Button>
 
         {/* Performance Report (Students only) */}
