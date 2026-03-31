@@ -3,6 +3,7 @@ import { Send, Smile, Paperclip, X, Loader2 } from 'lucide-react';
 import { socketService } from '../../services/socketService';
 import { chatService } from '../../services/chatService';
 import EmojiPicker from './EmojiPicker';
+import { ensurePastedFileName, getFileFromClipboardData } from '../../utils/chatClipboard';
 
 const MessageInput = ({ onSend, sending, conversationId }) => {
   const [message, setMessage] = useState('');
@@ -96,6 +97,14 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
 
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];
+    await handleFileUpload(file);
+  };
+
+  const handlePaste = async (e) => {
+    const raw = getFileFromClipboardData(e.clipboardData);
+    if (!raw || uploading || sending) return;
+    e.preventDefault();
+    const file = ensurePastedFileName(raw);
     await handleFileUpload(file);
   };
 
@@ -235,7 +244,10 @@ const MessageInput = ({ onSend, sending, conversationId }) => {
           value={message}
           onChange={handleInputChange}
           onKeyPress={handleKeyPress}
-          placeholder="Type a message..."
+          onPaste={handlePaste}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          placeholder="Message… Paste screenshot (Ctrl+V) or drop a file"
           rows={1}
           className="flex-1 resize-none border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600"
           style={{ minHeight: '44px', maxHeight: '120px' }}

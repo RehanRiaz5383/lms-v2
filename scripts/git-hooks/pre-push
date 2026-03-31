@@ -1,0 +1,30 @@
+#!/bin/sh
+# Require APP_MODE = 'production' in frontend API config before push.
+#
+# Install (repo root):  git config core.hooksPath scripts/git-hooks
+# Bypass (emergency): SKIP_PRODUCTION_MODE_CHECK=1 git push
+#
+# If you already use a different core.hooksPath, copy this file into that folder instead.
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+API_JS="$ROOT/frontend/src/config/api.js"
+
+if [ -n "$SKIP_PRODUCTION_MODE_CHECK" ]; then
+  exit 0
+fi
+
+if [ ! -f "$API_JS" ]; then
+  echo "pre-push: expected file not found: frontend/src/config/api.js" >&2
+  exit 1
+fi
+
+# const APP_MODE = 'production' or "production"
+if ! grep -qE "^[[:space:]]*const[[:space:]]+APP_MODE[[:space:]]*=[[:space:]]*'production'" "$API_JS" &&
+   ! grep -qE '^[[:space:]]*const[[:space:]]+APP_MODE[[:space:]]*=[[:space:]]*"production"' "$API_JS"; then
+  echo "pre-push: frontend/src/config/api.js must use APP_MODE = 'production' before push." >&2
+  echo "          Example: const APP_MODE = 'production';" >&2
+  echo "          Emergency bypass: SKIP_PRODUCTION_MODE_CHECK=1 git push" >&2
+  exit 1
+fi
+
+exit 0

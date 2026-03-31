@@ -11,6 +11,7 @@ import { Button } from '../components/ui/button';
 import EmojiPicker from '../components/chat/EmojiPicker';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { playNotificationSound } from '../utils/notificationSound';
+import { ensurePastedFileName, getFileFromClipboardData } from '../utils/chatClipboard';
 
 const AttachmentLink = ({ message, isOwn }) => {
   const [downloading, setDownloading] = useState(false);
@@ -545,6 +546,14 @@ const Inbox = () => {
     await handleFileUpload(file);
   };
 
+  const handlePaste = async (e) => {
+    const raw = getFileFromClipboardData(e.clipboardData);
+    if (!raw || uploading || sending) return;
+    e.preventDefault();
+    const file = ensurePastedFileName(raw);
+    await handleFileUpload(file);
+  };
+
   const handleRemoveAttachment = () => {
     setAttachment(null);
   };
@@ -1052,6 +1061,9 @@ const Inbox = () => {
                 <textarea
                   value={message}
                   onChange={handleInputChange}
+                  onPaste={handlePaste}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -1059,7 +1071,7 @@ const Inbox = () => {
                       setShowEmojiPicker(false);
                     }
                   }}
-                  placeholder="Type a message..."
+                  placeholder="Message… Paste screenshot (Ctrl+V) or drop a file"
                   rows={1}
                   className="flex-1 resize-none border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                   style={{ minHeight: '44px', maxHeight: '120px' }}
