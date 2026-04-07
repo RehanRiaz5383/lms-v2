@@ -38,6 +38,8 @@ import { API_ENDPOINTS } from '../config/api';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/toast';
 import { formatCurrency } from '../utils/currency';
+import { cn } from '../utils/cn';
+import { DASHBOARD_GLASS_SHELL, DASHBOARD_GLASS_CARD } from '../constants/dashboardGlassStyles';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import UpcomingActivities from '../components/UpcomingActivities';
 
@@ -302,7 +304,7 @@ const Dashboard = () => {
 
   if (isStudent && stats) {
     return (
-      <div className="space-y-6">
+      <div className={cn('space-y-6', DASHBOARD_GLASS_SHELL)}>
         {/* Welcome Section */}
         <div className="flex items-center justify-between">
           <div>
@@ -325,7 +327,7 @@ const Dashboard = () => {
           <UpcomingActivities />
           
           {/* Pending Payments Card - 30% width */}
-          <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
+          <Card className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-orange-500')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Pending Payments
@@ -377,7 +379,7 @@ const Dashboard = () => {
         {/* Performance and Videos Row */}
         <div className="grid gap-4 md:grid-cols-2">
           {/* Overall Performance */}
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className={DASHBOARD_GLASS_CARD}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Award className="h-5 w-5 text-yellow-500" />
@@ -489,7 +491,7 @@ const Dashboard = () => {
           </Card>
 
           {/* Videos Available */}
-          <Card className="hover:shadow-lg transition-shadow">
+          <Card className={DASHBOARD_GLASS_CARD}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <PlayCircle className="h-5 w-5 text-blue-500" />
@@ -518,7 +520,7 @@ const Dashboard = () => {
         {/* Recent Activity */}
         <div className="grid gap-4 md:grid-cols-2">
           {/* Recent Tasks */}
-          <Card>
+          <Card className={DASHBOARD_GLASS_CARD}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5" />
@@ -579,7 +581,7 @@ const Dashboard = () => {
           </Card>
 
           {/* Recent Quizzes */}
-          <Card>
+          <Card className={DASHBOARD_GLASS_CARD}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <HelpCircle className="h-5 w-5" />
@@ -706,7 +708,7 @@ const Dashboard = () => {
 
 
   return (
-    <div className="space-y-6">
+    <div className={cn('space-y-6', DASHBOARD_GLASS_SHELL)}>
       {/* Welcome Section */}
       <div className="flex items-center justify-between">
         <div>
@@ -728,9 +730,9 @@ const Dashboard = () => {
         {mainStats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <Card 
-              key={stat.title} 
-              className="hover:shadow-lg transition-shadow cursor-pointer"
+            <Card
+              key={stat.title}
+              className={cn(DASHBOARD_GLASS_CARD, 'cursor-pointer hover:scale-[1.01]')}
               onClick={() => navigate(stat.link)}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -770,7 +772,7 @@ const Dashboard = () => {
       {/* Charts and Additional Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {/* User Types Distribution */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <CardTitle className="text-base">User Types Distribution</CardTitle>
             <CardDescription>Breakdown by role</CardDescription>
@@ -805,7 +807,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Overdue Task Submissions */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-red-500" />
@@ -885,7 +887,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Trending Signup Reasons */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -992,7 +994,7 @@ const Dashboard = () => {
       {/* Recent Activity */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* Recent Users */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <UserCheck className="h-4 w-4" />
@@ -1034,7 +1036,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Recent Batches */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <GraduationCap className="h-4 w-4" />
@@ -1080,7 +1082,7 @@ const Dashboard = () => {
         </Card>
 
         {/* Recent Videos */}
-        <Card>
+        <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Video className="h-4 w-4" />

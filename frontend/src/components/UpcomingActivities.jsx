@@ -16,6 +16,8 @@ import { API_ENDPOINTS } from '../config/api';
 import { useToast } from './ui/toast';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { cn } from '../utils/cn';
+import { DASHBOARD_GLASS_CARD } from '../constants/dashboardGlassStyles';
 
 // Reusable countdown timer component
 const CountdownTimer = ({ dueDate, type = 'default' }) => {
@@ -232,7 +234,7 @@ const UpcomingActivities = () => {
 
   if (loading) {
     return (
-      <Card className="border-2 border-primary/20 shadow-lg">
+      <Card className={cn(DASHBOARD_GLASS_CARD, 'border-2 border-primary/20 shadow-lg')}>
         <CardContent className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </CardContent>
@@ -241,7 +243,12 @@ const UpcomingActivities = () => {
   }
 
   return (
-    <Card className="border-2 border-primary/20 shadow-lg hover:shadow-xl transition-shadow bg-gradient-to-br from-background to-muted/20">
+    <Card
+      className={cn(
+        DASHBOARD_GLASS_CARD,
+        'border-2 border-primary/20 shadow-lg hover:shadow-xl bg-gradient-to-br from-background/70 to-muted/20'
+      )}
+    >
       <CardHeader className="pb-4 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

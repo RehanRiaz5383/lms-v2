@@ -33,6 +33,12 @@ import {
   Inbox,
 } from 'lucide-react';
 
+/** Active item: frosted tint + inset highlight (emboss) to match the glass sidebar rail. */
+const SIDEBAR_ACTIVE_ITEM =
+  'relative z-0 bg-primary/20 backdrop-blur-md backdrop-saturate-150 font-semibold text-primary ' +
+  'shadow-[inset_0_1px_0_0_rgba(255,255,255,0.55),inset_0_-1px_0_0_rgba(0,0,0,0.06)] ring-1 ring-inset ring-primary/35 ' +
+  'dark:bg-primary/30 dark:text-primary-foreground dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),inset_0_-1px_0_0_rgba(0,0,0,0.25)] dark:ring-primary/45';
+
 // Submenu Button Component
 const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onClose, location, closeAllMenus }) => {
   const buttonRef = useRef(null);
@@ -75,10 +81,10 @@ const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onC
           ref={buttonRef}
           onClick={() => toggleMenu(item.key)}
           className={cn(
-            'w-full flex items-center justify-center py-2 rounded-md text-sm font-medium transition-colors',
+            'w-full flex items-center justify-center py-2 rounded-md text-sm font-medium transition-all duration-200',
             hasActiveChild
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              ? SIDEBAR_ACTIVE_ITEM
+              : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground hover:backdrop-blur-sm'
           )}
         >
           <Icon className="h-5 w-5 mx-auto" />
@@ -88,7 +94,7 @@ const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onC
         <div 
           ref={submenuRef}
           data-submenu={item.key}
-          className="fixed left-16 w-48 bg-card border border-border rounded-md shadow-lg py-1 z-[10000]"
+          className="fixed left-16 w-48 rounded-xl border border-border/50 bg-background/80 py-1 shadow-lg backdrop-blur-2xl backdrop-saturate-150 dark:bg-background/70 z-[10000]"
           style={{ 
             top: `${submenuTop}px`,
             zIndex: 10000,
@@ -107,10 +113,10 @@ const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onC
                   closeAllMenus();
                 }}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                  'mx-1 flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200',
                   isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    ? SIDEBAR_ACTIVE_ITEM
+                    : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground'
                 )}
               >
                 <SubIcon className="h-4 w-4" />
@@ -611,10 +617,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                 closeAllMenus();
               }}
               className={cn(
-                'relative flex items-center justify-center py-2 rounded-md text-sm font-medium transition-colors w-full',
+                'relative flex w-full items-center justify-center py-2 rounded-md text-sm font-medium transition-all duration-200',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  ? SIDEBAR_ACTIVE_ITEM
+                  : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground hover:backdrop-blur-sm'
               )}
             >
               <Icon className="h-5 w-5 mx-auto" />
@@ -643,13 +649,17 @@ const Sidebar = ({ isOpen, onClose }) => {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 h-full w-16 bg-card border-r border-border transform transition-transform duration-300 ease-in-out lg:translate-x-0 overflow-visible',
+          'fixed left-0 top-0 z-50 h-full w-16 transform transition-transform duration-300 ease-in-out lg:translate-x-0 overflow-visible',
+          'border-r border-border/50',
+          'bg-background/72 dark:bg-background/55',
+          'backdrop-blur-2xl backdrop-saturate-150',
+          'shadow-[2px_0_24px_-8px_rgba(0,0,0,0.08)] dark:shadow-[2px_0_32px_-12px_rgba(0,0,0,0.45)]',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex flex-col h-full overflow-visible">
           {/* Logo/Brand */}
-          <div className="h-16 flex items-center justify-center border-b border-border p-2">
+          <div className="h-16 flex items-center justify-center border-b border-border/40 p-2">
             <img 
               src={logo} 
               alt="LMS Logo" 
