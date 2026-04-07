@@ -2,36 +2,35 @@ import { useEffect, useState } from 'react';
 import { useAppSelector } from '../hooks/redux';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { 
-  Users, 
-  BookOpen, 
-  Video, 
+import {
+  Users,
+  BookOpen,
+  Video,
   GraduationCap,
   TrendingUp,
   TrendingDown,
   UserCheck,
-  UserX,
-  FolderOpen,
   FileVideo,
   Link2,
-  ArrowRight,
   Clock,
   Activity,
   ClipboardList,
   HelpCircle,
   CheckCircle2,
   XCircle,
-  Calendar,
+  CalendarDays,
   Award,
-  Target,
   PlayCircle,
   AlertCircle,
   Wallet,
   BarChart3,
   ChevronDown,
   Bell,
-  Mail,
   Loader2,
+  Inbox,
+  Sparkles,
+  LayoutList,
+  PieChart as PieChartIcon,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS } from '../config/api';
@@ -39,11 +38,31 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/toast';
 import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
-import { DASHBOARD_GLASS_SHELL, DASHBOARD_GLASS_CARD } from '../constants/dashboardGlassStyles';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import {
+  DASHBOARD_GLASS_SHELL,
+  DASHBOARD_GLASS_CARD,
+  DASHBOARD_PAGE_WRAP,
+  DASHBOARD_ORB_L,
+  DASHBOARD_ORB_R,
+  DASHBOARD_GLASS_PILL,
+} from '../constants/dashboardGlassStyles';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend as RechartsLegend,
+} from 'recharts';
 import UpcomingActivities from '../components/UpcomingActivities';
 
-// Countdown timer component for nearest task
+const PIE_COLORS = ['#8b5cf6', '#0ea5e9', '#22c55e', '#f97316', '#ec4899'];
+
 const TaskCountdownTimer = ({ dueDate }) => {
   const [timeLeft, setTimeLeft] = useState(null);
   const [isExpired, setIsExpired] = useState(false);
@@ -58,42 +77,32 @@ const TaskCountdownTimer = ({ dueDate }) => {
     const updateTimer = () => {
       try {
         const now = new Date();
-        // Parse due date - handle both date-only and datetime formats
         let due = new Date(dueDate);
-        
-        // If the date is invalid, return
         if (isNaN(due.getTime())) {
-          console.warn('Invalid date received:', dueDate);
           setTimeLeft(null);
           setIsExpired(false);
           return;
         }
-
-        // Check if it's a date-only format (YYYY-MM-DD) and set to end of day
         const dateStr = String(dueDate);
-        // If the string is just a date (10 chars: YYYY-MM-DD) or doesn't have time info
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/) || (!dateStr.includes('T') && !dateStr.includes(' ') && dateStr.length <= 10)) {
-          // It's a date-only format, set to end of day (23:59:59)
+        if (
+          dateStr.match(/^\d{4}-\d{2}-\d{2}$/) ||
+          (!dateStr.includes('T') && !dateStr.includes(' ') && dateStr.length <= 10)
+        ) {
           due.setHours(23, 59, 59, 999);
         }
-        
         const diff = due - now;
-
         if (diff <= 0) {
           setTimeLeft(null);
           setIsExpired(true);
           return;
         }
-
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
         setTimeLeft({ days, hours, minutes, seconds });
         setIsExpired(false);
-      } catch (error) {
-        console.error('Error calculating countdown:', error, 'dueDate:', dueDate);
+      } catch {
         setTimeLeft(null);
         setIsExpired(false);
       }
@@ -101,45 +110,43 @@ const TaskCountdownTimer = ({ dueDate }) => {
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
-
     return () => clearInterval(interval);
   }, [dueDate]);
 
   if (isExpired) {
-    return (
-      <div className="text-xs text-red-500 font-medium">
-        Expired
-      </div>
-    );
+    return <div className="text-xs font-medium text-red-500">Expired</div>;
   }
-
   if (!timeLeft) {
-    return (
-      <div className="text-xs text-muted-foreground">
-        Calculating...
-      </div>
-    );
+    return <div className="text-xs text-muted-foreground">…</div>;
   }
-
   return (
-    <div className="flex items-center gap-1.5 text-xs">
+    <div className="flex flex-wrap items-center gap-1 text-xs">
       {timeLeft.days > 0 && (
-        <span className="px-2 py-1 bg-blue-500/10 text-blue-600 rounded font-semibold">
+        <span className="rounded bg-blue-500/15 px-2 py-0.5 font-semibold text-blue-600 dark:text-blue-400">
           {timeLeft.days}d
         </span>
       )}
-      <span className="px-2 py-1 bg-orange-500/10 text-orange-600 rounded font-semibold">
+      <span className="rounded bg-orange-500/15 px-2 py-0.5 font-semibold text-orange-600 dark:text-orange-400">
         {String(timeLeft.hours).padStart(2, '0')}h
       </span>
-      <span className="px-2 py-1 bg-yellow-500/10 text-yellow-600 rounded font-semibold">
+      <span className="rounded bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-700 dark:text-amber-400">
         {String(timeLeft.minutes).padStart(2, '0')}m
       </span>
-      <span className="px-2 py-1 bg-green-500/10 text-green-600 rounded font-semibold">
+      <span className="rounded bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-400">
         {String(timeLeft.seconds).padStart(2, '0')}s
       </span>
     </div>
   );
 };
+
+function QuickAction({ icon: Icon, label, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className={cn(DASHBOARD_GLASS_PILL, 'w-full justify-center sm:w-auto')}>
+      <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+      {label}
+    </button>
+  );
+}
 
 const Dashboard = () => {
   const { user } = useAppSelector((state) => state.auth);
@@ -154,10 +161,11 @@ const Dashboard = () => {
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [loadingPendingSubmissions, setLoadingPendingSubmissions] = useState(false);
   const [notifyingStudentId, setNotifyingStudentId] = useState(null);
+  const [studentActivityTab, setStudentActivityTab] = useState('tasks');
 
-  // Check if user is student
-  const isStudent = user?.roles?.some(role => role.title?.toLowerCase() === 'student') || 
-                   user?.user_type_title?.toLowerCase() === 'student';
+  const isStudent =
+    user?.roles?.some((role) => role.title?.toLowerCase() === 'student') ||
+    user?.user_type_title?.toLowerCase() === 'student';
 
   useEffect(() => {
     if (isStudent) {
@@ -175,28 +183,23 @@ const Dashboard = () => {
     }
   }, [trendingFilter]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showFilterDropdown && !event.target.closest('.filter-dropdown-container')) {
         setShowFilterDropdown(false);
       }
     };
-
     if (showFilterDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showFilterDropdown]);
 
   const loadDashboardStats = async () => {
     try {
       const response = await apiService.get(API_ENDPOINTS.dashboard.stats);
       setStats(response.data.data);
-    } catch (err) {
+    } catch {
       showError('Failed to load dashboard statistics');
     } finally {
       setLoading(false);
@@ -251,7 +254,7 @@ const Dashboard = () => {
     try {
       const response = await apiService.get(API_ENDPOINTS.student.dashboardStats);
       setStats(response.data.data);
-    } catch (err) {
+    } catch {
       showError('Failed to load dashboard statistics');
     } finally {
       setLoading(false);
@@ -270,388 +273,358 @@ const Dashboard = () => {
     const date = new Date(dateString);
     const now = new Date();
     const diffInSeconds = Math.floor((now - date) / 1000);
-    
     if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
     return date.toLocaleDateString();
   };
 
   const getStatusColor = (rate) => {
-    if (rate >= 80) return 'text-green-500';
-    if (rate >= 60) return 'text-yellow-500';
+    if (rate >= 80) return 'text-emerald-500';
+    if (rate >= 60) return 'text-amber-500';
     return 'text-red-500';
   };
 
-  const getStatusBgColor = (rate) => {
-    if (rate >= 80) return 'bg-green-500/10';
-    if (rate >= 60) return 'bg-yellow-500/10';
-    return 'bg-red-500/10';
-  };
-
-  // Show empty dashboard for students (will be replaced with student stats)
   if (isStudent && loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md">
         <div className="text-center">
-          <Activity className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
-          <p className="text-muted-foreground">Loading your dashboard...</p>
+          <Activity className="mx-auto mb-2 h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading your learning hub…</p>
         </div>
       </div>
     );
   }
 
   if (isStudent && stats) {
+    const overallPct = stats.performance?.breakdown?.calculation?.result
+      ? parseFloat(String(stats.performance.breakdown.calculation.result).replace('%', '')) || 0
+      : stats.performance?.overall_average ?? 0;
+    const showAttendance = (stats.attendance?.total_days ?? 0) > 0;
+
     return (
-      <div className={cn('space-y-6', DASHBOARD_GLASS_SHELL)}>
-        {/* Welcome Section */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              Welcome back, {user?.name || 'Student'}! 👋
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              Here's your learning progress and statistics
-            </p>
+      <div className={cn(DASHBOARD_PAGE_WRAP)}>
+        <div className={DASHBOARD_ORB_L} aria-hidden />
+        <div className={DASHBOARD_ORB_R} aria-hidden />
+        <div className="relative z-10 space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary backdrop-blur-sm">
+                <Sparkles className="h-3.5 w-3.5" />
+                Your learning space
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+                Hi,{' '}
+                <span className="bg-gradient-to-r from-violet-600 to-sky-600 bg-clip-text text-transparent dark:from-violet-300 dark:to-sky-300">
+                  {user?.name?.split(' ')[0] || 'Student'}
+                </span>
+              </h1>
+              <p className="mt-2 max-w-xl text-muted-foreground">
+                Stay on top of tasks, quizzes, and deadlines—everything in one calm, glass-clear view.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <QuickAction icon={ClipboardList} label="Tasks" onClick={() => navigate('/dashboard/tasks')} />
+              <QuickAction icon={Video} label="Videos" onClick={() => navigate('/dashboard/lecture-videos')} />
+              <QuickAction icon={HelpCircle} label="Quizzes" onClick={() => navigate('/dashboard/quizzes')} />
+              <QuickAction icon={Inbox} label="Inbox" onClick={() => navigate('/dashboard/inbox')} />
+              <QuickAction
+                icon={CalendarDays}
+                label="Calendar"
+                onClick={() => navigate('/dashboard/academic-calendar')}
+              />
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Last updated</p>
-            <p className="text-sm font-medium">{new Date().toLocaleTimeString()}</p>
-          </div>
-        </div>
 
-        {/* My Upcoming Activities and Pending Payments - 70/30 Split */}
-        <div className="grid gap-4 lg:grid-cols-[70%_30%]">
-          {/* My Upcoming Activities - 70% width */}
-          <UpcomingActivities />
-          
-          {/* Pending Payments Card - 30% width */}
-          <Card className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-orange-500')}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Pending Payments
-              </CardTitle>
-              <div className="bg-orange-500/10 p-2 rounded-lg">
-                <Wallet className="h-4 w-4 text-orange-500" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground mb-1">
-                {stats.vouchers?.pending_count || 0}
-              </div>
-              <div className="flex items-center justify-between mb-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div
+              className={cn(
+                DASHBOARD_GLASS_CARD,
+                'border-l-4 border-l-violet-500 p-4'
+              )}
+            >
+              <p className="text-xs font-medium text-muted-foreground">Tasks</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
+                {stats.tasks?.completion_rate ?? 0}%
+              </p>
+              <p className="text-xs text-muted-foreground">Completion</p>
+              {(stats.tasks?.pending ?? 0) > 0 && (
+                <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  {stats.tasks.pending} overdue — act soon
+                </p>
+              )}
+            </div>
+            <div className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-sky-500 p-4')}>
+              <p className="text-xs font-medium text-muted-foreground">Quizzes</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
+                {stats.quizzes?.average_score ?? 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Avg score</p>
+            </div>
+            <div className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-emerald-500 p-4')}>
+              <p className="text-xs font-medium text-muted-foreground">Videos</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{stats.videos?.total ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Available to you</p>
+            </div>
+            {showAttendance ? (
+              <div className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-orange-500 p-4')}>
+                <p className="text-xs font-medium text-muted-foreground">Attendance</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
+                  {stats.attendance?.attendance_rate ?? 0}%
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  Pending vouchers
+                  {stats.attendance?.present_days ?? 0} present / {stats.attendance?.total_days ?? 0} days
                 </p>
               </div>
-              {stats.vouchers?.upcoming_voucher && (
-                <div className="mb-2 p-2 bg-muted/50 rounded-md border border-border/50">
-                  <p className="text-xs text-muted-foreground mb-1.5 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Upcoming Payment:
-                  </p>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium">
-                      {formatCurrency(stats.vouchers.upcoming_voucher.fee_amount)}
-                    </span>
-                  </div>
-                  <TaskCountdownTimer dueDate={stats.vouchers.upcoming_voucher.due_date} />
-                  <p className="text-xs text-muted-foreground mt-1 opacity-50">
-                    Due: {new Date(stats.vouchers.upcoming_voucher.due_date).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
-              {!stats.vouchers?.upcoming_voucher && stats.vouchers?.pending_count > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  No upcoming payments
-                </p>
-              )}
-              {stats.vouchers?.pending_count === 0 && (
-                <p className="text-xs text-green-600 mt-2">
-                  All payments up to date
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            ) : (
+              <div className={cn(DASHBOARD_GLASS_CARD, 'flex flex-col justify-center border-l-4 border-l-primary/40 p-4')}>
+                <p className="text-xs font-medium text-muted-foreground">Overall</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-primary">{overallPct}%</p>
+                <p className="text-xs text-muted-foreground">Weighted performance</p>
+              </div>
+            )}
+          </div>
 
-        {/* Performance and Videos Row */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Overall Performance */}
-          <Card className={DASHBOARD_GLASS_CARD}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Award className="h-5 w-5 text-yellow-500" />
-                Overall Performance
-              </CardTitle>
-              <CardDescription>Overall = (Total Obtained ÷ Total Possible) × 100 — not an average of the three categories</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Detailed Breakdown Table */}
-                {stats.performance?.breakdown && (
-                  <div className="border border-border rounded-lg overflow-hidden">
+          <div className="grid gap-4 lg:grid-cols-12 lg:gap-6">
+            <div className="space-y-4 lg:col-span-7">
+              <UpcomingActivities />
+            </div>
+            <div className="space-y-4 lg:col-span-5">
+              <Card className={cn(DASHBOARD_GLASS_CARD, 'border-l-4 border-l-amber-500')}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wallet className="h-5 w-5 text-amber-500" />
+                    Fees & vouchers
+                  </CardTitle>
+                  <CardDescription>Pending payments and what&apos;s next</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold tabular-nums text-foreground">
+                    {stats.vouchers?.pending_count || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Pending vouchers</p>
+                  {stats.vouchers?.upcoming_voucher && (
+                    <div className="mt-4 rounded-xl border border-border/50 bg-muted/30 p-3 backdrop-blur-sm">
+                      <p className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Next amount
+                      </p>
+                      <p className="text-sm font-semibold">
+                        {formatCurrency(stats.vouchers.upcoming_voucher.fee_amount)}
+                      </p>
+                      <TaskCountdownTimer dueDate={stats.vouchers.upcoming_voucher.due_date} />
+                      <p className="mt-1 text-[10px] text-muted-foreground opacity-70">
+                        Due {new Date(stats.vouchers.upcoming_voucher.due_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  {stats.vouchers?.pending_count === 0 && (
+                    <p className="mt-3 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      All payments up to date
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Card className={DASHBOARD_GLASS_CARD}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Award className="h-5 w-5 text-amber-500" />
+                      Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="relative mx-auto flex h-36 w-36 items-center justify-center rounded-full border-4 border-primary/20 bg-gradient-to-br from-primary/15 to-violet-500/10 shadow-inner">
+                      <div className="text-center">
+                        <p className="text-3xl font-bold text-foreground">{overallPct}%</p>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">overall</p>
+                      </div>
+                    </div>
+                    {stats.performance?.grade && stats.performance?.has_graded_activities && (
+                      <p className="mt-3 text-center text-sm text-muted-foreground">
+                        Grade:{' '}
+                        <span className="font-semibold text-foreground">{stats.performance.grade}</span>
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card className={DASHBOARD_GLASS_CARD}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <PlayCircle className="h-5 w-5 text-sky-500" />
+                      Lecture videos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col items-center">
+                    <p className="text-4xl font-bold tabular-nums text-foreground">{stats.videos?.total || 0}</p>
+                    <Button className="mt-4 w-full" onClick={() => navigate('/dashboard/lecture-videos')}>
+                      <Video className="mr-2 h-4 w-4" />
+                      Watch
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className={DASHBOARD_GLASS_CARD}>
+              <CardHeader>
+                <CardTitle className="text-base">Performance detail</CardTitle>
+                <CardDescription>How your overall score is built</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {stats.performance?.breakdown ? (
+                  <div className="overflow-hidden rounded-xl border border-border/40 bg-muted/20 backdrop-blur-sm">
                     <table className="w-full text-sm">
-                      <thead className="bg-muted">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-semibold text-foreground">
-                            Category
-                          </th>
-                          <th className="px-4 py-3 text-right font-semibold text-foreground">
-                            Percentage
-                          </th>
+                      <thead>
+                        <tr className="border-b border-border/50 bg-muted/50">
+                          <th className="px-3 py-2 text-left font-semibold">Area</th>
+                          <th className="px-3 py-2 text-right font-semibold">%</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border">
+                      <tbody className="divide-y divide-border/40">
                         <tr>
-                          <td className="px-4 py-3 text-foreground">
-                            {stats.performance.breakdown.tasks.label}
-                          </td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                          <td className="px-3 py-2">{stats.performance.breakdown.tasks.label}</td>
+                          <td className="px-3 py-2 text-right font-medium">
                             {stats.performance.breakdown.tasks.percentage}%
                           </td>
                         </tr>
                         <tr>
-                          <td className="px-4 py-3 text-foreground">
-                            {stats.performance.breakdown.quizzes.label}
-                          </td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                          <td className="px-3 py-2">{stats.performance.breakdown.quizzes.label}</td>
+                          <td className="px-3 py-2 text-right font-medium">
                             {stats.performance.breakdown.quizzes.percentage}%
                           </td>
                         </tr>
                         <tr>
-                          <td className="px-4 py-3 text-foreground">
-                            {stats.performance.breakdown.class_participations.label}
-                          </td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
+                          <td className="px-3 py-2">{stats.performance.breakdown.class_participations.label}</td>
+                          <td className="px-3 py-2 text-right font-medium">
                             {stats.performance.breakdown.class_participations.percentage}%
                           </td>
                         </tr>
-                        <tr className="bg-muted/50">
-                          <td className="px-4 py-3 font-semibold text-foreground">
-                            Calculation
-                          </td>
-                          <td className="px-4 py-3 text-right font-semibold text-foreground">
-                            {stats.performance.breakdown.calculation.formula}
-                          </td>
-                        </tr>
-                        <tr className="bg-primary/10 border-t-2 border-primary">
-                          <td className="px-4 py-3 font-bold text-lg text-foreground">
-                            Overall Performance
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-lg text-primary">
-                            {stats.performance.breakdown.calculation.result}
-                          </td>
+                        <tr className="bg-primary/10 font-semibold text-primary">
+                          <td className="px-3 py-2">Overall</td>
+                          <td className="px-3 py-2 text-right">{stats.performance.breakdown.calculation.result}</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
+                ) : (
+                  <p className="py-6 text-center text-muted-foreground">
+                    {stats.performance?.remarks ||
+                      'Complete tasks and quizzes to see your full breakdown here.'}
+                  </p>
                 )}
-
-                {/* Grade and Remarks - only when student has graded activities */}
-                {stats.performance?.has_graded_activities ? (
-                  <div className="space-y-3 pt-2">
-                    <div className="text-center">
-                      <p className="text-sm text-muted-foreground mb-1">Grade</p>
-                      <p className="text-3xl font-bold text-foreground">
-                        {stats.performance.grade}
-                      </p>
-                    </div>
-                    {stats.performance.remarks && (
-                      <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-xs font-semibold text-foreground mb-1">
-                          Remarks
-                        </p>
-                        <p className="text-sm text-foreground">
-                          {stats.performance.remarks}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : stats.performance && (
-                  <div className="p-3 bg-muted/50 rounded-lg text-center">
-                    <p className="text-sm text-muted-foreground">
-                      {stats.performance.remarks || 'No graded activities (tasks, quizzes, or class participations) yet.'}
-                    </p>
-                  </div>
+                {stats.performance?.remarks && stats.performance?.has_graded_activities && (
+                  <p className="mt-3 rounded-lg border border-border/40 bg-card/30 p-3 text-sm text-muted-foreground backdrop-blur-sm">
+                    {stats.performance.remarks}
+                  </p>
                 )}
+              </CardContent>
+            </Card>
 
-                {/* Fallback if breakdown not available */}
-                {!stats.performance?.breakdown && (
-                  <div className="text-center py-6">
-                    <div className="text-5xl font-bold text-foreground mb-2">
-                      {stats.performance?.overall_average || 0}%
-                    </div>
-                    <p className="text-sm text-muted-foreground">Overall Average</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Videos Available */}
-          <Card className={DASHBOARD_GLASS_CARD}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PlayCircle className="h-5 w-5 text-blue-500" />
-                Lecture Videos
-              </CardTitle>
-              <CardDescription>Access your assigned videos</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-6">
-                <div className="text-5xl font-bold text-foreground mb-2">
-                  {stats.videos?.total || 0}
+            <Card className={DASHBOARD_GLASS_CARD}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <LayoutList className="h-5 w-5" />
+                    Recent activity
+                  </CardTitle>
+                  <CardDescription>Latest from your assignments</CardDescription>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">Videos Available</p>
-                <Button
-                  onClick={() => navigate('/dashboard/lecture-videos')}
-                  className="w-full"
-                >
-                  <Video className="mr-2 h-4 w-4" />
-                  View All Videos
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Recent Tasks */}
-          <Card className={DASHBOARD_GLASS_CARD}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5" />
-                Recent Tasks
-              </CardTitle>
-              <CardDescription>Your latest assigned tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {stats.recent_activity?.tasks && stats.recent_activity.tasks.length > 0 ? (
-                  stats.recent_activity.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-accent transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {task.title}
-                          </p>
+                <div className="flex rounded-lg border border-border/50 bg-muted/20 p-0.5 text-xs backdrop-blur-sm">
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-md px-2 py-1 font-medium transition-colors',
+                      studentActivityTab === 'tasks' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                    )}
+                    onClick={() => setStudentActivityTab('tasks')}
+                  >
+                    Tasks
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-md px-2 py-1 font-medium transition-colors',
+                      studentActivityTab === 'quizzes' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                    )}
+                    onClick={() => setStudentActivityTab('quizzes')}
+                  >
+                    Quizzes
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {studentActivityTab === 'tasks' ? (
+                  <div className="space-y-2">
+                    {stats.recent_activity?.tasks?.length ? (
+                      stats.recent_activity.tasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between rounded-xl border border-border/30 bg-card/30 p-3 backdrop-blur-sm transition-colors hover:bg-card/50"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{task.title}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(task.created_at)}</p>
+                          </div>
                           {task.is_submitted ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                           ) : (
-                            <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                            <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDate(task.created_at)}
-                        </p>
-                      </div>
-                      <div className="ml-2">
-                        {task.is_submitted ? (
-                          <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
-                            Submitted
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded">
-                            Pending
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                      ))
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No recent tasks</p>
+                    )}
+                    <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard/tasks')}>
+                      All tasks
+                    </Button>
+                  </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No recent tasks
-                  </p>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                className="w-full mt-4"
-                onClick={() => navigate('/dashboard/tasks')}
-              >
-                View All Tasks
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Recent Quizzes */}
-          <Card className={DASHBOARD_GLASS_CARD}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5" />
-                Recent Quizzes
-              </CardTitle>
-              <CardDescription>Your latest quizzes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {stats.recent_activity?.quizzes && stats.recent_activity.quizzes.length > 0 ? (
-                  stats.recent_activity.quizzes.map((quiz) => (
-                    <div
-                      key={quiz.id}
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-accent transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {quiz.title}
-                          </p>
+                  <div className="space-y-2">
+                    {stats.recent_activity?.quizzes?.length ? (
+                      stats.recent_activity.quizzes.map((quiz) => (
+                        <div
+                          key={quiz.id}
+                          className="flex items-center justify-between rounded-xl border border-border/30 bg-card/30 p-3 backdrop-blur-sm transition-colors hover:bg-card/50"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{quiz.title}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(quiz.created_at)}</p>
+                          </div>
                           {quiz.is_completed ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                           ) : (
-                            <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                            <XCircle className="h-4 w-4 shrink-0 text-red-500" />
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDate(quiz.created_at)}
-                        </p>
-                      </div>
-                      <div className="ml-2">
-                        {quiz.is_completed ? (
-                          <span className="text-xs bg-green-500/10 text-green-500 px-2 py-1 rounded">
-                            Completed
-                          </span>
-                        ) : (
-                          <span className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded">
-                            Pending
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No recent quizzes
-                  </p>
+                      ))
+                    ) : (
+                      <p className="py-8 text-center text-sm text-muted-foreground">No recent quizzes</p>
+                    )}
+                    <Button variant="outline" className="w-full" onClick={() => navigate('/dashboard/quizzes')}>
+                      All quizzes
+                    </Button>
+                  </div>
                 )}
-              </div>
-              <Button
-                variant="outline"
-                className="w-full mt-4"
-                onClick={() => navigate('/dashboard/quizzes')}
-              >
-                View All Quizzes
-              </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Admin Dashboard (existing code)
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-border/40 bg-card/30 backdrop-blur-md">
         <div className="text-center">
-          <Activity className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
+          <Activity className="mx-auto mb-2 h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading command center…</p>
         </div>
       </div>
     );
@@ -659,7 +632,7 @@ const Dashboard = () => {
 
   if (!stats) {
     return (
-      <div className="text-center py-12">
+      <div className="rounded-2xl border border-border/40 py-12 text-center backdrop-blur-md">
         <p className="text-muted-foreground">Failed to load dashboard data</p>
       </div>
     );
@@ -669,274 +642,292 @@ const Dashboard = () => {
 
   const mainStats = [
     {
-      title: 'Total Users',
+      title: 'Learners',
       value: formatNumber(overview.total_users),
-      description: `${overview.active_users} active, ${overview.blocked_users} blocked`,
+      hint: `${overview.active_users} active · ${overview.blocked_users} blocked`,
       icon: Users,
-      color: 'bg-blue-500',
+      accent: 'from-blue-500/20 to-blue-600/5 border-blue-500/40',
       trend: growth.users.percentage,
       link: '/dashboard/users',
     },
     {
-      title: 'Total Batches',
+      title: 'Batches',
       value: formatNumber(overview.total_batches),
-      description: `${overview.active_batches} active batches`,
+      hint: `${overview.active_batches} running`,
       icon: GraduationCap,
-      color: 'bg-purple-500',
+      accent: 'from-violet-500/20 to-violet-600/5 border-violet-500/40',
       trend: growth.batches.percentage,
       link: '/dashboard/batches',
     },
     {
-      title: 'Total Subjects',
+      title: 'Subjects',
       value: formatNumber(overview.total_subjects),
-      description: `${overview.active_subjects} active subjects`,
+      hint: `${overview.active_subjects} active`,
       icon: BookOpen,
-      color: 'bg-green-500',
+      accent: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/40',
       trend: null,
       link: '/dashboard/subjects',
     },
     {
-      title: 'Total Videos',
+      title: 'Videos',
       value: formatNumber(overview.total_videos),
-      description: `${overview.internal_videos} internal, ${overview.external_videos} external`,
+      hint: `${overview.internal_videos} internal · ${overview.external_videos} external`,
       icon: Video,
-      color: 'bg-orange-500',
+      accent: 'from-orange-500/20 to-orange-600/5 border-orange-500/40',
       trend: growth.videos.percentage,
+      link: '/dashboard/videos',
+    },
+    {
+      title: 'Assignments',
+      value: formatNumber(overview.total_video_assignments ?? 0),
+      hint: 'Videos linked to batch subjects',
+      icon: Link2,
+      accent: 'from-cyan-500/20 to-cyan-600/5 border-cyan-500/40',
+      trend: null,
       link: '/dashboard/videos',
     },
   ];
 
+  const pieData = (user_types || []).map((t) => ({ name: t.type, value: t.count }));
 
   return (
-    <div className={cn('space-y-6', DASHBOARD_GLASS_SHELL)}>
-      {/* Welcome Section */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">
-            Welcome back, {user?.name || 'User'}! 👋
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Here's what's happening with your LMS today.
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-muted-foreground">Last updated</p>
-          <p className="text-sm font-medium">{new Date().toLocaleTimeString()}</p>
-        </div>
-      </div>
-
-      {/* Main Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {mainStats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card
-              key={stat.title}
-              className={cn(DASHBOARD_GLASS_CARD, 'cursor-pointer hover:scale-[1.01]')}
-              onClick={() => navigate(stat.link)}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.title}
-                </CardTitle>
-                <div className={`${stat.color} p-2 rounded-lg`}>
-                  <Icon className="h-4 w-4 text-white" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-foreground mb-1">
-                  {stat.value}
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    {stat.description}
-                  </p>
-                  {stat.trend !== null && (
-                    <div className={`flex items-center gap-1 text-xs ${getStatusColor(stat.trend)}`}>
-                      {stat.trend > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      <span>{Math.abs(stat.trend).toFixed(1)}%</span>
-                    </div>
-                  )}
-                </div>
-                {stat.trend !== null && (
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {stat.trend > 0 ? '↑' : stat.trend < 0 ? '↓' : '→'} Last 30 days
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Charts and Additional Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* User Types Distribution */}
-        <Card className={DASHBOARD_GLASS_CARD}>
-          <CardHeader>
-            <CardTitle className="text-base">User Types Distribution</CardTitle>
-            <CardDescription>Breakdown by role</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {user_types && user_types.length > 0 ? (
-                user_types.map((type, index) => {
-                  const total = user_types.reduce((sum, t) => sum + t.count, 0);
-                  const percentage = total > 0 ? (type.count / total) * 100 : 0;
-                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-pink-500'];
-                  return (
-                    <div key={type.type} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{type.type}</span>
-                        <span className="text-muted-foreground">{type.count} ({percentage.toFixed(1)}%)</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className={`${colors[index % colors.length]} h-2 rounded-full transition-all`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No user types data</p>
-              )}
+    <div className={cn(DASHBOARD_PAGE_WRAP)}>
+      <div className={DASHBOARD_ORB_L} aria-hidden />
+      <div className={DASHBOARD_ORB_R} aria-hidden />
+      <div className="relative z-10 space-y-8 p-4 sm:p-6 lg:p-8">
+        <div className={cn(DASHBOARD_GLASS_SHELL, 'border-white/20 dark:border-white/5')}>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="mb-1 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary backdrop-blur-sm">
+                <PieChartIcon className="h-3.5 w-3.5" />
+                Admin command center
+              </p>
+              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                Welcome back,{' '}
+                <span className="bg-gradient-to-r from-violet-600 to-sky-600 bg-clip-text text-transparent dark:from-violet-300 dark:to-sky-300">
+                  {user?.name?.split(' ')[0] || 'Admin'}
+                </span>
+              </h1>
+              <p className="mt-2 max-w-2xl text-muted-foreground">
+                Enrollment health, delivery pipeline, and student follow-ups—prioritized for daily operations.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <QuickAction icon={UserCheck} label="Users" onClick={() => navigate('/dashboard/users')} />
+              <QuickAction icon={GraduationCap} label="Batches" onClick={() => navigate('/dashboard/batches')} />
+              <QuickAction icon={Wallet} label="Vouchers" onClick={() => navigate('/dashboard/fee-vouchers')} />
+              <QuickAction
+                icon={ClipboardList}
+                label="Pending work"
+                onClick={() => navigate('/dashboard/pending-task-submissions')}
+              />
+              <QuickAction icon={Inbox} label="Inbox" onClick={() => navigate('/dashboard/inbox')} />
+              <QuickAction
+                icon={CalendarDays}
+                label="Calendar"
+                onClick={() => navigate('/dashboard/academic-calendar')}
+              />
+            </div>
+          </div>
+        </div>
 
-        {/* Overdue Task Submissions */}
-        <Card className={DASHBOARD_GLASS_CARD}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              Overdue Task Submissions
-            </CardTitle>
-            <CardDescription>Students with tasks past their due date</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingPendingSubmissions ? (
-              <div className="flex items-center justify-center h-64">
-                <Activity className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : pendingSubmissions.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-muted-foreground">
-                <p>No overdue task submissions</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                {pendingSubmissions.slice(0, 10).map((submission) => (
-                  <div
-                    key={submission.id}
-                    className="flex items-start justify-between p-3 rounded-lg border transition-colors bg-red-500/10 border-red-500/20 hover:bg-red-500/20"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {submission.student_name}
-                        </p>
-                        <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-600 rounded">
-                          Overdue
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate mb-1">
-                        {submission.student_email}
-                      </p>
-                      <p className="text-xs font-medium text-foreground">
-                        Task: {submission.task_title}
-                      </p>
-                      {submission.task_expiry_date && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Due: {new Date(submission.task_expiry_date).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleNotifyStudent(submission.student_id, submission.task_id)}
-                      disabled={notifyingStudentId === submission.student_id}
-                      className="ml-2 flex-shrink-0"
-                    >
-                      {notifyingStudentId === submission.student_id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Bell className="h-4 w-4" />
-                      )}
-                      <span className="ml-1 hidden sm:inline">Notify</span>
-                    </Button>
-                  </div>
-                ))}
-                {pendingSubmissions.length > 0 && (
-                  <Button
-                    variant="outline"
-                    className="w-full mt-4"
-                    onClick={() => navigate('/dashboard/pending-task-submissions')}
-                  >
-                    {pendingSubmissions.length > 10 ? (
-                      <>View All {pendingSubmissions.length} Overdue Submissions</>
-                    ) : (
-                      <>View All Overdue Submissions</>
-                    )}
-                  </Button>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          {mainStats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <button
+                key={stat.title}
+                type="button"
+                onClick={() => navigate(stat.link)}
+                className={cn(
+                  DASHBOARD_GLASS_CARD,
+                  'group cursor-pointer border border-border/40 bg-gradient-to-br p-5 text-left ring-1 ring-transparent transition-all hover:ring-primary/20',
+                  stat.accent
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      {stat.title}
+                    </p>
+                    <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight text-foreground">
+                      {stat.value}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{stat.hint}</p>
+                  </div>
+                  <div className="rounded-xl bg-background/60 p-2.5 shadow-inner backdrop-blur-md dark:bg-background/40">
+                    <Icon className="h-5 w-5 text-primary" />
+                  </div>
+                </div>
+                {stat.trend != null && (
+                  <div className={cn('mt-3 flex items-center gap-1 text-xs font-medium', getStatusColor(stat.trend))}>
+                    {stat.trend > 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                    {Math.abs(stat.trend).toFixed(1)}% <span className="font-normal text-muted-foreground">vs prior 30d</span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-        {/* Trending Signup Reasons */}
+        <div className="grid gap-6 lg:grid-cols-12">
+          <Card className={cn(DASHBOARD_GLASS_CARD, 'lg:col-span-7')}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Student follow-up
+              </CardTitle>
+              <CardDescription>Overdue task submissions — notify or drill into the list</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingPendingSubmissions ? (
+                <div className="flex h-48 items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : pendingSubmissions.length === 0 ? (
+                <div className="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-muted/10 text-center backdrop-blur-sm">
+                  <CheckCircle2 className="mb-2 h-10 w-10 text-emerald-500/70" />
+                  <p className="font-medium text-foreground">No overdue submissions right now</p>
+                  <p className="text-sm text-muted-foreground">Great job staying on top of tasks.</p>
+                </div>
+              ) : (
+                <div className="max-h-[380px] space-y-2 overflow-y-auto pr-1">
+                  {pendingSubmissions.slice(0, 8).map((submission) => (
+                    <div
+                      key={submission.id}
+                      className="flex flex-col gap-2 rounded-xl border border-red-500/20 bg-red-500/5 p-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground">{submission.student_name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{submission.student_email}</p>
+                        <p className="mt-1 text-xs font-medium">Task: {submission.task_title}</p>
+                        {submission.task_expiry_date && (
+                          <p className="text-xs text-muted-foreground">
+                            Due {new Date(submission.task_expiry_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 border-red-500/30"
+                        onClick={() => handleNotifyStudent(submission.student_id, submission.task_id)}
+                        disabled={notifyingStudentId === submission.student_id}
+                      >
+                        {notifyingStudentId === submission.student_id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Bell className="h-4 w-4" />
+                        )}
+                        <span className="ml-1">Nudge</span>
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="secondary" className="w-full" onClick={() => navigate('/dashboard/pending-task-submissions')}>
+                    Open full overdue queue
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className={cn(DASHBOARD_GLASS_CARD, 'lg:col-span-5')}>
+            <CardHeader>
+              <CardTitle className="text-lg">Role mix</CardTitle>
+              <CardDescription>Active assignments across user types</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pieData.length > 0 ? (
+                <div className="h-[260px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={58}
+                        outerRadius={88}
+                        paddingAngle={3}
+                      >
+                        {pieData.map((entry, i) => (
+                          <Cell key={`${entry.name}-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="transparent" />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card) / 0.95)',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '12px',
+                          backdropFilter: 'blur(8px)',
+                        }}
+                      />
+                      <RechartsLegend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p className="py-12 text-center text-muted-foreground">No role distribution data</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className={DASHBOARD_GLASS_CARD}>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-base flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <BarChart3 className="h-5 w-5" />
-                  Trending Signup Reasons
+                  Where students hear about you
                 </CardTitle>
-                <CardDescription>Most common sources where students heard about us</CardDescription>
+                <CardDescription>Signup sources — tune campaigns and intake</CardDescription>
               </div>
               <div className="relative filter-dropdown-container">
                 <button
+                  type="button"
                   onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm border border-input rounded-md hover:bg-accent transition-colors"
+                  className={cn(DASHBOARD_GLASS_PILL, 'text-xs')}
                 >
-                  <span>
-                    {trendingFilter === 'today' ? 'Today' :
-                     trendingFilter === 'yesterday' ? 'Yesterday' :
-                     trendingFilter === 'last_15_days' ? 'Last 15 Days' :
-                     trendingFilter === 'this_month' ? 'This Month' :
-                     trendingFilter === 'last_month' ? 'Last Month' :
-                     'Beginning of Time'}
-                  </span>
+                  {trendingFilter === 'today'
+                    ? 'Today'
+                    : trendingFilter === 'yesterday'
+                      ? 'Yesterday'
+                      : trendingFilter === 'last_15_days'
+                        ? 'Last 15 days'
+                        : trendingFilter === 'this_month'
+                          ? 'This month'
+                          : trendingFilter === 'last_month'
+                            ? 'Last month'
+                            : 'All time'}
                   <ChevronDown className="h-4 w-4" />
                 </button>
                 {showFilterDropdown && (
-                  <div className="absolute right-0 mt-1 w-56 bg-card border border-border rounded-md shadow-lg z-10">
-                    <div className="py-1">
-                      {[
-                        { value: 'today', label: 'Today' },
-                        { value: 'yesterday', label: 'Yesterday' },
-                        { value: 'last_15_days', label: 'Last 15 Days' },
-                        { value: 'this_month', label: 'This Month' },
-                        { value: 'last_month', label: 'Last Month' },
-                        { value: 'all_time', label: 'Beginning of Time' },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setTrendingFilter(option.value);
-                            setShowFilterDropdown(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors ${
-                            trendingFilter === option.value ? 'bg-accent font-medium' : ''
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-border/50 bg-card/95 shadow-xl backdrop-blur-xl">
+                    {[
+                      { value: 'today', label: 'Today' },
+                      { value: 'yesterday', label: 'Yesterday' },
+                      { value: 'last_15_days', label: 'Last 15 days' },
+                      { value: 'this_month', label: 'This month' },
+                      { value: 'last_month', label: 'Last month' },
+                      { value: 'all_time', label: 'All time' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setTrendingFilter(option.value);
+                          setShowFilterDropdown(false);
+                        }}
+                        className={cn(
+                          'w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent/80',
+                          trendingFilter === option.value && 'bg-accent font-medium'
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -944,194 +935,132 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             {loadingTrending ? (
-              <div className="flex items-center justify-center h-64">
-                <Activity className="h-6 w-6 animate-spin text-muted-foreground" />
+              <div className="flex h-56 items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             ) : trendingData.length === 0 ? (
-              <div className="flex items-center justify-center h-64 text-muted-foreground">
-                <p>No signup data available for the selected period</p>
-              </div>
+              <p className="py-12 text-center text-muted-foreground">No signup keywords in this range</p>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={trendingData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="keyword"
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                    className="text-xs"
-                    tick={{ fill: 'currentColor' }}
-                  />
-                  <YAxis
-                    tick={{ fill: 'currentColor' }}
-                    className="text-xs"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '6px',
-                    }}
-                  />
-                  <Legend />
-                  <Bar
-                    dataKey="count"
-                    fill="hsl(var(--primary))"
-                    radius={[4, 4, 0, 0]}
-                    name="Signups"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trendingData} margin={{ top: 8, right: 8, left: 8, bottom: 48 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border/40" vertical={false} />
+                    <XAxis
+                      dataKey="keyword"
+                      angle={-35}
+                      textAnchor="end"
+                      height={70}
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    />
+                    <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted) / 0.15)' }}
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card) / 0.95)',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '12px',
+                      }}
+                    />
+                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} name="Signups" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Recent Activity */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* Recent Users */}
-        <Card className={DASHBOARD_GLASS_CARD}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <UserCheck className="h-4 w-4" />
-              Recent Users
-            </CardTitle>
-            <CardDescription>Latest registered users</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recent_activity.users && recent_activity.users.length > 0 ? (
-                recent_activity.users.map((user) => (
-                  <div key={user.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {user.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {user.email}
-                      </p>
+        <div className={cn(DASHBOARD_GLASS_SHELL)}>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+            <Activity className="h-5 w-5 text-primary" />
+            Latest across the platform
+          </h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">People</p>
+              <div className="space-y-2">
+                {recent_activity.users?.length ? (
+                  recent_activity.users.map((u) => (
+                    <div
+                      key={u.id}
+                      className="flex items-center justify-between rounded-xl border border-border/35 bg-card/40 px-3 py-2 backdrop-blur-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{u.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{formatDate(u.created_at)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(user.created_at)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No recent users</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No recent registrations</p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => navigate('/dashboard/users')}>
+                Users
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              className="w-full mt-4"
-              onClick={() => navigate('/dashboard/users')}
-            >
-              View All Users
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Recent Batches */}
-        <Card className={DASHBOARD_GLASS_CARD}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <GraduationCap className="h-4 w-4" />
-              Recent Batches
-            </CardTitle>
-            <CardDescription>Latest created batches</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recent_activity.batches && recent_activity.batches.length > 0 ? (
-                recent_activity.batches.map((batch) => (
-                  <div key={batch.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {batch.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {batch.active ? (
-                          <span className="text-green-500">Active</span>
-                        ) : (
-                          <span className="text-muted-foreground">Inactive</span>
-                        )}
-                      </p>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Batches</p>
+              <div className="space-y-2">
+                {recent_activity.batches?.length ? (
+                  recent_activity.batches.map((b) => (
+                    <div
+                      key={b.id}
+                      className="flex items-center justify-between rounded-xl border border-border/35 bg-card/40 px-3 py-2 backdrop-blur-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{b.title}</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          {b.active ? 'Active' : 'Inactive'}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{formatDate(b.created_at)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(batch.created_at)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No recent batches</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No batches yet</p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => navigate('/dashboard/batches')}>
+                Batches
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              className="w-full mt-4"
-              onClick={() => navigate('/dashboard/batches')}
-            >
-              View All Batches
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Recent Videos */}
-        <Card className={DASHBOARD_GLASS_CARD}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Video className="h-4 w-4" />
-              Recent Videos
-            </CardTitle>
-            <CardDescription>Latest uploaded videos</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recent_activity.videos && recent_activity.videos.length > 0 ? (
-                recent_activity.videos.map((video) => (
-                  <div key={video.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {video.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {video.source_type === 'internal' ? (
-                          <span className="flex items-center gap-1">
-                            <FileVideo className="h-3 w-3" />
-                            Internal
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1">
-                            <Link2 className="h-3 w-3" />
-                            External
-                          </span>
-                        )}
-                      </p>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Videos</p>
+              <div className="space-y-2">
+                {recent_activity.videos?.length ? (
+                  recent_activity.videos.map((v) => (
+                    <div
+                      key={v.id}
+                      className="flex items-center justify-between rounded-xl border border-border/35 bg-card/40 px-3 py-2 backdrop-blur-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{v.title}</p>
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          {v.source_type === 'internal' ? (
+                            <>
+                              <FileVideo className="h-3 w-3" /> Internal
+                            </>
+                          ) : (
+                            <>
+                              <Link2 className="h-3 w-3" /> External
+                            </>
+                          )}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{formatDate(v.created_at)}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(video.created_at)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No recent videos</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No uploads yet</p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => navigate('/dashboard/videos')}>
+                Library
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              className="w-full mt-4"
-              onClick={() => navigate('/dashboard/videos')}
-            >
-              View All Videos
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

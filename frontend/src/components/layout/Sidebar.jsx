@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { cn } from '../../utils/cn';
@@ -16,7 +16,6 @@ import {
   BarChart3,
   UserCog,
   ChevronDown,
-  ChevronRight,
   FolderOpen,
   GraduationCap,
   Layers,
@@ -29,98 +28,83 @@ import {
   Clock,
   DollarSign,
   Plug,
-  RefreshCw,
   Inbox,
+  Menu,
 } from 'lucide-react';
 
-/** Active item: frosted tint + inset highlight (emboss) to match the glass sidebar rail. */
-const SIDEBAR_ACTIVE_ITEM =
-  'relative z-0 bg-primary/20 backdrop-blur-md backdrop-saturate-150 font-semibold text-primary ' +
-  'shadow-[inset_0_1px_0_0_rgba(255,255,255,0.55),inset_0_-1px_0_0_rgba(0,0,0,0.06)] ring-1 ring-inset ring-primary/35 ' +
-  'dark:bg-primary/30 dark:text-primary-foreground dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),inset_0_-1px_0_0_rgba(0,0,0,0.25)] dark:ring-primary/45';
-
-// Submenu Button Component
-const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onClose, location, closeAllMenus }) => {
+/** Compact rail: icon-only row + flyout panel attached to `left-16`. */
+const CollapsedSubmenuFlyout = ({
+  item,
+  Icon,
+  isExpanded,
+  hasActiveChild,
+  toggleMenu,
+  afterNav,
+  location,
+}) => {
   const buttonRef = useRef(null);
   const submenuRef = useRef(null);
   const [submenuTop, setSubmenuTop] = useState(0);
 
   useEffect(() => {
     if (isExpanded && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setSubmenuTop(rect.top);
+      setSubmenuTop(buttonRef.current.getBoundingClientRect().top);
     }
   }, [isExpanded]);
 
-  // Close submenu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isExpanded && submenuRef.current && buttonRef.current) {
-        if (
-          !submenuRef.current.contains(event.target) &&
-          !buttonRef.current.contains(event.target)
-        ) {
-          closeAllMenus();
-        }
+    const handler = (e) => {
+      if (!isExpanded || !submenuRef.current || !buttonRef.current) return;
+      if (!submenuRef.current.contains(e.target) && !buttonRef.current.contains(e.target)) {
+        toggleMenu(item.key);
       }
     };
-
-    if (isExpanded) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isExpanded, closeAllMenus]);
+    if (isExpanded) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isExpanded, item.key, toggleMenu]);
 
   return (
-    <div className="relative">
+    <div className="relative flex w-full justify-center overflow-visible">
       <Tooltip content={item.title} side="right">
         <button
           ref={buttonRef}
+          type="button"
+          aria-expanded={isExpanded}
           onClick={() => toggleMenu(item.key)}
           className={cn(
-            'w-full flex items-center justify-center py-2 rounded-md text-sm font-medium transition-all duration-200',
+            'relative flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-medium transition-all duration-150',
             hasActiveChild
-              ? SIDEBAR_ACTIVE_ITEM
-              : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground hover:backdrop-blur-sm'
+              ? 'bg-primary/12 font-semibold text-primary shadow-[inset_3px_0_0_0_hsl(var(--primary))] ring-1 ring-primary/10 dark:bg-primary/[0.18]'
+              : 'text-muted-foreground hover:bg-accent/90 hover:text-accent-foreground'
           )}
         >
-          <Icon className="h-5 w-5 mx-auto" />
+          <Icon className="h-5 w-5" aria-hidden />
         </button>
       </Tooltip>
       {isExpanded && (
-        <div 
+        <div
           ref={submenuRef}
           data-submenu={item.key}
-          className="fixed left-16 w-48 rounded-xl border border-border/50 bg-background/80 py-1 shadow-lg backdrop-blur-2xl backdrop-saturate-150 dark:bg-background/70 z-[10000]"
-          style={{ 
-            top: `${submenuTop}px`,
-            zIndex: 10000,
-          }}
+          className="fixed left-16 z-[10000] w-52 rounded-xl border border-border/50 bg-background/90 py-1 shadow-xl backdrop-blur-2xl dark:bg-background/80"
+          style={{ top: `${submenuTop}px` }}
         >
           {item.submenu.map((subItem) => {
             const SubIcon = subItem.icon;
-            const isActive = location.pathname === subItem.path;
-
+            const isSubActive = location.pathname === subItem.path;
             return (
               <Link
                 key={subItem.path}
                 to={subItem.path}
-                onClick={() => {
-                  onClose();
-                  closeAllMenus();
-                }}
+                onClick={afterNav}
                 className={cn(
-                  'mx-1 flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200',
-                  isActive
-                    ? SIDEBAR_ACTIVE_ITEM
-                    : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground'
+                  'mx-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isSubActive
+                    ? 'bg-primary/12 font-semibold text-primary dark:bg-primary/[0.16]'
+                    : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground'
                 )}
               >
-                <SubIcon className="h-4 w-4" />
-                <span>{subItem.title}</span>
+                <SubIcon className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="truncate">{subItem.title}</span>
               </Link>
             );
           })}
@@ -130,21 +114,50 @@ const SubmenuButton = ({ item, Icon, isExpanded, hasActiveChild, toggleMenu, onC
   );
 };
 
-const Sidebar = ({ isOpen, onClose }) => {
+const navRow =
+  'flex w-full min-h-[2.75rem] items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-[color,background-color,box-shadow] duration-150 ease-out';
+
+const navIdle =
+  'text-muted-foreground hover:bg-accent/90 hover:text-accent-foreground active:scale-[0.99]';
+
+const navActive =
+  'bg-primary/12 font-semibold text-primary shadow-[inset_3px_0_0_0_hsl(var(--primary))] dark:bg-primary/[0.18] dark:text-primary';
+
+const navSubActive =
+  'bg-primary/10 font-semibold text-primary ring-1 ring-primary/15 dark:bg-primary/[0.14] dark:text-primary';
+
+const navSubRow =
+  'flex min-h-10 items-center gap-2.5 rounded-lg py-2 pl-3 pr-2 text-[13px] font-medium transition-colors duration-150';
+
+const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
-  const [expandedMenus, setExpandedMenus] = useState([]); // Start with all collapsed
+  /** Compact icon rail only on large screens; mobile drawer always shows labels. */
+  const [isLgUp, setIsLgUp] = useState(typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false);
+  const [expandedMenus, setExpandedMenus] = useState([]);
   const [pendingTasksCount, setPendingTasksCount] = useState(0);
   const [pendingVouchersCount, setPendingVouchersCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
 
-  // Get user roles - prioritize user_roles table, use user_type only for backward compatibility
+  const closeAllMenus = useCallback(() => {
+    setExpandedMenus([]);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsLgUp(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const compactRail = collapsed && isLgUp;
+
   const getUserRoles = () => {
     const roles = [];
-    
-    // First, check roles array from user_roles table (primary method)
+
     if (user?.roles && Array.isArray(user.roles)) {
-      user.roles.forEach(role => {
+      user.roles.forEach((role) => {
         const roleTitle = role.title?.toLowerCase();
         if (roleTitle === 'admin' && !roles.includes('admin')) {
           roles.push('admin');
@@ -157,9 +170,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         }
       });
     }
-    
-    // Fallback to user_type only if roles array is empty (backward compatibility)
-    // Note: Do NOT use user_type for teacher/CR role - only use user_roles table
+
     if (roles.length === 0 && user?.user_type) {
       if (user.user_type === 1 || user?.user_type_title?.toLowerCase() === 'admin') {
         roles.push('admin');
@@ -167,9 +178,8 @@ const Sidebar = ({ isOpen, onClose }) => {
       if (user.user_type === 2 || user?.user_type_title?.toLowerCase() === 'student') {
         roles.push('student');
       }
-      // Explicitly NOT checking user_type === 3 for teacher/CR - only use user_roles table
     }
-    
+
     return roles;
   };
 
@@ -177,101 +187,43 @@ const Sidebar = ({ isOpen, onClose }) => {
   const hasAdminRole = userRoles.includes('admin');
   const hasStudentRole = userRoles.includes('student');
   const hasTeacherRole = userRoles.includes('teacher') || userRoles.includes('cr');
-  
-  // Check if user is blocked
-  const isBlocked = Number(user?.block) === 1;
 
   const toggleMenu = (menuKey) => {
     setExpandedMenus((prev) => {
-      // If clicking the same menu, toggle it
       if (prev.includes(menuKey)) {
         return prev.filter((key) => key !== menuKey);
       }
-      // If clicking a different menu, close all others and open the new one
       return [menuKey];
     });
   };
 
-  // Close all submenus
-  const closeAllMenus = () => {
-    setExpandedMenus([]);
-  };
-
-  // Student menu items
   const studentMenuItems = [
-    {
-      title: 'Dashboard',
-      icon: LayoutDashboard,
-      path: '/dashboard',
-    },
-    {
-      title: 'Inbox',
-      icon: Inbox,
-      path: '/dashboard/inbox',
-    },
-    {
-      title: 'Lecture Videos',
-      icon: Video,
-      path: '/dashboard/lecture-videos',
-    },
-    {
-      title: 'Task Assigned',
-      icon: ClipboardList,
-      path: '/dashboard/tasks',
-    },
-    {
-      title: 'My Quizes',
-      icon: HelpCircle,
-      path: '/dashboard/quizzes',
-    },
-    {
-      title: 'Class Participations',
-      icon: Users,
-      path: '/dashboard/class-participations',
-    },
-    {
-      title: 'Account Book',
-      icon: Wallet,
-      path: '/dashboard/account-book',
-    },
-    // Settings menu with submenu (Student)
+    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
+    { title: 'Lecture Videos', icon: Video, path: '/dashboard/lecture-videos' },
+    { title: 'Task Assigned', icon: ClipboardList, path: '/dashboard/tasks' },
+    { title: 'My Quizes', icon: HelpCircle, path: '/dashboard/quizzes' },
+    { title: 'Class Participations', icon: Users, path: '/dashboard/class-participations' },
+    { title: 'Account Book', icon: Wallet, path: '/dashboard/account-book' },
     {
       title: 'Settings',
       icon: Settings,
       key: 'student-settings',
       submenu: [
-        {
-          title: 'Notifications',
-          icon: Bell,
-          path: '/dashboard/settings/notifications',
-        },
+        { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications' },
       ],
     },
   ];
 
-  // Admin menu items
   const adminMenuItems = [
-    {
-      title: 'Dashboard',
-      icon: LayoutDashboard,
-      path: '/dashboard',
-    },
-    {
-      title: 'Inbox',
-      icon: Inbox,
-      path: '/dashboard/inbox',
-    },
-    // Management menu with submenu (Admin only)
+    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
     {
       title: 'Management',
       icon: FolderOpen,
       key: 'management',
       submenu: [
-        {
-          title: 'User Management',
-          icon: UserCog,
-          path: '/dashboard/users',
-        },
+        { title: 'User Management', icon: UserCog, path: '/dashboard/users' },
       ],
     },
     {
@@ -279,171 +231,77 @@ const Sidebar = ({ isOpen, onClose }) => {
       icon: GraduationCap,
       key: 'academics',
       submenu: [
-        {
-          title: 'Batch Management',
-          icon: Layers,
-          path: '/dashboard/batches',
-        },
-        {
-          title: 'Subjects',
-          icon: BookOpen,
-          path: '/dashboard/subjects',
-        },
-        {
-          title: 'Videos',
-          icon: Video,
-          path: '/dashboard/videos',
-        },
-        {
-          title: 'Tasks',
-          icon: ClipboardList,
-          path: '/dashboard/admin-tasks',
-        },
+        { title: 'Batch Management', icon: Layers, path: '/dashboard/batches' },
+        { title: 'Subjects', icon: BookOpen, path: '/dashboard/subjects' },
+        { title: 'Videos', icon: Video, path: '/dashboard/videos' },
+        { title: 'Tasks', icon: ClipboardList, path: '/dashboard/admin-tasks' },
       ],
     },
-    // Accounts menu with submenu (Admin only) - moved below Academics
     {
       title: 'Accounts',
       icon: DollarSign,
       key: 'accounts',
       submenu: [
-        {
-          title: 'Fee Vouchers',
-          icon: Wallet,
-          path: '/dashboard/fee-vouchers',
-        },
-        {
-          title: 'Expense Management',
-          icon: FileText,
-          path: '/dashboard/expenses',
-        },
-        {
-          title: 'Income & Expense Report',
-          icon: BarChart3,
-          path: '/dashboard/income-expense-report',
-        },
+        { title: 'Fee Vouchers', icon: Wallet, path: '/dashboard/fee-vouchers' },
+        { title: 'Expense Management', icon: FileText, path: '/dashboard/expenses' },
+        { title: 'Income & Expense Report', icon: BarChart3, path: '/dashboard/income-expense-report' },
       ],
     },
     {
       title: 'Reports',
       icon: BarChart3,
       key: 'reports',
-      submenu: [
-        {
-          title: 'Income Report',
-          icon: DollarSign,
-          path: '/dashboard/reports/income',
-        },
-      ],
+      submenu: [{ title: 'Income Report', icon: DollarSign, path: '/dashboard/reports/income' }],
     },
-    {
-      title: 'Documents',
-      icon: FileText,
-      path: '/dashboard/documents',
-    },
-    // Settings menu with submenu (Admin only)
+    { title: 'Documents', icon: FileText, path: '/dashboard/documents' },
     {
       title: 'Settings',
       icon: Settings,
       key: 'settings',
       submenu: [
-        {
-          title: 'SMTP Settings',
-          icon: Mail,
-          path: '/dashboard/settings/smtp',
-        },
-        {
-          title: 'Notifications',
-          icon: Bell,
-          path: '/dashboard/settings/notifications',
-        },
-        {
-          title: 'Scheduled Jobs',
-          icon: Clock,
-          path: '/dashboard/scheduled-jobs',
-        },
-        {
-          title: 'Google Drive Folders',
-          icon: FolderOpen,
-          path: '/dashboard/settings/google-drive-folders',
-        },
+        { title: 'SMTP Settings', icon: Mail, path: '/dashboard/settings/smtp' },
+        { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications' },
+        { title: 'Scheduled Jobs', icon: Clock, path: '/dashboard/scheduled-jobs' },
+        { title: 'Google Drive Folders', icon: FolderOpen, path: '/dashboard/settings/google-drive-folders' },
       ],
     },
-    // Internal Integrations (Admin only)
-    {
-      title: 'Internal Integrations',
-      icon: Plug,
-      path: '/dashboard/integrations/internal',
-    },
+    { title: 'Internal Integrations', icon: Plug, path: '/dashboard/integrations/internal' },
   ];
 
-  // Teacher menu items (no User Management, but has Batch Management)
   const teacherMenuItems = [
-    {
-      title: 'Dashboard',
-      icon: LayoutDashboard,
-      path: '/dashboard',
-    },
+    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     {
       title: 'Academics',
       icon: GraduationCap,
       key: 'academics',
-      submenu: [
-        {
-          title: 'Batch Management',
-          icon: Layers,
-          path: '/dashboard/batches',
-        },
-      ],
+      submenu: [{ title: 'Batch Management', icon: Layers, path: '/dashboard/batches' }],
     },
   ];
 
-  // Build menu items grouped by role
   const buildMenuItems = () => {
     const menuGroups = [];
-    
-    // Add Admin menu items if user has admin role
+
     if (hasAdminRole) {
-      menuGroups.push({
-        role: 'Admin',
-        items: adminMenuItems,
-      });
+      menuGroups.push({ role: 'Admin', items: adminMenuItems });
     }
-    
-    // Add Teacher/CR menu items if user has teacher or CR role (but not admin)
-    // Teachers/CRs can have multiple roles, so only show teacher menu if they're not admin
+
     if (hasTeacherRole && !hasAdminRole) {
-      // Determine role label
-      const roleLabel = userRoles.includes('cr') && !userRoles.includes('teacher') 
-        ? 'Class Representative' 
-        : 'Teacher';
-      
-      menuGroups.push({
-        role: roleLabel,
-        items: teacherMenuItems,
-      });
+      const roleLabel =
+        userRoles.includes('cr') && !userRoles.includes('teacher') ? 'Class Representative' : 'Teacher';
+      menuGroups.push({ role: roleLabel, items: teacherMenuItems });
     }
-    
-    // Add Student menu items if user has student role
+
     if (hasStudentRole) {
-      menuGroups.push({
-        role: 'Student',
-        items: studentMenuItems,
-      });
+      menuGroups.push({ role: 'Student', items: studentMenuItems });
     }
-    
-    // If no roles found, default to admin (backward compatibility)
+
     if (menuGroups.length === 0) {
-      menuGroups.push({
-        role: 'Admin',
-        items: adminMenuItems,
-      });
+      menuGroups.push({ role: 'Admin', items: adminMenuItems });
     }
-    
+
     return menuGroups;
   };
 
-  // Auto-expand parent menu only if current path matches a child
   useEffect(() => {
     const menuGroups = buildMenuItems();
     const activeMenuKeys = [];
@@ -451,9 +309,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     menuGroups.forEach((group) => {
       group.items.forEach((item) => {
         if (item.submenu && item.key) {
-          const hasActiveChild = item.submenu.some(
-            (subItem) => location.pathname === subItem.path
-          );
+          const hasActiveChild = item.submenu.some((subItem) => location.pathname === subItem.path);
           if (hasActiveChild) {
             activeMenuKeys.push(item.key);
           }
@@ -464,228 +320,320 @@ const Sidebar = ({ isOpen, onClose }) => {
     setExpandedMenus(activeMenuKeys);
   }, [location.pathname, hasAdminRole, hasStudentRole, hasTeacherRole]);
 
-  // Close submenus when clicking outside sidebar or submenu
   useEffect(() => {
+    if (!compactRail) return;
     const handleClickOutside = (event) => {
-      // Check if click is outside sidebar and all submenus
-      const sidebar = document.querySelector('aside');
+      const sidebar = document.getElementById('app-sidebar');
       const submenus = document.querySelectorAll('[data-submenu]');
-      
-      let isClickInsideSidebar = false;
-      let isClickInsideSubmenu = false;
-
-      if (sidebar && sidebar.contains(event.target)) {
-        isClickInsideSidebar = true;
-      }
-
-      submenus.forEach((submenu) => {
-        if (submenu.contains(event.target)) {
-          isClickInsideSubmenu = true;
-        }
+      let inside = sidebar?.contains(event.target);
+      submenus.forEach((node) => {
+        if (node.contains(event.target)) inside = true;
       });
-
-      // Close submenus if clicking outside both sidebar and submenus
-      if (!isClickInsideSidebar && !isClickInsideSubmenu) {
-        closeAllMenus();
-      }
+      if (!inside) closeAllMenus();
     };
-
-    // Add event listener
     document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [compactRail, closeAllMenus]);
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [closeAllMenus]);
-
-  // Fetch pending tasks count for students
   useEffect(() => {
     if (hasStudentRole) {
       const fetchPendingCount = async () => {
         try {
           const response = await apiService.get(API_ENDPOINTS.student.tasks.pendingCount);
           setPendingTasksCount(response.data.data?.count || 0);
-        } catch (err) {
-          // Silently fail - don't show error for badge count
+        } catch {
           setPendingTasksCount(0);
         }
       };
       fetchPendingCount();
-      // Refresh count every 30 seconds
       const interval = setInterval(fetchPendingCount, 30000);
       return () => clearInterval(interval);
     }
   }, [hasStudentRole]);
 
-  // Fetch pending vouchers count for students
   useEffect(() => {
     if (hasStudentRole) {
       const fetchPendingVouchersCount = async () => {
         try {
           const response = await apiService.get(API_ENDPOINTS.student.vouchers.list);
           const vouchers = response.data.data || [];
-          const pendingCount = vouchers.filter(v => v.status === 'pending').length;
+          const pendingCount = vouchers.filter((v) => v.status === 'pending').length;
           setPendingVouchersCount(pendingCount);
-        } catch (err) {
-          // Silently fail - don't show error for badge count
+        } catch {
           setPendingVouchersCount(0);
         }
       };
       fetchPendingVouchersCount();
-      // Refresh count every 30 seconds
       const interval = setInterval(fetchPendingVouchersCount, 30000);
       return () => clearInterval(interval);
     }
   }, [hasStudentRole]);
 
-  // Fetch unread messages count for all users
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
         const response = await chatService.getUnreadCount();
         setUnreadMessagesCount(response.data?.unread_count || 0);
-      } catch (err) {
-        // Silently fail - don't show error for badge count
+      } catch {
         setUnreadMessagesCount(0);
       }
     };
     fetchUnreadCount();
-    // Refresh count every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);
 
   const menuGroups = buildMenuItems();
-  
-  // Helper to render menu items (avoid duplicates like Dashboard)
-  const renderMenuItems = (items, seenPaths = new Set()) => {
-    return items.map((item) => {
-      // Skip Dashboard if already shown
-      if (item.path === '/dashboard' && seenPaths.has('/dashboard')) {
-        return null;
-      }
-      
-      if (item.path) {
-        seenPaths.add(item.path);
-      }
-      
-      const Icon = item.icon;
 
-      // Handle submenu items
-      if (item.submenu) {
-        const isExpanded = expandedMenus.includes(item.key);
-        const hasActiveChild = item.submenu.some(
-          (subItem) => location.pathname === subItem.path
-        );
+  const afterNav = () => {
+    onClose();
+    closeAllMenus();
+  };
+
+  const badgeForPath = (path) => {
+    if (path === '/dashboard/tasks' && hasStudentRole && pendingTasksCount > 0) {
+      return pendingTasksCount;
+    }
+    if (path === '/dashboard/account-book' && hasStudentRole && pendingVouchersCount > 0) {
+      return pendingVouchersCount;
+    }
+    if (path === '/dashboard/inbox' && unreadMessagesCount > 0) {
+      return unreadMessagesCount;
+    }
+    return null;
+  };
+
+  const handleToggleCompact = () => {
+    closeAllMenus();
+    onToggleCollapsed?.();
+  };
+
+  const renderExpandedItems = (items, seenPaths = new Set()) =>
+    items
+      .map((item) => {
+        if (item.path === '/dashboard' && seenPaths.has('/dashboard')) return null;
+        if (item.path) seenPaths.add(item.path);
+
+        const Icon = item.icon;
+
+        if (item.submenu) {
+          const isExpanded = expandedMenus.includes(item.key);
+          const hasActiveChild = item.submenu.some((subItem) => location.pathname === subItem.path);
+
+          return (
+            <div key={item.key} className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => toggleMenu(item.key)}
+                aria-expanded={isExpanded}
+                className={cn(
+                  navRow,
+                  hasActiveChild ? cn(navActive, 'ring-1 ring-primary/10') : navIdle
+                )}
+              >
+                <Icon className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 shrink-0 opacity-50 transition-transform duration-200',
+                    isExpanded && 'rotate-180'
+                  )}
+                  aria-hidden
+                />
+              </button>
+              {isExpanded && (
+                <div
+                  className="relative ml-3 mt-0.5 space-y-0.5 border-l border-border/60 pl-2.5"
+                  role="region"
+                  aria-label={`${item.title} links`}
+                >
+                  {item.submenu.map((subItem) => {
+                    const SubIcon = subItem.icon;
+                    const isSubActive = location.pathname === subItem.path;
+                    return (
+                      <Link
+                        key={subItem.path}
+                        to={subItem.path}
+                        onClick={afterNav}
+                        className={cn(navSubRow, isSubActive ? navSubActive : navIdle)}
+                      >
+                        <SubIcon className="h-4 w-4 shrink-0 opacity-85" aria-hidden />
+                        <span className="min-w-0 truncate">{subItem.title}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        const isActive = location.pathname === item.path;
+        const bc = badgeForPath(item.path);
+        const showBadge = bc != null && bc > 0;
 
         return (
-          <SubmenuButton
-            key={item.key}
-            item={item}
-            Icon={Icon}
-            isExpanded={isExpanded}
-            hasActiveChild={hasActiveChild}
-            toggleMenu={toggleMenu}
-            onClose={onClose}
-            location={location}
-            closeAllMenus={closeAllMenus}
-          />
+          <Link
+            key={item.path}
+            to={item.path}
+            onClick={afterNav}
+            className={cn(navRow, isActive ? cn(navActive, 'ring-1 ring-primary/10') : navIdle)}
+          >
+            <Icon className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
+            {showBadge && (
+              <span className="inline-flex min-h-[1.25rem] min-w-[1.25rem] shrink-0 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-bold text-destructive-foreground tabular-nums shadow-sm">
+                {bc > 99 ? '99+' : bc}
+              </span>
+            )}
+          </Link>
         );
-      }
+      })
+      .filter(Boolean);
 
-      // Handle regular menu items
-      const isActive = location.pathname === item.path;
-      
-      // Get badge count for specific items
-      let badgeCount = null;
-      if (item.path === '/dashboard/tasks' && hasStudentRole && pendingTasksCount > 0) {
-        badgeCount = pendingTasksCount;
-      } else if (item.path === '/dashboard/account-book' && hasStudentRole && pendingVouchersCount > 0) {
-        badgeCount = pendingVouchersCount;
-      } else if (item.path === '/dashboard/inbox' && unreadMessagesCount > 0) {
-        badgeCount = unreadMessagesCount;
-      }
-      const showBadge = badgeCount !== null && badgeCount > 0;
+  const renderCollapsedItems = (items, seenPaths = new Set()) =>
+    items
+      .map((item) => {
+        if (item.path === '/dashboard' && seenPaths.has('/dashboard')) return null;
+        if (item.path) seenPaths.add(item.path);
 
-      return (
-        <div key={item.path} className="relative overflow-visible">
-          <Tooltip content={item.title} side="right">
-            <Link
-              to={item.path}
-              onClick={() => {
-                onClose();
-                closeAllMenus();
-              }}
-              className={cn(
-                'relative flex w-full items-center justify-center py-2 rounded-md text-sm font-medium transition-all duration-200',
-                isActive
-                  ? SIDEBAR_ACTIVE_ITEM
-                  : 'text-muted-foreground hover:bg-accent/70 hover:text-accent-foreground hover:backdrop-blur-sm'
-              )}
-            >
-              <Icon className="h-5 w-5 mx-auto" />
-              {showBadge && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-4.5 px-1 text-[10px] font-semibold text-white bg-red-500 rounded-full">
-                  {badgeCount > 99 ? '99+' : badgeCount}
-                </span>
-              )}
-            </Link>
-          </Tooltip>
-        </div>
-      );
-    }).filter(Boolean);
-  };
+        const Icon = item.icon;
+
+        if (item.submenu) {
+          const isExpanded = expandedMenus.includes(item.key);
+          const hasActiveChild = item.submenu.some((subItem) => location.pathname === subItem.path);
+          return (
+            <CollapsedSubmenuFlyout
+              key={item.key}
+              item={item}
+              Icon={Icon}
+              isExpanded={isExpanded}
+              hasActiveChild={hasActiveChild}
+              toggleMenu={toggleMenu}
+              afterNav={afterNav}
+              location={location}
+            />
+          );
+        }
+
+        const isActive = location.pathname === item.path;
+        const bc = badgeForPath(item.path);
+        const showBadge = bc != null && bc > 0;
+
+        return (
+          <div key={item.path} className="relative flex w-full justify-center">
+            <Tooltip content={item.title} side="right">
+              <Link
+                to={item.path}
+                onClick={afterNav}
+                className={cn(
+                  'relative flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-medium transition-all duration-150',
+                  isActive
+                    ? 'bg-primary/12 font-semibold text-primary shadow-[inset_3px_0_0_0_hsl(var(--primary))] ring-1 ring-primary/10 dark:bg-primary/[0.18]'
+                    : 'text-muted-foreground hover:bg-accent/90 hover:text-accent-foreground'
+                )}
+              >
+                <Icon className="h-5 w-5" aria-hidden />
+                {showBadge && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
+                    {bc > 99 ? '99+' : bc}
+                  </span>
+                )}
+              </Link>
+            </Tooltip>
+          </div>
+        );
+      })
+      .filter(Boolean);
 
   return (
     <>
-      {/* Overlay for mobile */}
       {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 bg-background/40 backdrop-blur-[2px] transition-opacity lg:hidden"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
       <aside
+        id="app-sidebar"
         className={cn(
-          'fixed left-0 top-0 z-50 h-full w-16 transform transition-transform duration-300 ease-in-out lg:translate-x-0 overflow-visible',
-          'border-r border-border/50',
-          'bg-background/72 dark:bg-background/55',
-          'backdrop-blur-2xl backdrop-saturate-150',
-          'shadow-[2px_0_24px_-8px_rgba(0,0,0,0.08)] dark:shadow-[2px_0_32px_-12px_rgba(0,0,0,0.45)]',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed left-0 top-0 z-50 flex h-full flex-col overflow-visible',
+          'w-72 max-w-[85vw] border-r border-border/50 bg-card/85 shadow-[4px_0_40px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl backdrop-saturate-150 transition-[width,transform] duration-300 ease-out',
+          'dark:bg-card/55 dark:shadow-[4px_0_48px_-16px_rgba(0,0,0,0.5)]',
+          'lg:max-w-none',
+          compactRail ? 'lg:w-16' : 'lg:w-72',
+          'lg:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="flex flex-col h-full overflow-visible">
-          {/* Logo/Brand */}
-          <div className="h-16 flex items-center justify-center border-b border-border/40 p-2">
-            <img 
-              src={logo} 
-              alt="LMS Logo" 
-              className="h-full w-auto object-contain max-h-12"
-            />
+        <div
+          className={cn(
+            'flex h-[4.25rem] shrink-0 items-center gap-2 border-b border-border/50 px-3',
+            compactRail && 'lg:h-auto lg:flex-col lg:items-center lg:gap-2 lg:px-1 lg:py-3'
+          )}
+        >
+          <button
+            type="button"
+            onClick={handleToggleCompact}
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={collapsed ? 'Expand sidebar with labels' : 'Use compact icon sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Compact sidebar'}
+          >
+            <Menu className="h-5 w-5" aria-hidden />
+          </button>
+
+          <div
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-2',
+              compactRail && 'lg:hidden'
+            )}
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/10">
+              <img src={logo} alt="" className="h-7 w-auto object-contain" aria-hidden />
+            </div>
+            <p className="min-w-0 truncate text-sm font-bold tracking-tight text-foreground">LMS</p>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto overflow-x-visible p-2 space-y-1">
-            {(() => {
-              const seenPaths = new Set();
-              return menuGroups.map((group) => {
-                return (
-                  <div key={group.role} className="space-y-1">
-                    {/* Menu Items for this role */}
-                    {renderMenuItems(group.items, seenPaths)}
-                  </div>
-                );
-              });
-            })()}
-          </nav>
+          {compactRail && (
+            <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/10 lg:flex">
+              <img src={logo} className="h-6 w-auto object-contain" alt="" aria-hidden />
+            </div>
+          )}
         </div>
+
+        <nav
+          className={cn(
+            'flex-1 overflow-y-auto py-3',
+            compactRail ? 'overflow-x-visible px-1.5 lg:px-1.5' : 'overflow-x-hidden px-2'
+          )}
+          aria-label="Main navigation"
+        >
+          {(() => {
+            const seenPaths = new Set();
+            return menuGroups.map((group, idx) => (
+              <div
+                key={group.role}
+                className={cn(
+                  'space-y-1',
+                  idx > 0 && (compactRail ? 'mt-2 border-t border-border/50 pt-2' : 'mt-4 border-t border-border/50 pt-4')
+                )}
+              >
+                {!compactRail && menuGroups.length > 1 && (
+                  <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/90">
+                    {group.role}
+                  </p>
+                )}
+                {(compactRail ? renderCollapsedItems : renderExpandedItems)(group.items, seenPaths)}
+              </div>
+            ));
+          })()}
+        </nav>
       </aside>
     </>
   );
 };
 
 export default Sidebar;
-

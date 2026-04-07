@@ -1,23 +1,50 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Outlet } from 'react-router-dom';
+import { cn } from '../../utils/cn';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { SidebarLayoutContext } from './sidebarLayoutContext';
 
 const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /** Always start expanded on load/refresh; compact mode is session-only. */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((c) => !c);
+  }, []);
+
+  const layoutValue = useMemo(
+    () => ({
+      sidebarCollapsed,
+      toggleSidebarCollapsed,
+    }),
+    [sidebarCollapsed, toggleSidebarCollapsed]
+  );
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:pl-16">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 lg:p-6">
-          <Outlet />
-        </main>
+    <SidebarLayoutContext.Provider value={layoutValue}>
+      <div className="min-h-screen bg-background">
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebarCollapsed}
+        />
+        <div
+          className={cn(
+            'transition-[padding] duration-300 ease-out',
+            sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-72'
+          )}
+        >
+          <Header onMenuClick={() => setSidebarOpen(true)} />
+          <main className="p-4 lg:p-6">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </SidebarLayoutContext.Provider>
   );
 };
 
 export default DashboardLayout;
-

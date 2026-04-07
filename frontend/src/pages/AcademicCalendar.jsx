@@ -21,6 +21,7 @@ import { API_ENDPOINTS } from '../config/api';
 import { useToast } from '../components/ui/toast';
 import { Button } from '../components/ui/button';
 import { cn } from '../utils/cn';
+import { useSidebarLayout } from '../components/layout/sidebarLayoutContext';
 
 function toDateKey(value) {
   if (!value) return null;
@@ -57,6 +58,7 @@ export default function AcademicCalendar() {
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
   const { error: showError } = useToast();
+  const { sidebarCollapsed } = useSidebarLayout();
   const studentView = useMemo(() => isStudentUser(user), [user]);
 
   const [displayMonth, setDisplayMonth] = useState(() => startOfMonth(new Date()));
@@ -205,7 +207,8 @@ export default function AcademicCalendar() {
     <div
       className={cn(
         'fixed z-30 bg-background flex flex-col',
-        'inset-x-0 bottom-0 top-16 lg:left-16',
+        'inset-x-0 bottom-0 top-16',
+        sidebarCollapsed ? 'lg:left-16' : 'lg:left-72',
         'border-t border-border'
       )}
     >
