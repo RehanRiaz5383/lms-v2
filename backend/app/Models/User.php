@@ -42,6 +42,7 @@ class User extends Authenticatable
         'expected_fee_promise_date',
         'requested_course',
         'source',
+        'study_type',
         'block',
         'block_reason',
         'signup_visit_refer',

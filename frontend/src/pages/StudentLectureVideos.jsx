@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAppSelector } from '../hooks/redux';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -10,6 +11,7 @@ import { API_ENDPOINTS, getStorageUrl } from '../config/api';
 import { useToast } from '../components/ui/toast';
 
 const StudentLectureVideos = () => {
+  const [searchParams] = useSearchParams();
   const { user } = useAppSelector((state) => state.auth);
   const { error: showError } = useToast();
   const [videos, setVideos] = useState([]);
@@ -18,6 +20,17 @@ const StudentLectureVideos = () => {
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const b = searchParams.get('batch_id');
+    const s = searchParams.get('subject_id');
+    if (b) {
+      setSelectedBatch(b);
+    }
+    if (s) {
+      setSelectedSubject(s);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadVideos();

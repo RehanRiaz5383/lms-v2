@@ -30,12 +30,16 @@ const SmtpSettings = () => {
     is_active: false,
   });
 
+  /** Recipient for “Test connection” only; not persisted with Save. */
+  const [testRecipientEmail, setTestRecipientEmail] = useState('');
+
   useEffect(() => {
     dispatch(fetchSmtpSettings());
   }, [dispatch]);
 
   useEffect(() => {
     if (settings) {
+      const fromAddr = settings.from_address || '';
       setFormData({
         mailer: settings.mailer || 'smtp',
         host: settings.host || '',
@@ -43,10 +47,11 @@ const SmtpSettings = () => {
         username: settings.username || '',
         password: settings.password || '',
         encryption: settings.encryption || 'tls',
-        from_address: settings.from_address || '',
+        from_address: fromAddr,
         from_name: settings.from_name || '',
         is_active: settings.is_active ?? false,
       });
+      setTestRecipientEmail((prev) => (prev.trim() === '' ? fromAddr : prev));
     }
   }, [settings]);
 
@@ -77,9 +82,17 @@ const SmtpSettings = () => {
   };
 
   const handleTest = async () => {
+    const to = testRecipientEmail.trim();
+    if (!to) {
+      showError('Enter the email address where the test message should be delivered.');
+      return;
+    }
     try {
-      await dispatch(testSmtpConnection(formData)).unwrap();
-      success('Test email sent successfully! Please check your inbox.');
+      const result = await dispatch(
+        testSmtpConnection({ ...formData, test_to: to })
+      ).unwrap();
+      const sentTo = result?.data?.sent_to || to;
+      success(`Test email sent to ${sentTo}. Please check that inbox.`);
     } catch (err) {
       const errorMessage = typeof err === 'string' ? err : testError || 'Failed to send test email';
       showError(errorMessage);
@@ -205,6 +218,23 @@ const SmtpSettings = () => {
                     placeholder="LMS System"
                     required
                   />
+                </div>
+
+                <div className="md:col-span-2 rounded-lg border border-dashed p-4 space-y-2">
+                  <Label htmlFor="test_to">Send test email to *</Label>
+                  <Input
+                    id="test_to"
+                    name="test_to"
+                    type="email"
+                    value={testRecipientEmail}
+                    onChange={(e) => setTestRecipientEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="off"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    The connection test delivers a message to this inbox. It can be different from the From address
+                    above (useful to verify delivery to another mailbox).
+                  </p>
                 </div>
 
                 <div className="md:col-span-2">

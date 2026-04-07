@@ -52,6 +52,16 @@ class UserController extends ApiController
             $query->where('block', $request->get('block'));
         }
 
+        // Study type (students): physical, online, or none (null / not set)
+        if ($request->filled('study_type')) {
+            $studyType = $request->get('study_type');
+            if ($studyType === 'none') {
+                $query->whereNull('study_type');
+            } elseif (in_array($studyType, ['physical', 'online'], true)) {
+                $query->where('study_type', $studyType);
+            }
+        }
+
         // Date range filter
         if ($request->has('date_from') && !empty($request->get('date_from'))) {
             $query->whereDate('created_at', '>=', $request->get('date_from'));
@@ -146,6 +156,7 @@ class UserController extends ApiController
                 'expected_fee_promise_date' => 'nullable|integer|min:1|max:31',
                 'requested_course' => 'nullable|string',
                 'source' => 'nullable|string',
+                'study_type' => 'nullable|in:physical,online',
             ];
             
             // user_type is required only if role_ids is not provided
@@ -162,12 +173,27 @@ class UserController extends ApiController
             return $this->validationError($e->errors(), 'Validation failed');
         }
 
-        // Hash password
-        $validated['password'] = Hash::make($validated['password']);
-
         // Extract role_ids before creating user
         $roleIds = $validated['role_ids'] ?? [];
         unset($validated['role_ids']);
+
+        $creatingStudent = (!empty($roleIds) && in_array(2, $roleIds, true))
+            || (empty($roleIds) && (int) ($validated['user_type'] ?? 0) === 2);
+
+        if ($creatingStudent) {
+            try {
+                $request->validate([
+                    'study_type' => 'required|in:physical,online',
+                ]);
+            } catch (ValidationException $e) {
+                return $this->validationError($e->errors(), 'Validation failed');
+            }
+        } else {
+            unset($validated['study_type']);
+        }
+
+        // Hash password
+        $validated['password'] = Hash::make($validated['password']);
 
         // Set user_type to first role for backward compatibility
         if (!empty($roleIds)) {
@@ -232,6 +258,7 @@ class UserController extends ApiController
                 'expected_fee_promise_date' => 'nullable|integer|min:1|max:31',
                 'requested_course' => 'nullable|string',
                 'source' => 'nullable|string',
+                'study_type' => 'nullable|in:physical,online',
             ];
             
             // Only validate picture if it's being uploaded
@@ -242,6 +269,10 @@ class UserController extends ApiController
             $validated = $request->validate($validationRules);
         } catch (ValidationException $e) {
             return $this->validationError($e->errors(), 'Validation failed');
+        }
+
+        if (!$user->isStudent()) {
+            unset($validated['study_type']);
         }
 
         // Handle profile picture upload
@@ -383,6 +414,7 @@ class UserController extends ApiController
                 'guardian_name' => 'nullable|string|max:255',
                 'guardian_email' => 'nullable|email',
                 'guardian_contact_no' => 'nullable|string|max:20',
+                'study_type' => 'required|in:physical,online',
             ];
             
             // Only validate picture if it's being uploaded

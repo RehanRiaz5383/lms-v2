@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\VideoAssignedToBatchSubject;
 use App\Models\GoogleDriveFolder;
 use App\Models\Video;
 use App\Models\VideoResource;
@@ -444,6 +445,12 @@ class VideoController extends ApiController
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        event(new VideoAssignedToBatchSubject(
+            $video,
+            (int) $validated['batch_id'],
+            (int) $validated['subject_id']
+        ));
 
         // Get the updated list of videos
         $videos = DB::table('batch_subjects_video')

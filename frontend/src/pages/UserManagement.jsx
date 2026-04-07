@@ -52,6 +52,12 @@ import {
 } from 'lucide-react';
 import { debounce } from '../utils/debounce';
 
+function formatStudyTypeLabel(value) {
+  if (value === 'physical') return 'Physical';
+  if (value === 'online') return 'Online';
+  return '—';
+}
+
 const UserManagement = () => {
   const dispatch = useAppDispatch();
   const { users, userTypes, pagination, loading, filters } = useAppSelector((state) => state.users);
@@ -104,6 +110,7 @@ const UserManagement = () => {
   const [notificationTitle, setNotificationTitle] = useState('');
   const [notificationDescription, setNotificationDescription] = useState('');
   const [sendingNotification, setSendingNotification] = useState(false);
+  const [newUserStudyType, setNewUserStudyType] = useState('physical');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -115,6 +122,7 @@ const UserManagement = () => {
     guardian_name: '',
     guardian_email: '',
     guardian_contact_no: '',
+    study_type: 'physical',
   });
   const [searchValue, setSearchValue] = useState(filters.search || '');
 
@@ -158,6 +166,7 @@ const UserManagement = () => {
 
   const handleCreate = () => {
     setEditingUser(null);
+    setNewUserStudyType('physical');
     setFormData({
       name: '',
       email: '',
@@ -169,6 +178,7 @@ const UserManagement = () => {
       guardian_name: '',
       guardian_email: '',
       guardian_contact_no: '',
+      study_type: 'physical',
     });
     setShowDrawer(true);
   };
@@ -186,6 +196,7 @@ const UserManagement = () => {
       guardian_name: user.guardian_name || '',
       guardian_email: user.guardian_email || '',
       guardian_contact_no: user.guardian_contact_no || '',
+      study_type: user.study_type || 'physical',
     });
     setShowDrawer(true);
   };
@@ -208,6 +219,15 @@ const UserManagement = () => {
     if (submitData.expected_fee_promise_date === '') delete submitData.expected_fee_promise_date;
     if (submitData.contact_no === '') delete submitData.contact_no;
     if (submitData.address === '') delete submitData.address;
+
+    const submitIsStudent =
+      editingUser &&
+      (editingUser.roles?.some((r) => Number(r.id) === 2) ||
+        Number(editingUser.user_type) === 2 ||
+        editingUser.user_type_title?.toLowerCase() === 'student');
+    if (!submitIsStudent) {
+      delete submitData.study_type;
+    }
 
     try {
       if (editingUser) {
@@ -240,6 +260,11 @@ const UserManagement = () => {
 
     const submitData = { ...formData };
     submitData.role_ids = selectedRoles;
+    if (selectedRoles.map(Number).includes(2)) {
+      submitData.study_type = newUserStudyType;
+    } else {
+      delete submitData.study_type;
+    }
 
     try {
       await dispatch(createUser(submitData)).unwrap();
@@ -248,6 +273,7 @@ const UserManagement = () => {
       setShowAssignRolesDialog(false);
       setUserToAssignRoles(null);
       setSelectedRoles([]);
+      setNewUserStudyType('physical');
       dispatch(fetchUsers(filters));
     } catch (err) {
       const errorMessage = typeof err === 'string' ? err : err?.email?.[0] || 'Operation failed';
@@ -736,7 +762,7 @@ const UserManagement = () => {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -772,6 +798,19 @@ const UserManagement = () => {
               <option value="">All Status</option>
               <option value="0">Active</option>
               <option value="1">Blocked</option>
+            </select>
+            <select
+              value={filters.study_type || ''}
+              onChange={(e) => {
+                const value = e.target.value === '' ? null : e.target.value;
+                handleFilter('study_type', value);
+              }}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">All study types</option>
+              <option value="physical">Physical</option>
+              <option value="online">Online</option>
+              <option value="none">Not set</option>
             </select>
             <DateRangePicker
               value={
@@ -852,13 +891,14 @@ const UserManagement = () => {
                       <th className="text-left p-4">Name</th>
                       <th className="text-left p-4">Email</th>
                       <th className="text-left p-4">User Type</th>
+                      <th className="text-left p-4">Study Type</th>
                       <th className="text-left p-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.length === 0 ? (
                       <tr>
-                        <td colSpan="6" className="text-center p-8 text-muted-foreground">
+                        <td colSpan="7" className="text-center p-8 text-muted-foreground">
                           No users found
                         </td>
                       </tr>
@@ -905,6 +945,9 @@ const UserManagement = () => {
                           <td className="p-4">{user.email}</td>
                           <td className="p-4">
                             {user.roles_display || (user.roles_titles && user.roles_titles.join(', ')) || user.user_type_title || 'N/A'}
+                          </td>
+                          <td className="p-4 text-muted-foreground">
+                            {isStudent ? formatStudyTypeLabel(user.study_type) : '—'}
                           </td>
                           <td className="p-4">
                             <div className="flex gap-2">
@@ -1150,6 +1193,31 @@ const UserManagement = () => {
                     })}
                   </select>
                 </div>
+                <fieldset className="space-y-2">
+                  <legend className="text-sm font-medium">Study type *</legend>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="study_type"
+                        value="physical"
+                        checked={formData.study_type === 'physical'}
+                        onChange={() => setFormData({ ...formData, study_type: 'physical' })}
+                      />
+                      Physical
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="study_type"
+                        value="online"
+                        checked={formData.study_type === 'online'}
+                        onChange={() => setFormData({ ...formData, study_type: 'online' })}
+                      />
+                      Online
+                    </label>
+                  </div>
+                </fieldset>
               </>
             ) : null;
           })()}
@@ -1270,6 +1338,34 @@ const UserManagement = () => {
               {selectedRoles.length} role(s) selected
             </p>
           </div>
+          {selectedRoles.map(Number).includes(2) && !userToAssignRoles?.id && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Study type *</legend>
+              <p className="text-xs text-muted-foreground">Required for users with the Student role.</p>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="new_user_study_type"
+                    value="physical"
+                    checked={newUserStudyType === 'physical'}
+                    onChange={() => setNewUserStudyType('physical')}
+                  />
+                  Physical
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="new_user_study_type"
+                    value="online"
+                    checked={newUserStudyType === 'online'}
+                    onChange={() => setNewUserStudyType('online')}
+                  />
+                  Online
+                </label>
+              </div>
+            </fieldset>
+          )}
           <div className="flex gap-2">
             <Button
               onClick={userToAssignRoles?.id ? handleAssignRolesSubmit : handleCreateUserWithRoles}

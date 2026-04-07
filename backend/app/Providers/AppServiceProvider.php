@@ -7,6 +7,8 @@ use App\Events\StudentLogin;
 use App\Events\StudentLogout;
 use App\Events\StudentRegistered;
 use App\Events\UserUpdated;
+use App\Events\VideoAssignedToBatchSubject;
+use App\Listeners\QueueNotifyEnrolledStudentsAboutNewBatchVideo;
 use App\Listeners\SendStudentBlockedNotification;
 use App\Listeners\SendUserLoginLogoutNotification;
 use App\Listeners\SendStudentRegistrationNotification;
@@ -60,6 +62,11 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(
             StudentLogout::class,
             SendUserLoginLogoutNotification::class
+        );
+
+        Event::listen(
+            VideoAssignedToBatchSubject::class,
+            QueueNotifyEnrolledStudentsAboutNewBatchVideo::class
         );
 
         // Configure SMTP settings from database when email is being sent

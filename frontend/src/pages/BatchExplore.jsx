@@ -18,6 +18,12 @@ import { Loader2, ChevronRight, ChevronDown, Video, ArrowLeft, GripVertical, Plu
 import { cn } from '../utils/cn';
 import RichTextEditor from '../components/RichTextEditor';
 
+function formatStudyTypeLabel(value) {
+  if (value === 'physical') return 'Physical';
+  if (value === 'online') return 'Online';
+  return '—';
+}
+
 const BatchExplore = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -106,6 +112,7 @@ const BatchExplore = () => {
     guardian_name: '',
     guardian_email: '',
     guardian_contact_no: '',
+    study_type: 'physical',
     password: '',
     picture: null,
   });
@@ -1093,6 +1100,7 @@ const BatchExplore = () => {
       guardian_name: student.guardian_name || '',
       guardian_email: student.guardian_email || '',
       guardian_contact_no: student.guardian_contact_no || '',
+      study_type: student.study_type || 'physical',
       password: '',
       picture: null,
     });
@@ -1498,6 +1506,9 @@ const BatchExplore = () => {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground truncate">{student.email}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Study type: {formatStudyTypeLabel(student.study_type)}
+                          </p>
                           {student.contact_no && (
                             <p className="text-xs text-muted-foreground">Contact: {student.contact_no}</p>
                           )}
@@ -2372,6 +2383,7 @@ const BatchExplore = () => {
             guardian_name: '',
             guardian_email: '',
             guardian_contact_no: '',
+            study_type: 'physical',
             password: '',
             picture: null,
           });
@@ -2508,6 +2520,32 @@ const BatchExplore = () => {
               />
             </div>
           </div>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Study type *</legend>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="batch_student_study_type"
+                  value="physical"
+                  checked={studentFormData.study_type === 'physical'}
+                  onChange={() => setStudentFormData({ ...studentFormData, study_type: 'physical' })}
+                />
+                Physical
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="batch_student_study_type"
+                  value="online"
+                  checked={studentFormData.study_type === 'online'}
+                  onChange={() => setStudentFormData({ ...studentFormData, study_type: 'online' })}
+                />
+                Online
+              </label>
+            </div>
+          </fieldset>
 
           <div>
             <Label htmlFor="student_picture">Profile Picture</Label>

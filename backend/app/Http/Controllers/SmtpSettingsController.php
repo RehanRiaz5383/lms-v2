@@ -100,11 +100,15 @@ class SmtpSettingsController extends ApiController
                 'password' => 'required|string',
                 'encryption' => 'nullable|string|in:tls,ssl',
                 'from_address' => 'required|email|max:255',
+                'from_name' => 'nullable|string|max:255',
+                'test_to' => 'required|email|max:255',
             ]);
 
             if ($validator->fails()) {
                 return $this->validationError($validator->errors());
             }
+
+            $testTo = $request->input('test_to');
 
             // Configure mail settings temporarily
             config([
@@ -114,16 +118,17 @@ class SmtpSettingsController extends ApiController
                 'mail.mailers.smtp.password' => $request->password,
                 'mail.mailers.smtp.encryption' => $request->encryption ?? 'tls',
                 'mail.from.address' => $request->from_address,
+                'mail.from.name' => $request->input('from_name') ?: config('mail.from.name'),
             ]);
 
             // Try to send a test email
             try {
-                Mail::raw('This is a test email from LMS SMTP Settings.', function ($message) use ($request) {
-                    $message->to($request->from_address)
+                Mail::raw('This is a test email from LMS SMTP Settings.', function ($message) use ($testTo) {
+                    $message->to($testTo)
                             ->subject('SMTP Test Email');
                 });
 
-                return $this->success(null, 'Test email sent successfully');
+                return $this->success(['sent_to' => $testTo], 'Test email sent successfully');
             } catch (\Exception $e) {
                 return $this->error('Failed to send test email: ' . $e->getMessage());
             }

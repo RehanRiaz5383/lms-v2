@@ -19,6 +19,7 @@ const initialState = {
     search: '',
     user_type: null,
     block: 0, // Default to active users only
+    study_type: null,
     date_from: null,
     date_to: null,
   },
