@@ -102,13 +102,6 @@ const InternalIntegrations = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Internal Integrations</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage internal integrations and third-party services
-        </p>
-      </div>
-
       {/* Integrations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {integrations.map((integration) => {

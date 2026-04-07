@@ -131,22 +131,10 @@ const NotificationDetail = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/dashboard')}
-          >
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              Notification Details
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              View complete notification information
-            </p>
-          </div>
         </div>
         {!notification.read && (
           <Button

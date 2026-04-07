@@ -120,27 +120,11 @@ const PendingTaskSubmissions = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-              <AlertCircle className="h-8 w-8 text-red-500" />
-              Overdue Task Submissions
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              View and manage students with tasks past their due date
-            </p>
-          </div>
-        </div>
+      <div className="flex justify-start">
+        <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Dashboard
+        </Button>
       </div>
 
       {/* Search */}

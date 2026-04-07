@@ -137,13 +137,7 @@ const GoogleDriveFolders = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Google Drive Folders</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage Google Drive folder configurations for file storage
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={() => handleOpenDialog()}>
           <Plus className="h-4 w-4 mr-2" />
           Add Folder

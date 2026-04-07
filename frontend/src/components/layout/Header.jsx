@@ -2,41 +2,42 @@ import { useAppDispatch, useAppSelector } from '../../hooks/redux';
 import { toggleTheme } from '../../store/slices/themeSlice';
 import { logout } from '../../store/slices/authSlice';
 import { fetchProfile } from '../../store/slices/profileSlice';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Menu, Moon, Sun, LogOut, BarChart3, BookOpen, CalendarDays } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getStorageUrl, normalizeStorageUrl } from '../../config/api';
 import NotificationDropdown from '../notifications/NotificationDropdown';
 import ProfilePicture from '../ProfilePicture';
+import { getPageMeta } from '../../config/routeMeta';
+import { cn } from '../../utils/cn';
 
 const Header = ({ onMenuClick }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme } = useAppSelector((state) => state.theme);
   const { user } = useAppSelector((state) => state.auth);
   const { profile } = useAppSelector((state) => state.profile);
   const [profilePicture, setProfilePicture] = useState(null);
 
+  const { title, description } = getPageMeta(location.pathname);
+
   useEffect(() => {
-    // Fetch profile if not loaded
     if (!profile && user) {
       dispatch(fetchProfile());
     }
   }, [dispatch, profile, user]);
 
   useEffect(() => {
-    // Get profile picture from user or profile
     if (user?.picture_url || user?.picture) {
       let pictureUrl = user.picture_url || (user.picture ? getStorageUrl(user.picture) : null);
-      // Normalize URL to ensure it uses /load-storage/ instead of /storage/
       if (pictureUrl) {
         pictureUrl = normalizeStorageUrl(pictureUrl);
       }
       setProfilePicture(pictureUrl);
     } else if (profile?.picture_url || profile?.picture) {
       let pictureUrl = profile.picture_url || (profile.picture ? getStorageUrl(profile.picture) : null);
-      // Normalize URL to ensure it uses /load-storage/ instead of /storage/
       if (pictureUrl) {
         pictureUrl = normalizeStorageUrl(pictureUrl);
       }
@@ -51,40 +52,35 @@ const Header = ({ onMenuClick }) => {
     navigate('/login');
   };
 
-  // Check if user is a student
   const isStudent = () => {
     if (!user) return false;
-    
-    // Check roles array
     if (user.roles && Array.isArray(user.roles)) {
-      return user.roles.some(role => 
-        role.title?.toLowerCase() === 'student' || role.id == 2
-      );
+      return user.roles.some((role) => role.title?.toLowerCase() === 'student' || role.id == 2);
     }
-    
-    // Fallback to user_type
     return user.user_type == 2 || user.user_type_title?.toLowerCase() === 'student';
   };
 
   return (
-    <header className="h-16 border-b border-border bg-card flex items-center justify-between px-4 lg:px-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden"
-          onClick={onMenuClick}
-        >
+    <header className="flex min-h-16 items-center gap-3 border-b border-border bg-card/80 px-4 py-2.5 backdrop-blur-md lg:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={onMenuClick} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
-        <h2 className="text-lg font-semibold text-foreground">Dashboard</h2>
+        <div key={location.pathname} className={cn('min-w-0 flex-1 animate-fade-in-down')}>
+          <h1 className="truncate text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground sm:text-sm sm:leading-snug">
+              {description}
+            </p>
+          ) : null}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Notifications */}
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <NotificationDropdown />
 
-        {/* Academic calendar */}
         <Button
           variant="ghost"
           size="icon"
@@ -95,7 +91,6 @@ const Header = ({ onMenuClick }) => {
           <CalendarDays className="h-5 w-5" />
         </Button>
 
-        {/* Performance Report (Students only) */}
         {isStudent() && (
           <Button
             variant="ghost"
@@ -108,7 +103,6 @@ const Header = ({ onMenuClick }) => {
           </Button>
         )}
 
-        {/* Account Book (Students only) */}
         {isStudent() && (
           <Button
             variant="ghost"
@@ -121,46 +115,20 @@ const Header = ({ onMenuClick }) => {
           </Button>
         )}
 
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => dispatch(toggleTheme())}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? (
-            <Sun className="h-5 w-5" />
-          ) : (
-            <Moon className="h-5 w-5" />
-          )}
+        <Button variant="ghost" size="icon" onClick={() => dispatch(toggleTheme())} aria-label="Toggle theme">
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
 
-        {/* User Info */}
         <Link
           to="/dashboard/profile"
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted hover:bg-accent transition-colors cursor-pointer"
+          className="hidden cursor-pointer items-center gap-2 rounded-md bg-muted px-3 py-1.5 transition-colors hover:bg-accent sm:flex"
         >
-          <ProfilePicture
-            src={profilePicture}
-            alt={user?.name || 'User'}
-            size="sm"
-            showBorder={true}
-          />
-          <span className="text-sm font-medium text-foreground">
-            {user?.name || 'User'}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            ({user?.user_type_title || 'N/A'})
-          </span>
+          <ProfilePicture src={profilePicture} alt={user?.name || 'User'} size="sm" showBorder={true} />
+          <span className="max-w-[8rem] truncate text-sm font-medium text-foreground">{user?.name || 'User'}</span>
+          <span className="hidden text-xs text-muted-foreground md:inline">({user?.user_type_title || 'N/A'})</span>
         </Link>
 
-        {/* Logout Button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleLogout}
-          aria-label="Logout"
-        >
+        <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout">
           <LogOut className="h-5 w-5" />
         </Button>
       </div>
@@ -169,4 +137,3 @@ const Header = ({ onMenuClick }) => {
 };
 
 export default Header;
-

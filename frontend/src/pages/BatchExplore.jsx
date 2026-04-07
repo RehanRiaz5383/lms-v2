@@ -1395,18 +1395,15 @@ const BatchExplore = () => {
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 space-y-6">
-          {/* Batch Header */}
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              {currentBatch?.title || 'Batch Details'}
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              {currentBatch?.active ? (
-                <span className="text-green-500">Active</span>
-              ) : (
-                <span className="text-muted-foreground">Inactive</span>
-              )}
-            </p>
+          {/* Batch context (title also in top bar as “Batch workspace”) */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold text-foreground">{currentBatch?.title || 'Batch'}</span>
+            <span className="text-muted-foreground">·</span>
+            {currentBatch?.active ? (
+              <span className="text-emerald-600 dark:text-emerald-400">Active</span>
+            ) : (
+              <span className="text-muted-foreground">Inactive</span>
+            )}
           </div>
 
           {/* Students Content */}

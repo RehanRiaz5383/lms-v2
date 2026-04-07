@@ -240,26 +240,19 @@ const AdminTasks = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground mt-2">
-            Review and grade unchecked task submissions
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="sort-order" className="text-sm">Sort by:</Label>
-          <select
-            id="sort-order"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value)}
-            className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-          >
-            <option value="oldest">Oldest to Latest</option>
-            <option value="latest">Latest to Oldest</option>
-          </select>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Label htmlFor="sort-order" className="text-sm">
+          Sort by:
+        </Label>
+        <select
+          id="sort-order"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value)}
+          className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+        >
+          <option value="oldest">Oldest to Latest</option>
+          <option value="latest">Latest to Oldest</option>
+        </select>
       </div>
 
       {/* Filters */}

@@ -431,14 +431,7 @@ const VideosManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Videos Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage videos - upload internal videos or add external links
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="outline"
             onClick={handleBackfillGoogleDriveIds}
@@ -456,11 +449,10 @@ const VideosManagement = () => {
               </>
             )}
           </Button>
-          <Button onClick={handleCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Video
-          </Button>
-        </div>
+        <Button onClick={handleCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Create New Video
+        </Button>
       </div>
 
       {/* Filters */}

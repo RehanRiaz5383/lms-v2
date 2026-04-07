@@ -182,13 +182,7 @@ const ExpenseManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Expense Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage expenses and expense heads
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={() => {
           setEditingExpenseHead(null);
           setExpenseHeadForm({ name: '', description: '', is_active: true });

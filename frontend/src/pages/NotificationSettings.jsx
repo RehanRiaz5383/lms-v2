@@ -128,13 +128,6 @@ const NotificationSettings = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Notification Settings</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure your notification preferences for email and push notifications
-        </p>
-      </div>
-
       {/* Push Notifications Section */}
       <div className="space-y-4">
         <PushNotificationManager />

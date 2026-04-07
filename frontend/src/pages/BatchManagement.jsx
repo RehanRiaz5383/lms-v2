@@ -358,20 +358,14 @@ const BatchManagement = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Batch Management</h1>
-          <p className="text-muted-foreground mt-2">
-            {hasAdminAccess ? 'Manage batches and assign subjects' : (isTeacherCR ? 'View your assigned batches' : 'Manage batches and assign subjects')}
-          </p>
-        </div>
-        {hasAdminAccess && (
+      {hasAdminAccess && (
+        <div className="flex justify-end">
           <Button onClick={handleCreate}>
             <Plus className="mr-2 h-4 w-4" />
             Add Batch
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>

@@ -394,17 +394,11 @@ const Profile = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Profile Settings</h1>
-        <p className="text-muted-foreground mt-2">
-          Manage your profile information and account settings
-        </p>
-        {profileError && (
-          <div className="mt-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">
-            Error loading profile: {profileError}
-          </div>
-        )}
-      </div>
+      {profileError && (
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          Error loading profile: {profileError}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">

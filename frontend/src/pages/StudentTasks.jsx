@@ -281,16 +281,6 @@ const StudentTasks = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Task Assigned</h1>
-          <p className="text-muted-foreground mt-2">
-            View and manage your assigned tasks
-          </p>
-        </div>
-      </div>
-
       {/* Batch and Subject Filters */}
       <Card>
         <CardHeader>

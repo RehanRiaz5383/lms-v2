@@ -101,13 +101,6 @@ const SmtpSettings = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">SMTP Settings</h1>
-        <p className="text-muted-foreground mt-2">
-          Configure your SMTP server settings for sending emails
-        </p>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

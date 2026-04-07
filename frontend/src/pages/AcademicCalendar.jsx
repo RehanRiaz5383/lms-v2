@@ -213,13 +213,8 @@ export default function AcademicCalendar() {
       )}
     >
       <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-3 sm:px-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-foreground sm:text-xl">Academic calendar</h1>
-          <p className="truncate text-xs text-muted-foreground sm:text-sm">
-            {studentView
-              ? 'Your assignments, quizzes, and class participations by date — batch · subject on each item'
-              : 'All assignments, quizzes, and class participations — batch · subject on each item'}
-          </p>
+        <div className="min-w-0 text-xs text-muted-foreground sm:text-sm">
+          {studentView ? 'Your items by date' : 'All cohort items by date'}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1 sm:gap-2">
           <Button variant="outline" size="sm" onClick={() => setDisplayMonth(startOfMonth(new Date()))}>

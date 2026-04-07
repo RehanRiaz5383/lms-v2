@@ -15,22 +15,10 @@ const StudentPerformanceReportPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/dashboard')}
-        >
+      <div className="flex justify-start">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} aria-label="Back to dashboard">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">
-            My Performance Report
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            View your academic performance and progress
-          </p>
-        </div>
       </div>
 
       <StudentPerformanceReport

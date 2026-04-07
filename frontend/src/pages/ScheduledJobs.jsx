@@ -258,13 +258,7 @@ const ScheduledJobs = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Scheduled Jobs</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage automated scheduled tasks and notifications
-          </p>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Add Scheduled Job
