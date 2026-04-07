@@ -1,11 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { SidebarLayoutContext } from './sidebarLayoutContext';
 
 const DashboardLayout = () => {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** Always start expanded on load/refresh; compact mode is session-only. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -39,7 +40,9 @@ const DashboardLayout = () => {
         >
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="p-4 lg:p-6">
-            <Outlet />
+            <div key={location.pathname} className="animate-page-enter">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>

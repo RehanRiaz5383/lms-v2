@@ -31,13 +31,13 @@ const Dialog = ({ isOpen, onClose, title, children, className, size = 'md' }) =>
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-backdrop-in"
         onClick={onClose}
       >
         {/* Dialog */}
         <div
           className={cn(
-            "bg-card rounded-lg shadow-xl w-full border border-border",
+            'w-full rounded-lg border border-border bg-card shadow-xl animate-dialog-in',
             sizeClasses[size],
             className
           )}

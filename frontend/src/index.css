@@ -58,6 +58,17 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /**
+   * Motion tokens — short, ease-out-ish curves. Used by utility classes below.
+   */
+  :root {
+    --motion-enter-duration: 320ms;
+    --motion-enter-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-micro: 180ms;
+    --motion-dialog: 280ms;
+    --motion-backdrop: 200ms;
+  }
 }
 
 @layer utilities {
@@ -102,6 +113,86 @@
 
   .animate-fade-in-down {
     animation: fade-in-down 0.42s ease-out both;
+  }
+
+  /* —— Professional page & section motion (dashboard shell, login) —— */
+  @keyframes motion-fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-page-enter {
+    animation: motion-fade-in-up var(--motion-enter-duration) var(--motion-enter-ease) both;
+  }
+
+  .motion-stagger-1 {
+    animation-delay: 90ms;
+  }
+
+  .motion-stagger-2 {
+    animation-delay: 160ms;
+  }
+
+  @keyframes motion-backdrop-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-backdrop-in {
+    animation: motion-backdrop-in var(--motion-backdrop) ease-out both;
+  }
+
+  @keyframes motion-dialog-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .animate-dialog-in {
+    animation: motion-dialog-in var(--motion-dialog) var(--motion-enter-ease) both;
+  }
+
+  @keyframes motion-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .animate-fade-in-soft {
+    animation: motion-fade-in var(--motion-micro) ease-out both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-down,
+  .animate-page-enter,
+  .motion-stagger-1,
+  .motion-stagger-2,
+  .animate-backdrop-in,
+  .animate-dialog-in,
+  .animate-fade-in-soft {
+    animation: none !important;
+    animation-delay: 0ms !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

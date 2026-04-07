@@ -109,7 +109,7 @@ const Login = () => {
       />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col lg:flex-row lg:items-stretch">
-        <div className="flex flex-1 flex-col justify-center px-6 pb-6 pt-10 sm:px-10 lg:px-14 lg:py-16">
+        <div className="flex flex-1 animate-page-enter motion-stagger-1 flex-col justify-center px-6 pb-6 pt-10 sm:px-10 lg:px-14 lg:py-16">
           <div className="mx-auto w-full max-w-lg lg:mx-0">
             <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-[3.25rem] lg:leading-[1.08]">
               Sign in and{' '}
@@ -125,7 +125,7 @@ const Login = () => {
               {highlights.map(({ icon: Icon, label, sub }) => (
                 <li
                   key={label}
-                  className="flex gap-4 rounded-2xl border border-border/35 bg-card/45 p-4 shadow-sm backdrop-blur-md transition-colors hover:border-border/60 dark:bg-card/25"
+                  className="flex gap-4 rounded-2xl border border-border/35 bg-card/45 p-4 shadow-sm backdrop-blur-md transition-[colors,transform,box-shadow] duration-300 ease-out hover:border-border/60 hover:shadow-md hover:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none dark:bg-card/25"
                 >
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/15 to-sky-500/15 text-violet-700 dark:text-violet-200">
                     <Icon className="h-5 w-5" aria-hidden />
@@ -147,7 +147,7 @@ const Login = () => {
           </div>
         </div>
 
-        <div className="flex flex-1 items-center justify-center px-4 pb-12 pt-2 sm:px-8 lg:px-10 lg:py-16">
+        <div className="flex flex-1 animate-page-enter motion-stagger-2 items-center justify-center px-4 pb-12 pt-2 sm:px-8 lg:px-10 lg:py-16">
           <div className="w-full max-w-md">
             <Card
               className={cn(
