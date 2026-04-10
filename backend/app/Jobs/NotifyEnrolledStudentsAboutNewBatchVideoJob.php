@@ -7,6 +7,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Models\Video;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -14,25 +15,34 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class NotifyEnrolledStudentsAboutNewBatchVideoJob implements ShouldQueue
+class NotifyEnrolledStudentsAboutNewBatchVideoJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 300;
 
-    public int $tries = 2;
+    /**
+     * Retrying the whole job re-queues emails for every student; rely on SendNotificationEmail dedupe if a retry occurs.
+     */
+    public int $tries = 1;
+
+    public int $uniqueFor = 600;
 
     public function __construct(
         public int $videoId,
         public int $batchId,
         public int $subjectId
-    ) {
+    ) {}
+
+    public function uniqueId(): string
+    {
+        return "new-batch-video:{$this->videoId}:{$this->batchId}:{$this->subjectId}";
     }
 
     public function handle(): void
     {
         $video = Video::find($this->videoId);
-        if (!$video) {
+        if (! $video) {
             Log::warning('NotifyEnrolledStudentsAboutNewBatchVideoJob: video not found', [
                 'video_id' => $this->videoId,
             ]);
@@ -57,20 +67,20 @@ class NotifyEnrolledStudentsAboutNewBatchVideoJob implements ShouldQueue
             return;
         }
 
-        $reviewUrl = '/dashboard/lecture-videos?batch_id=' . $this->batchId . '&subject_id=' . $this->subjectId;
+        $reviewUrl = '/dashboard/lecture-videos?batch_id='.$this->batchId.'&subject_id='.$this->subjectId;
 
         $inAppTitle = 'New lecture video';
         $inAppMessage = "{$videoTitle} is now available for {$subjectTitle} in {$batchTitle}. Please review it in Lecture Videos.";
 
         $emailSubject = "[LMS] New video: {$subjectTitle} — {$batchTitle}";
         $emailBody = "Hello,\n\n"
-            . "A new lecture video has been uploaded for a subject in your batch.\n\n"
-            . "Video: {$videoTitle}\n"
-            . "Batch: {$batchTitle}\n"
-            . "Subject: {$subjectTitle}\n\n"
-            . "Please sign in to the LMS and open Lecture Videos to review it.\n\n"
-            . "Direct link path: {$reviewUrl}\n\n"
-            . "— LMS";
+            ."A new lecture video has been uploaded for a subject in your batch.\n\n"
+            ."Video: {$videoTitle}\n"
+            ."Batch: {$batchTitle}\n"
+            ."Subject: {$subjectTitle}\n\n"
+            ."Please sign in to the LMS and open Lecture Videos to review it.\n\n"
+            ."Direct link path: {$reviewUrl}\n\n"
+            .'— LMS';
 
         $payload = [
             'video_id' => $video->id,
