@@ -1,7 +1,10 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../../utils/cn";
 import { X } from "lucide-react";
 import { Button } from "./button";
+
+const DRAWER_Z = "z-[10250]";
 
 const Drawer = ({ isOpen, onClose, title, children, className, size = 'lg' }) => {
   const sizeClasses = {
@@ -45,21 +48,23 @@ const Drawer = ({ isOpen, onClose, title, children, className, size = 'lg' }) =>
 
   if (!isMounted && !isOpen) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       <div
         className={cn(
-          "fixed inset-0 bg-black/50 z-50 transition-opacity duration-300 ease-in-out",
+          "fixed inset-0 bg-black/50 transition-opacity duration-300 ease-in-out",
+          DRAWER_Z,
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
       />
-      
+
       {/* Drawer */}
       <div
         className={cn(
-          "fixed right-0 top-0 h-full bg-card border-l border-border z-50 shadow-2xl transform transition-all duration-300 ease-out",
+          "fixed right-0 top-0 h-full bg-card border-l border-border shadow-2xl transform transition-all duration-300 ease-out",
+          DRAWER_Z,
           sizeClasses[size],
           isAnimating && isOpen ? "translate-x-0 opacity-100" : "translate-x-full opacity-0",
           className
@@ -82,14 +87,15 @@ const Drawer = ({ isOpen, onClose, title, children, className, size = 'lg' }) =>
               <X className="h-5 w-5" />
             </Button>
           </div>
-          
+
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
             {children}
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 

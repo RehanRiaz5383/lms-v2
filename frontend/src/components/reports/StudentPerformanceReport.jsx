@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, Printer, Loader2, User, Mail, Phone, Calendar } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -695,8 +696,8 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[10250] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg shadow-lg w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border no-print">
@@ -797,7 +798,8 @@ const StudentPerformanceReport = ({ student, isOpen, onClose, hideActions = fals
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

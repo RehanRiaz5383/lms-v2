@@ -1,7 +1,11 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "../../utils/cn";
 import { X } from "lucide-react";
 import { Button } from "./button";
+
+/** Above sidebar (50) and chat shells (~10000); portaled so not clipped by main stacking. */
+const DIALOG_Z = "z-[10250]";
 
 const Dialog = ({ isOpen, onClose, title, children, className, size = 'md' }) => {
   const sizeClasses = {
@@ -27,11 +31,14 @@ const Dialog = ({ isOpen, onClose, title, children, className, size = 'md' }) =>
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-backdrop-in"
+        className={cn(
+          "fixed inset-0 flex items-center justify-center bg-black/50 p-4 animate-backdrop-in",
+          DIALOG_Z
+        )}
         onClick={onClose}
       >
         {/* Dialog */}
@@ -62,7 +69,8 @@ const Dialog = ({ isOpen, onClose, title, children, className, size = 'md' }) =>
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
 

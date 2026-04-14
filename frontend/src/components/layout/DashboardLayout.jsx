@@ -39,7 +39,7 @@ const DashboardLayout = () => {
           )}
         >
           <Header onMenuClick={() => setSidebarOpen(true)} />
-          <main className="p-4 lg:p-6">
+          <main className="relative z-0 p-4 lg:p-6">
             <div key={location.pathname} className="animate-page-enter">
               <Outlet />
             </div>

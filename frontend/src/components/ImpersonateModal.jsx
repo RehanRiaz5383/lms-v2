@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../utils/cn';
@@ -129,8 +130,8 @@ const ImpersonateModal = ({ isOpen, onClose, userId, userName }) => {
 
   const appBaseUrl = getAppBaseUrl();
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+  return createPortal(
+    <div className="fixed inset-0 z-[10250] flex items-center justify-center bg-black/80">
       <div className="relative w-full h-full max-w-[95vw] max-h-[95vh] bg-background rounded-lg shadow-xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-600 to-purple-600 text-white">
@@ -215,7 +216,8 @@ const ImpersonateModal = ({ isOpen, onClose, userId, userName }) => {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
