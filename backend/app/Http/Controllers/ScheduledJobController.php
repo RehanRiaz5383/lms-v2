@@ -2,22 +2,25 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ScheduledJob;
-use App\Models\JobLog;
-use App\Models\Voucher;
-use App\Models\User;
 use App\Mail\TaskReminderMail;
+use App\Models\JobLog;
+use App\Models\ScheduledJob;
+use App\Models\TaskReminderLog;
+use App\Models\User;
+use App\Models\Voucher;
+use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Carbon\Carbon;
 
 class ScheduledJobController extends ApiController
 {
     /**
      * Current job log reference for use in job execution methods
+     *
      * @var JobLog|null
      */
     private $currentJobLog = null;
@@ -42,7 +45,7 @@ class ScheduledJobController extends ApiController
             foreach ($jobs as $job) {
                 $jobLog = null;
                 $startTime = microtime(true);
-                
+
                 try {
                     // Create job log entry
                     $jobLog = JobLog::create([
@@ -55,10 +58,10 @@ class ScheduledJobController extends ApiController
 
                     // Execute the job based on job_class (pass job log for metadata tracking)
                     $this->executeJob($job, $jobLog);
-                    
+
                     // Calculate execution time
                     $executionTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
-                    
+
                     // Update last_run_at and calculate next_run_at
                     $job->last_run_at = now();
                     $job->calculateNextRun();
@@ -66,21 +69,21 @@ class ScheduledJobController extends ApiController
 
                     // Refresh job log to get any metadata updates from job execution
                     $jobLog->refresh();
-                    
+
                     // Update job log with success (preserve any metadata set by job execution)
                     $updateData = [
                         'status' => 'success',
                         'completed_at' => now(),
                         'execution_time_ms' => (int) $executionTime,
                     ];
-                    
+
                     // Only set default message if not already set by job execution
-                    if (!$jobLog->message) {
+                    if (! $jobLog->message) {
                         $updateData['message'] = 'Job executed successfully';
                     }
-                    
+
                     $jobLog->update($updateData);
-                    
+
                     // Clear current job log reference
                     $this->currentJobLog = null;
 
@@ -92,10 +95,10 @@ class ScheduledJobController extends ApiController
                 } catch (\Exception $e) {
                     // Calculate execution time even on failure
                     $executionTime = (microtime(true) - $startTime) * 1000;
-                    
+
                     $errorMessage = $e->getMessage();
                     $errorTrace = $e->getTraceAsString();
-                    
+
                     Log::error("Scheduled job execution failed: {$job->name}", [
                         'job_id' => $job->id,
                         'error' => $errorMessage,
@@ -143,7 +146,8 @@ class ScheduledJobController extends ApiController
                 'timestamp' => now()->toDateTimeString(),
             ], 'Scheduled jobs executed');
         } catch (\Exception $e) {
-            Log::error('Scheduled job execution error: ' . $e->getMessage());
+            Log::error('Scheduled job execution error: '.$e->getMessage());
+
             return $this->error($e->getMessage(), 'Failed to execute scheduled jobs', 500);
         }
     }
@@ -151,12 +155,12 @@ class ScheduledJobController extends ApiController
     /**
      * Execute a specific job based on job_class
      */
-    private function executeJob(ScheduledJob $job, JobLog $jobLog = null): void
+    private function executeJob(ScheduledJob $job, ?JobLog $jobLog = null): void
     {
         // Store job log reference for use in job execution methods
         $previousJobLog = $this->currentJobLog;
         $this->currentJobLog = $jobLog;
-        
+
         try {
             switch ($job->job_class) {
                 case 'TaskReminderJob':
@@ -189,23 +193,24 @@ class ScheduledJobController extends ApiController
     private function executeTaskReminderJob(ScheduledJob $job): void
     {
         $reminderHours = $job->metadata['reminder_hours'] ?? 24;
-        
+
         // Get all pending tasks with expiry_date exactly in $reminderHours (with 1 hour window)
         $now = now()->setTimezone('Asia/Karachi');
         $targetTimeStart = $now->copy()->addHours($reminderHours)->startOfHour();
         $targetTimeEnd = $targetTimeStart->copy()->addHour();
-        
+
         // Get tasks that expire within the target window (e.g., 24h ± 1 hour)
         $tasks = DB::table('tasks')
             ->whereNotNull('expiry_date')
             ->whereBetween('expiry_date', [
                 $targetTimeStart->format('Y-m-d H:i:s'),
-                $targetTimeEnd->format('Y-m-d H:i:s')
+                $targetTimeEnd->format('Y-m-d H:i:s'),
             ])
             ->get();
 
         if ($tasks->isEmpty()) {
-            Log::info("No tasks found for reminder (24h before deadline)");
+            Log::info('No tasks found for reminder (24h before deadline)');
+
             return;
         }
 
@@ -215,8 +220,8 @@ class ScheduledJobController extends ApiController
         foreach ($tasks as $task) {
             // Get students assigned to this task's batch
             $batchId = $task->batch_id ?? null;
-            
-            if (!$batchId) {
+
+            if (! $batchId) {
                 continue;
             }
 
@@ -242,30 +247,35 @@ class ScheduledJobController extends ApiController
                     continue;
                 }
 
-                // Check if reminder was already sent (bookkeeping)
                 $reminderType = "{$reminderHours}h";
-                if (\App\Models\TaskReminderLog::wasSent($task->id, $studentId, $reminderType)) {
-                    continue; // Already sent, skip
-                }
 
+                // Claim the reminder row first so overlapping cron runs cannot both queue duplicate emails.
                 try {
-                    // Send notification and queue email
-                    $this->sendTaskReminder($task, $studentId, $reminderHours);
-                    
-                    // Log the reminder (email is queued, so mark as queued)
-                    \App\Models\TaskReminderLog::create([
+                    $reminderLog = TaskReminderLog::create([
                         'task_id' => $task->id,
                         'student_id' => $studentId,
                         'reminder_type' => $reminderType,
                         'reminder_sent_at' => now(),
+                        'notification_sent' => false,
+                        'email_sent' => false,
+                    ]);
+                } catch (UniqueConstraintViolationException) {
+                    continue;
+                }
+
+                try {
+                    $this->sendTaskReminder($task, $studentId, $reminderHours);
+
+                    $reminderLog->update([
                         'notification_sent' => true,
-                        'email_sent' => true, // Email is queued successfully
+                        'email_sent' => true,
                     ]);
 
                     $notifiedCount++;
-                    $emailCount++; // Email queued successfully
+                    $emailCount++;
                 } catch (\Exception $e) {
-                    Log::error("Failed to send reminder for task {$task->id} to student {$studentId}: " . $e->getMessage());
+                    $reminderLog->delete();
+                    Log::error("Failed to send reminder for task {$task->id} to student {$studentId}: ".$e->getMessage());
                 }
             }
         }
@@ -276,8 +286,8 @@ class ScheduledJobController extends ApiController
             'emails_sent' => $emailCount,
         ];
 
-        Log::info("Task reminder job completed", $metadata);
-        
+        Log::info('Task reminder job completed', $metadata);
+
         // Store metadata in job log if available
         if (isset($this->currentJobLog)) {
             $this->currentJobLog->update([
@@ -293,7 +303,7 @@ class ScheduledJobController extends ApiController
     private function sendTaskReminder($task, int $studentId, int $reminderHours): void
     {
         $student = \App\Models\User::find($studentId);
-        if (!$student) {
+        if (! $student) {
             return;
         }
 
@@ -315,7 +325,7 @@ class ScheduledJobController extends ApiController
     private function createTaskReminderNotification(int $studentId, $task, int $reminderHours, string $formattedDate): void
     {
         try {
-            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+            if (! DB::getSchemaBuilder()->hasTable('notifications')) {
                 return;
             }
 
@@ -329,7 +339,7 @@ class ScheduledJobController extends ApiController
             $notificationData = [];
 
             // Set ID only if it's a UUID column (not auto-increment)
-            if ($hasIdColumn && !DB::getSchemaBuilder()->getColumnType('notifications', 'id') === 'bigint') {
+            if ($hasIdColumn && ! DB::getSchemaBuilder()->getColumnType('notifications', 'id') === 'bigint') {
                 $notificationData['id'] = \Illuminate\Support\Str::uuid()->toString();
             }
 
@@ -338,9 +348,9 @@ class ScheduledJobController extends ApiController
                 $notificationData['user_id'] = $studentId;
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
-            } else if ($hasUserIdColumn) {
+            } elseif ($hasUserIdColumn) {
                 $notificationData['user_id'] = $studentId;
-            } else if ($hasNotifiableIdColumn) {
+            } elseif ($hasNotifiableIdColumn) {
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
             }
@@ -360,7 +370,7 @@ class ScheduledJobController extends ApiController
 
             DB::table('notifications')->insert($notificationData);
         } catch (\Exception $e) {
-            Log::error("Failed to create task reminder notification for student {$studentId}: " . $e->getMessage());
+            Log::error("Failed to create task reminder notification for student {$studentId}: ".$e->getMessage());
         }
     }
 
@@ -371,7 +381,7 @@ class ScheduledJobController extends ApiController
     private function createVoucherNotification(int $studentId, $voucher): void
     {
         try {
-            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+            if (! DB::getSchemaBuilder()->hasTable('notifications')) {
                 return;
             }
 
@@ -395,9 +405,9 @@ class ScheduledJobController extends ApiController
                 $notificationData['user_id'] = $studentId;
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
-            } else if ($hasUserIdColumn) {
+            } elseif ($hasUserIdColumn) {
                 $notificationData['user_id'] = $studentId;
-            } else if ($hasNotifiableIdColumn) {
+            } elseif ($hasNotifiableIdColumn) {
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
             }
@@ -436,6 +446,7 @@ class ScheduledJobController extends ApiController
                     'student_id' => $studentId,
                     'voucher_id' => $voucher->id ?? null,
                 ]);
+
                 return;
             }
 
@@ -450,7 +461,7 @@ class ScheduledJobController extends ApiController
             ]);
 
             $inserted = DB::table('notifications')->insert($notificationData);
-            
+
             $notificationId = null;
             if ($inserted) {
                 // Get the inserted ID if available
@@ -460,7 +471,7 @@ class ScheduledJobController extends ApiController
                     // Ignore if we can't get the ID
                 }
             }
-            
+
             Log::info('Voucher notification created successfully', [
                 'student_id' => $studentId,
                 'voucher_id' => $voucher->id ?? null,
@@ -499,7 +510,7 @@ class ScheduledJobController extends ApiController
 
             Log::info("Email reminder queued for {$student->email} for task {$task->id}");
         } catch (\Exception $e) {
-            Log::error("Failed to queue email reminder to {$student->email}: " . $e->getMessage());
+            Log::error("Failed to queue email reminder to {$student->email}: ".$e->getMessage());
             // Don't throw - continue with other notifications
         }
     }
@@ -513,7 +524,7 @@ class ScheduledJobController extends ApiController
         $now = Carbon::now()->setTimezone('Asia/Karachi');
         $todayPlus10Days = $now->copy()->addDays(10);
         $targetPromiseDay = $todayPlus10Days->day; // The promise date that is 10 days from today
-        
+
         $generatedCount = 0;
         $skippedCount = 0;
 
@@ -527,7 +538,7 @@ class ScheduledJobController extends ApiController
         foreach ($students as $student) {
             try {
                 $promiseDay = (int) $student->expected_fee_promise_date; // Day of month (1-31)
-                
+
                 // Calculate the due date (promise date in the month that is 10 days from now)
                 // Example: Today is Jan 7, promise day is 17, so due date should be Jan 17
                 $dueDate = Carbon::create(
@@ -547,6 +558,7 @@ class ScheduledJobController extends ApiController
 
                 if ($existingVoucher) {
                     $skippedCount++;
+
                     continue; // Voucher already exists for this month
                 }
 
@@ -566,7 +578,7 @@ class ScheduledJobController extends ApiController
                 $generatedCount++;
                 Log::info("Voucher generated for student {$student->id} ({$student->email}) with due date {$dueDate->format('Y-m-d')}");
             } catch (\Exception $e) {
-                Log::error("Failed to generate voucher for student {$student->id}: " . $e->getMessage(), [
+                Log::error("Failed to generate voucher for student {$student->id}: ".$e->getMessage(), [
                     'exception' => $e,
                 ]);
             }
@@ -579,8 +591,8 @@ class ScheduledJobController extends ApiController
             'vouchers_skipped' => $skippedCount,
         ];
 
-        Log::info("Voucher generation job completed", $metadata);
-        
+        Log::info('Voucher generation job completed', $metadata);
+
         // Store metadata in job log if available
         if (isset($this->currentJobLog)) {
             $this->currentJobLog->update([
@@ -597,7 +609,7 @@ class ScheduledJobController extends ApiController
     private function executeVoucherOverdueNotificationJob(ScheduledJob $job): void
     {
         $now = Carbon::now()->setTimezone('Asia/Karachi')->startOfDay();
-        
+
         // Get all pending vouchers where due_date has passed
         $overdueVouchers = Voucher::where('status', 'pending')
             ->whereDate('due_date', '<', $now)
@@ -605,7 +617,8 @@ class ScheduledJobController extends ApiController
             ->get();
 
         if ($overdueVouchers->isEmpty()) {
-            Log::info("No overdue vouchers found for notification");
+            Log::info('No overdue vouchers found for notification');
+
             return;
         }
 
@@ -614,8 +627,9 @@ class ScheduledJobController extends ApiController
 
         foreach ($overdueVouchers as $voucher) {
             try {
-                if (!$voucher->student) {
+                if (! $voucher->student) {
                     $skippedCount++;
+
                     continue;
                 }
 
@@ -625,7 +639,7 @@ class ScheduledJobController extends ApiController
 
                 Log::info("Overdue voucher notification sent to student {$voucher->student->id} for voucher {$voucher->id}");
             } catch (\Exception $e) {
-                Log::error("Failed to send overdue notification for voucher {$voucher->id}: " . $e->getMessage());
+                Log::error("Failed to send overdue notification for voucher {$voucher->id}: ".$e->getMessage());
             }
         }
 
@@ -635,8 +649,8 @@ class ScheduledJobController extends ApiController
             'skipped' => $skippedCount,
         ];
 
-        Log::info("Voucher overdue notification job completed", $metadata);
-        
+        Log::info('Voucher overdue notification job completed', $metadata);
+
         // Store metadata in job log if available
         if (isset($this->currentJobLog)) {
             $this->currentJobLog->update([
@@ -652,7 +666,7 @@ class ScheduledJobController extends ApiController
     private function createVoucherOverdueNotification(int $studentId, Voucher $voucher): void
     {
         try {
-            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+            if (! DB::getSchemaBuilder()->hasTable('notifications')) {
                 return;
             }
 
@@ -676,9 +690,9 @@ class ScheduledJobController extends ApiController
                 $notificationData['user_id'] = $studentId;
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
-            } else if ($hasUserIdColumn) {
+            } elseif ($hasUserIdColumn) {
                 $notificationData['user_id'] = $studentId;
-            } else if ($hasNotifiableIdColumn) {
+            } elseif ($hasNotifiableIdColumn) {
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
             }
@@ -717,6 +731,7 @@ class ScheduledJobController extends ApiController
                     'student_id' => $studentId,
                     'voucher_id' => $voucher->id ?? null,
                 ]);
+
                 return;
             }
 
@@ -729,14 +744,14 @@ class ScheduledJobController extends ApiController
             ]);
 
             DB::table('notifications')->insert($notificationData);
-            
+
             Log::info('Overdue voucher notification created successfully', [
                 'student_id' => $studentId,
                 'voucher_id' => $voucher->id ?? null,
             ]);
         } catch (\Exception $e) {
             // Log error with full details for debugging
-            Log::error("Failed to create overdue voucher notification for student {$studentId}: " . $e->getMessage(), [
+            Log::error("Failed to create overdue voucher notification for student {$studentId}: ".$e->getMessage(), [
                 'error_code' => $e->getCode(),
                 'error_file' => $e->getFile(),
                 'error_line' => $e->getLine(),
@@ -754,7 +769,7 @@ class ScheduledJobController extends ApiController
     {
         $now = Carbon::now()->setTimezone('Asia/Karachi')->startOfDay();
         $threeDaysAgo = $now->copy()->subDays(3);
-        
+
         // Get all pending vouchers where due_date is 3+ days ago
         $overdueVouchers = Voucher::where('status', 'pending')
             ->whereDate('due_date', '<=', $threeDaysAgo)
@@ -762,7 +777,8 @@ class ScheduledJobController extends ApiController
             ->get();
 
         if ($overdueVouchers->isEmpty()) {
-            Log::info("No vouchers found for auto-blocking (3+ days overdue)");
+            Log::info('No vouchers found for auto-blocking (3+ days overdue)');
+
             return;
         }
 
@@ -772,8 +788,9 @@ class ScheduledJobController extends ApiController
 
         foreach ($overdueVouchers as $voucher) {
             try {
-                if (!$voucher->student) {
+                if (! $voucher->student) {
                     $skippedCount++;
+
                     continue;
                 }
 
@@ -782,6 +799,7 @@ class ScheduledJobController extends ApiController
                 // Skip if already blocked
                 if ($student->block == 1) {
                     $alreadyBlockedCount++;
+
                     continue;
                 }
 
@@ -796,7 +814,7 @@ class ScheduledJobController extends ApiController
                 $blockedCount++;
                 Log::info("Student {$student->id} auto-blocked due to overdue voucher {$voucher->id}");
             } catch (\Exception $e) {
-                Log::error("Failed to auto-block student for voucher {$voucher->id}: " . $e->getMessage());
+                Log::error("Failed to auto-block student for voucher {$voucher->id}: ".$e->getMessage());
             }
         }
 
@@ -807,8 +825,8 @@ class ScheduledJobController extends ApiController
             'skipped' => $skippedCount,
         ];
 
-        Log::info("Voucher auto-block job completed", $metadata);
-        
+        Log::info('Voucher auto-block job completed', $metadata);
+
         // Store metadata in job log if available
         if (isset($this->currentJobLog)) {
             $this->currentJobLog->update([
@@ -825,9 +843,9 @@ class ScheduledJobController extends ApiController
     private function executeClearLogFilesJob(ScheduledJob $job): void
     {
         $daysOld = $job->metadata['days_old'] ?? 30;
-        
+
         try {
-            $logService = new \App\Services\GoogleDriveLogService();
+            $logService = new \App\Services\GoogleDriveLogService;
             $result = $logService->clearOldLogs($daysOld);
 
             $metadata = [
@@ -838,11 +856,11 @@ class ScheduledJobController extends ApiController
                 'cutoff_date' => $result['cutoff_date'],
             ];
 
-            if (!empty($result['errors'])) {
+            if (! empty($result['errors'])) {
                 $metadata['errors'] = $result['errors'];
             }
 
-            Log::info("Clear log files job completed", $metadata);
+            Log::info('Clear log files job completed', $metadata);
 
             // Store metadata in job log if available
             if (isset($this->currentJobLog)) {
@@ -852,7 +870,7 @@ class ScheduledJobController extends ApiController
                 ]);
             }
         } catch (\Exception $e) {
-            $errorMessage = "Failed to clear old log files: " . $e->getMessage();
+            $errorMessage = 'Failed to clear old log files: '.$e->getMessage();
             Log::error($errorMessage, [
                 'exception' => $e,
                 'days_old' => $daysOld,
@@ -876,7 +894,7 @@ class ScheduledJobController extends ApiController
     private function createAutoBlockNotification(int $studentId, Voucher $voucher): void
     {
         try {
-            if (!DB::getSchemaBuilder()->hasTable('notifications')) {
+            if (! DB::getSchemaBuilder()->hasTable('notifications')) {
                 return;
             }
 
@@ -900,9 +918,9 @@ class ScheduledJobController extends ApiController
                 $notificationData['user_id'] = $studentId;
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
-            } else if ($hasUserIdColumn) {
+            } elseif ($hasUserIdColumn) {
                 $notificationData['user_id'] = $studentId;
-            } else if ($hasNotifiableIdColumn) {
+            } elseif ($hasNotifiableIdColumn) {
                 $notificationData['notifiable_id'] = $studentId;
                 $notificationData['notifiable_type'] = 'App\\Models\\User';
             }
@@ -942,6 +960,7 @@ class ScheduledJobController extends ApiController
                     'student_id' => $studentId,
                     'voucher_id' => $voucher->id ?? null,
                 ]);
+
                 return;
             }
 
@@ -954,14 +973,14 @@ class ScheduledJobController extends ApiController
             ]);
 
             DB::table('notifications')->insert($notificationData);
-            
+
             Log::info('Auto-block notification created successfully', [
                 'student_id' => $studentId,
                 'voucher_id' => $voucher->id ?? null,
             ]);
         } catch (\Exception $e) {
             // Log error with full details for debugging
-            Log::error("Failed to create auto-block notification for student {$studentId}: " . $e->getMessage(), [
+            Log::error("Failed to create auto-block notification for student {$studentId}: ".$e->getMessage(), [
                 'error_code' => $e->getCode(),
                 'error_file' => $e->getFile(),
                 'error_line' => $e->getLine(),
@@ -977,6 +996,7 @@ class ScheduledJobController extends ApiController
     public function index(): JsonResponse
     {
         $jobs = ScheduledJob::orderBy('name')->get();
+
         return $this->success($jobs, 'Scheduled jobs retrieved successfully');
     }
 
@@ -1008,7 +1028,7 @@ class ScheduledJobController extends ApiController
     public function update(Request $request, int $id): JsonResponse
     {
         $job = ScheduledJob::find($id);
-        if (!$job) {
+        if (! $job) {
             return $this->notFound('Scheduled job not found');
         }
 
@@ -1023,7 +1043,7 @@ class ScheduledJobController extends ApiController
         ]);
 
         $job->update($validated);
-        
+
         // Recalculate next run if schedule changed
         if ($request->has('schedule_type') || $request->has('schedule_config')) {
             $job->calculateNextRun();
@@ -1039,26 +1059,23 @@ class ScheduledJobController extends ApiController
     public function destroy(int $id): JsonResponse
     {
         $job = ScheduledJob::find($id);
-        if (!$job) {
+        if (! $job) {
             return $this->notFound('Scheduled job not found');
         }
 
         $job->delete();
+
         return $this->success(null, 'Scheduled job deleted successfully');
     }
 
     /**
      * Get job logs for a specific scheduled job
-     *
-     * @param Request $request
-     * @param int $jobId
-     * @return JsonResponse
      */
     public function getJobLogs(Request $request, int $jobId): JsonResponse
     {
         try {
             $job = ScheduledJob::find($jobId);
-            if (!$job) {
+            if (! $job) {
                 return $this->notFound('Scheduled job not found');
             }
 
@@ -1066,15 +1083,15 @@ class ScheduledJobController extends ApiController
                 ->orderBy('started_at', 'desc');
 
             // Date range filter
-            if ($request->has('date_from') && !empty($request->get('date_from'))) {
+            if ($request->has('date_from') && ! empty($request->get('date_from'))) {
                 $query->whereDate('started_at', '>=', $request->get('date_from'));
             }
-            if ($request->has('date_to') && !empty($request->get('date_to'))) {
+            if ($request->has('date_to') && ! empty($request->get('date_to'))) {
                 $query->whereDate('started_at', '<=', $request->get('date_to'));
             }
 
             // Status filter
-            if ($request->has('status') && !empty($request->get('status'))) {
+            if ($request->has('status') && ! empty($request->get('status'))) {
                 $query->where('status', $request->get('status'));
             }
 
@@ -1094,23 +1111,20 @@ class ScheduledJobController extends ApiController
                 ],
             ], 'Job logs retrieved successfully');
         } catch (\Exception $e) {
-            Log::error('Failed to retrieve job logs: ' . $e->getMessage());
+            Log::error('Failed to retrieve job logs: '.$e->getMessage());
+
             return $this->error($e->getMessage(), 'Failed to retrieve job logs', 500);
         }
     }
 
     /**
      * Clear job logs for a specific scheduled job
-     *
-     * @param Request $request
-     * @param int $jobId
-     * @return JsonResponse
      */
     public function clearJobLogs(Request $request, int $jobId): JsonResponse
     {
         try {
             $job = ScheduledJob::find($jobId);
-            if (!$job) {
+            if (! $job) {
                 return $this->notFound('Scheduled job not found');
             }
 
@@ -1121,9 +1135,9 @@ class ScheduledJobController extends ApiController
                 'deleted_count' => $deletedCount,
             ], "Successfully cleared {$deletedCount} log(s) for job: {$job->name}");
         } catch (\Exception $e) {
-            Log::error('Failed to clear job logs: ' . $e->getMessage());
+            Log::error('Failed to clear job logs: '.$e->getMessage());
+
             return $this->error($e->getMessage(), 'Failed to clear job logs', 500);
         }
     }
 }
-

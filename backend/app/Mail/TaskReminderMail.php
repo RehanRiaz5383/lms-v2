@@ -6,9 +6,17 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 
 class TaskReminderMail extends BaseMailable implements ShouldQueue
 {
+    /**
+     * Avoid sending the same reminder twice if the queue worker retries after SMTP accepted the message.
+     */
+    public int $tries = 1;
+
     public $taskTitle;
+
     public $reminderHours;
+
     public $formattedDate;
+
     public $studentName;
 
     /**

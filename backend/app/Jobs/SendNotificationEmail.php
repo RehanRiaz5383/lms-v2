@@ -5,19 +5,25 @@ namespace App\Jobs;
 use App\Models\SmtpSetting;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 
 class SendNotificationEmail implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $to;
+
     public $subject;
+
     public $message;
+
     public $smtpSettings;
 
     /**
@@ -37,15 +43,25 @@ class SendNotificationEmail implements ShouldQueue
     public function handle(): void
     {
         // Get SMTP settings if not provided
-        if (!$this->smtpSettings) {
+        if (! $this->smtpSettings) {
             $smtpSettings = SmtpSetting::where('is_active', true)->first();
         } else {
             $smtpSettings = $this->smtpSettings;
         }
 
         // If no active SMTP settings, skip sending
-        if (!$smtpSettings || !$smtpSettings->is_active) {
+        if (! $smtpSettings || ! $smtpSettings->is_active) {
             \Log::warning('Cannot send notification email: No active SMTP settings found');
+
+            return;
+        }
+
+        if (! $this->reserveDedupeKey()) {
+            \Log::info('Skipping duplicate notification email (dedupe)', [
+                'to' => $this->to,
+                'subject' => $this->subject,
+            ]);
+
             return;
         }
 
@@ -73,12 +89,13 @@ class SendNotificationEmail implements ShouldQueue
 
             Mail::raw($this->message, function ($message) use ($smtpSettings) {
                 $message->to($this->to)
-                        ->from($smtpSettings->from_address, $smtpSettings->from_name)
-                        ->subject($this->subject);
+                    ->from($smtpSettings->from_address, $smtpSettings->from_name)
+                    ->subject($this->subject);
             });
 
             \Log::info('Email sent successfully', ['to' => $this->to]);
         } catch (\Exception $e) {
+            $this->releaseDedupeKey();
             \Log::error('Failed to send notification email', [
                 'to' => $this->to,
                 'error' => $e->getMessage(),
@@ -87,5 +104,49 @@ class SendNotificationEmail implements ShouldQueue
             throw $e;
         }
     }
-}
 
+    /**
+     * Same recipient + subject + body in the same clock hour counts as one logical send (queue retries / double dispatch).
+     */
+    private function dedupeKey(): string
+    {
+        $payload = strtolower(trim((string) $this->to))
+            ."\0"
+            .(string) $this->subject
+            ."\0"
+            .(string) $this->message
+            ."\0"
+            .now()->format('Y-m-d-H');
+
+        return hash('sha256', $payload);
+    }
+
+    private function reserveDedupeKey(): bool
+    {
+        if (! Schema::hasTable('notification_email_dedupe_keys')) {
+            return true;
+        }
+
+        $key = $this->dedupeKey();
+
+        try {
+            DB::table('notification_email_dedupe_keys')->insert([
+                'dedupe_key' => $key,
+                'created_at' => now(),
+            ]);
+
+            return true;
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
+    }
+
+    private function releaseDedupeKey(): void
+    {
+        if (! Schema::hasTable('notification_email_dedupe_keys')) {
+            return;
+        }
+
+        DB::table('notification_email_dedupe_keys')->where('dedupe_key', $this->dedupeKey())->delete();
+    }
+}
