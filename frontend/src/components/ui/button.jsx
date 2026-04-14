@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "../../utils/cn";
 
 const Button = React.forwardRef(
-  ({ className, variant = "default", size = "default", ...props }, ref) => {
+  ({ className, variant = "default", size = "default", type = "button", ...props }, ref) => {
     const variants = {
       default: "bg-primary text-primary-foreground hover:bg-primary/90",
       destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
@@ -21,6 +21,7 @@ const Button = React.forwardRef(
 
     return (
       <button
+        type={type}
         className={cn(
           'inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.99] disabled:active:scale-100 motion-reduce:transition-colors motion-reduce:active:scale-100',
           variant === 'link' && 'active:scale-100',

@@ -157,7 +157,13 @@ export const API_ENDPOINTS = {
     approve: '/vouchers/:id/approve',
     reject: '/vouchers/:id/reject',
     notify: '/vouchers/:id/notify',
+    archive: '/vouchers/:id/archive',
+    unarchive: '/vouchers/:id/unarchive',
     delete: '/vouchers/:id',
+  },
+
+  chat: {
+    assignTaskFromMessage: '/chat/messages/:messageId/assign-task-submission',
   },
   
   // Expense Management
@@ -221,6 +227,7 @@ export const API_ENDPOINTS = {
     getSubmissions: '/tasks/:id/submissions',
     gradeSubmission: '/tasks/:taskId/submissions/:submissionId/grade',
     uploadStudentSubmission: '/tasks/:taskId/upload-student-submission',
+    pendingForStudent: '/tasks/pending-for-student/:studentId',
     getUncheckedSubmissions: '/tasks/unchecked-submissions',
     deleteSubmission: '/tasks/submissions/:submissionId',
     bulkDeleteSubmissions: '/tasks/submissions/bulk-delete',
@@ -315,8 +322,11 @@ export const getApiUrl = (endpoint) => {
  * @returns {string} Endpoint with replaced parameters
  */
 export const buildEndpoint = (endpoint, params = {}) => {
+  if (typeof endpoint !== 'string' || !endpoint) {
+    throw new Error('buildEndpoint: endpoint must be a non-empty string');
+  }
   let builtEndpoint = endpoint;
-  Object.keys(params).forEach(key => {
+  Object.keys(params).forEach((key) => {
     builtEndpoint = builtEndpoint.replace(`:${key}`, params[key]);
   });
   return builtEndpoint;

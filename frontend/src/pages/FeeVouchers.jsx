@@ -158,25 +158,41 @@ const FeeVouchers = () => {
 
   const handleArchive = async (voucherId) => {
     try {
-      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.archive, { id: voucherId });
+      const template = API_ENDPOINTS.vouchers?.archive;
+      if (typeof template !== 'string') {
+        throw new Error('Archive endpoint missing in app config. Hard-refresh or redeploy the frontend.');
+      }
+      if (voucherId == null || voucherId === '') {
+        throw new Error('Invalid voucher id.');
+      }
+      const endpoint = buildEndpoint(template, { id: voucherId });
       await apiService.post(endpoint);
       success('Voucher archived');
       loadVouchers();
     } catch (err) {
-      console.error('Archive voucher failed:', err.response?.data || err.message);
-      showError(formatApiError(err, 'Failed to archive voucher'));
+      console.error('Archive voucher failed:', err);
+      const fromApi = err?.response && formatApiError(err, 'Failed to archive voucher');
+      showError(fromApi || err?.message || 'Failed to archive voucher');
     }
   };
 
   const handleUnarchive = async (voucherId) => {
     try {
-      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.unarchive, { id: voucherId });
+      const template = API_ENDPOINTS.vouchers?.unarchive;
+      if (typeof template !== 'string') {
+        throw new Error('Unarchive endpoint missing in app config. Hard-refresh or redeploy the frontend.');
+      }
+      if (voucherId == null || voucherId === '') {
+        throw new Error('Invalid voucher id.');
+      }
+      const endpoint = buildEndpoint(template, { id: voucherId });
       await apiService.post(endpoint);
       success('Voucher restored to active list');
       loadVouchers();
     } catch (err) {
-      console.error('Unarchive voucher failed:', err.response?.data || err.message);
-      showError(formatApiError(err, 'Failed to restore voucher'));
+      console.error('Unarchive voucher failed:', err);
+      const fromApi = err?.response && formatApiError(err, 'Failed to restore voucher');
+      showError(fromApi || err?.message || 'Failed to restore voucher');
     }
   };
 
