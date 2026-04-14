@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ChatMessage;
 use App\Models\Task;
 use App\Models\SubmittedTask;
+use App\Models\User;
 use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -843,84 +845,7 @@ class TaskController extends ApiController
             // Handle file upload - upload to Google Drive using folder name (from database)
             $filePath = $this->uploadToGoogleDrive($file, 'submitted_tasks');
 
-            // Check if submission already exists
-            $submission = SubmittedTask::where('task_id', $taskId)
-                ->where('student_id', $studentId)
-                ->first();
-
-            // Check which column exists for file storage
-            $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
-            $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
-            $fileColumn = $hasAnswerFileColumn ? 'answer_file' : ($hasFilePathColumn ? 'file_path' : null);
-
-            if ($submission) {
-                // Update existing submission
-                // Delete old file if exists (from Google Drive)
-                $oldFilePath = $hasAnswerFileColumn ? $submission->answer_file : ($hasFilePathColumn ? $submission->file_path : null);
-                if ($oldFilePath) {
-                    $this->deleteFromGoogleDrive($oldFilePath);
-                }
-
-                // Update the correct column
-                if ($hasAnswerFileColumn) {
-                    $submission->answer_file = $filePath;
-                } else if ($hasFilePathColumn) {
-                    $submission->file_path = $filePath;
-                }
-                
-                // Only set remarks if column exists
-                $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
-                if ($hasRemarksColumn && $request->has('remarks')) {
-                    $submission->remarks = $request->input('remarks');
-                }
-                
-                // Only set submitted_at if column exists
-                $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
-                if ($hasSubmittedAtColumn) {
-                    $submission->submitted_at = now();
-                }
-                
-                // Only set status if column exists
-                $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
-                if ($hasStatusColumn) {
-                    $submission->status = 'submitted';
-                }
-                
-                $submission->save();
-            } else {
-                // Create new submission
-                $submissionData = [
-                    'task_id' => $taskId,
-                    'student_id' => $studentId,
-                ];
-                
-                // Use answer_file if it exists, otherwise file_path
-                if ($hasAnswerFileColumn) {
-                    $submissionData['answer_file'] = $filePath;
-                } else if ($hasFilePathColumn) {
-                    $submissionData['file_path'] = $filePath;
-                }
-                
-                // Only include remarks if column exists
-                $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
-                if ($hasRemarksColumn && $request->has('remarks')) {
-                    $submissionData['remarks'] = $request->input('remarks');
-                }
-                
-                // Only include submitted_at if column exists
-                $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
-                if ($hasSubmittedAtColumn) {
-                    $submissionData['submitted_at'] = now();
-                }
-                
-                // Only include status if column exists
-                $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
-                if ($hasStatusColumn) {
-                    $submissionData['status'] = 'submitted';
-                }
-                
-                $submission = SubmittedTask::create($submissionData);
-            }
+            $submission = $this->persistSubmittedTaskFile($taskId, $studentId, $filePath, $request);
 
             $submission->load('task');
 
@@ -932,6 +857,170 @@ class TaskController extends ApiController
             ]);
             return $this->error($e->getMessage(), 'Failed to upload task submission', 500);
         }
+    }
+
+    /**
+     * Admin: use a chat message attachment as the student's submission for a task (copy in Drive).
+     */
+    public function assignSubmissionFromChatMessage(Request $request, int $messageId): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'task_id' => 'required|integer|exists:tasks,id',
+            ]);
+            if ($validator->fails()) {
+                return $this->validationError($validator->errors()->toArray());
+            }
+
+            $message = ChatMessage::with(['sender', 'conversation'])->find($messageId);
+            if (!$message || !$message->attachment_path) {
+                return $this->notFound('Message or attachment not found');
+            }
+            if (empty($message->google_drive_file_id)) {
+                return $this->error('This attachment has no Google Drive file id and cannot be linked.', 'Unsupported attachment', 400);
+            }
+
+            $sender = $message->sender;
+            if (!$sender || !$this->userIsStudent($sender)) {
+                return $this->error('Only student message attachments can be assigned as submissions.', 'Invalid message', 400);
+            }
+            $studentId = (int) $message->sender_id;
+
+            $taskId = (int) $request->input('task_id');
+            $task = Task::find($taskId);
+            if (!$task) {
+                return $this->notFound('Task not found');
+            }
+
+            if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id') && $task->batch_id) {
+                $isInBatch = DB::table('user_batches')
+                    ->where(function ($query) use ($studentId) {
+                        if (DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id')) {
+                            $query->where('user_id', $studentId);
+                        } elseif (DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id')) {
+                            $query->where('student_id', $studentId);
+                        }
+                    })
+                    ->where('batch_id', $task->batch_id)
+                    ->exists();
+                if (!$isInBatch) {
+                    return $this->error('Student is not in the task\'s batch', 'Invalid student', 400);
+                }
+            }
+
+            $filePath = $this->copyGoogleDriveFileToFolder(
+                $message->google_drive_file_id,
+                'submitted_tasks',
+                $message->attachment_name ?: 'submission'
+            );
+
+            $remarks = 'Submitted from inbox attachment (message #' . $message->id . ')';
+            $submission = $this->persistSubmittedTaskFile($taskId, $studentId, $filePath, $request, $remarks);
+
+            $submission->load('task');
+
+            return $this->success($submission, 'Attachment assigned as task submission');
+        } catch (\Exception $e) {
+            \Log::error('assignSubmissionFromChatMessage: ' . $e->getMessage(), ['exception' => $e, 'message_id' => $messageId]);
+            return $this->error($e->getMessage(), 'Failed to assign submission', 500);
+        }
+    }
+
+    private function userIsStudent(User $user): bool
+    {
+        if ((int) ($user->user_type ?? 0) === 2) {
+            return true;
+        }
+        $user->loadMissing(['roles', 'userType']);
+        if ($user->roles && $user->roles->count() > 0) {
+            foreach ($user->roles as $role) {
+                if (strtolower($role->title ?? '') === 'student' || (int) $role->id === 2) {
+                    return true;
+                }
+            }
+        }
+        return strtolower(optional($user->userType)->title ?? '') === 'student';
+    }
+
+    /**
+     * Create or update submitted_tasks row with a stored Google Drive path (admin upload / chat assign).
+     */
+    private function persistSubmittedTaskFile(int $taskId, int $studentId, string $filePath, ?Request $request, ?string $defaultRemarks = null): SubmittedTask
+    {
+        $submission = SubmittedTask::where('task_id', $taskId)
+            ->where('student_id', $studentId)
+            ->first();
+
+        $hasAnswerFileColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'answer_file');
+        $hasFilePathColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'file_path');
+
+        if ($submission) {
+            $oldFilePath = $hasAnswerFileColumn ? $submission->answer_file : ($hasFilePathColumn ? $submission->file_path : null);
+            if ($oldFilePath) {
+                $this->deleteFromGoogleDrive($oldFilePath);
+            }
+
+            if ($hasAnswerFileColumn) {
+                $submission->answer_file = $filePath;
+            } elseif ($hasFilePathColumn) {
+                $submission->file_path = $filePath;
+            }
+
+            $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
+            if ($hasRemarksColumn) {
+                if ($request && $request->has('remarks')) {
+                    $submission->remarks = $request->input('remarks');
+                } elseif ($defaultRemarks !== null) {
+                    $submission->remarks = $defaultRemarks;
+                }
+            }
+
+            $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
+            if ($hasSubmittedAtColumn) {
+                $submission->submitted_at = now();
+            }
+
+            $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
+            if ($hasStatusColumn) {
+                $submission->status = 'submitted';
+            }
+
+            $submission->save();
+        } else {
+            $submissionData = [
+                'task_id' => $taskId,
+                'student_id' => $studentId,
+            ];
+
+            if ($hasAnswerFileColumn) {
+                $submissionData['answer_file'] = $filePath;
+            } elseif ($hasFilePathColumn) {
+                $submissionData['file_path'] = $filePath;
+            }
+
+            $hasRemarksColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'remarks');
+            if ($hasRemarksColumn) {
+                if ($request && $request->has('remarks')) {
+                    $submissionData['remarks'] = $request->input('remarks');
+                } elseif ($defaultRemarks !== null) {
+                    $submissionData['remarks'] = $defaultRemarks;
+                }
+            }
+
+            $hasSubmittedAtColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'submitted_at');
+            if ($hasSubmittedAtColumn) {
+                $submissionData['submitted_at'] = now();
+            }
+
+            $hasStatusColumn = DB::getSchemaBuilder()->hasColumn('submitted_tasks', 'status');
+            if ($hasStatusColumn) {
+                $submissionData['status'] = 'submitted';
+            }
+
+            $submission = SubmittedTask::create($submissionData);
+        }
+
+        return $submission;
     }
 
     /**

@@ -4,7 +4,18 @@ import { useAppSelector } from '../hooks/redux';
 import { chatService } from '../services/chatService';
 import { socketService } from '../services/socketService';
 import { getStorageUrl } from '../config/api';
-import { MessageSquare, Search, Send, Smile, UserPlus, Paperclip, X, Loader2, Download } from 'lucide-react';
+import {
+  MessageSquare,
+  Search,
+  Send,
+  Smile,
+  UserPlus,
+  Paperclip,
+  X,
+  Loader2,
+  Download,
+  ClipboardList,
+} from 'lucide-react';
 import { useToast } from '../components/ui/toast';
 import { Dialog } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
@@ -12,6 +23,8 @@ import EmojiPicker from '../components/chat/EmojiPicker';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { playNotificationSound } from '../utils/notificationSound';
 import { ensurePastedFileName, getFileFromClipboardData } from '../utils/chatClipboard';
+import { apiService } from '../services/api';
+import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 
 const AttachmentLink = ({ message, isOwn }) => {
   const [downloading, setDownloading] = useState(false);
@@ -101,14 +114,22 @@ const Inbox = () => {
   const [usersLoading, setUsersLoading] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
+  /** Admin: assign a student's chat file to a task submission */
+  const [assignSidebarOpen, setAssignSidebarOpen] = useState(false);
+  const [assignMessage, setAssignMessage] = useState(null);
+  const [pendingTasksForAssign, setPendingTasksForAssign] = useState([]);
+  const [pendingTasksLoading, setPendingTasksLoading] = useState(false);
+  const [assigningTaskId, setAssigningTaskId] = useState(null);
+
   // Check if user is admin
   const isAdmin = () => {
     if (!currentUser) return false;
-    // Check roles array (primary method)
     if (currentUser.roles && Array.isArray(currentUser.roles)) {
-      return currentUser.roles.some(role => role.title?.toLowerCase() === 'admin');
+      return currentUser.roles.some(
+        (role) =>
+          role.title?.toLowerCase() === 'admin' || role.id === 1 || Number(role.id) === 1
+      );
     }
-    // Fallback to user_type (backward compatibility)
     return currentUser.user_type === 1 || currentUser.user_type_title?.toLowerCase() === 'admin';
   };
 
@@ -121,6 +142,47 @@ const Inbox = () => {
     }
     // Fallback to user_type (backward compatibility)
     return currentUser.user_type === 2 || currentUser.user_type_title?.toLowerCase() === 'student';
+  };
+
+  const closeAssignTaskSidebar = () => {
+    setAssignSidebarOpen(false);
+    setAssignMessage(null);
+    setPendingTasksForAssign([]);
+    setAssigningTaskId(null);
+  };
+
+  const openAssignTaskSidebar = async (msg) => {
+    if (!msg?.attachment_path || !msg?.sender_id || !msg?.google_drive_file_id) return;
+    setAssignMessage(msg);
+    setAssignSidebarOpen(true);
+    setPendingTasksLoading(true);
+    setPendingTasksForAssign([]);
+    try {
+      const url = buildEndpoint(API_ENDPOINTS.tasks.pendingForStudent, { studentId: msg.sender_id });
+      const res = await apiService.get(url);
+      const tasks = res.data?.data?.tasks ?? res.data?.tasks ?? [];
+      setPendingTasksForAssign(Array.isArray(tasks) ? tasks : []);
+    } catch (e) {
+      showError(e.response?.data?.message || 'Could not load this student’s pending tasks');
+      closeAssignTaskSidebar();
+    } finally {
+      setPendingTasksLoading(false);
+    }
+  };
+
+  const handleAssignAttachmentToTask = async (taskId) => {
+    if (!assignMessage?.id) return;
+    setAssigningTaskId(taskId);
+    try {
+      const url = buildEndpoint(API_ENDPOINTS.chat.assignTaskFromMessage, { messageId: assignMessage.id });
+      await apiService.post(url, { task_id: taskId });
+      showSuccess('Submission recorded for that task using this attachment.');
+      closeAssignTaskSidebar();
+    } catch (e) {
+      showError(e.response?.data?.message || 'Failed to assign attachment to task');
+    } finally {
+      setAssigningTaskId(null);
+    }
   };
 
   // Load conversations
@@ -978,6 +1040,24 @@ const Inbox = () => {
                                 <AttachmentLink message={msg} isOwn={isOwn} />
                               )}
                             </div>
+                            {isAdmin() && !isOwn && msg.attachment_path && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-1.5 h-8 text-xs"
+                                disabled={!msg.google_drive_file_id}
+                                title={
+                                  msg.google_drive_file_id
+                                    ? 'Attach this file as the student’s submission for a task'
+                                    : 'This attachment cannot be linked (missing storage id). Ask the student to resend.'
+                                }
+                                onClick={() => openAssignTaskSidebar(msg)}
+                              >
+                                <ClipboardList className="h-3.5 w-3.5 mr-1.5" />
+                                Use for task submission
+                              </Button>
+                            )}
                             <span className="text-xs text-gray-400 mt-1 px-2">
                               {formatMessageTime(msg.created_at)}
                               {isOwn && msg.is_read && (
@@ -1186,6 +1266,83 @@ const Inbox = () => {
             </div>
           </div>
         </Dialog>
+
+      {assignSidebarOpen && (
+        <div className="fixed inset-0 z-[10260] flex justify-end">
+          <button
+            type="button"
+            aria-label="Close panel"
+            className="absolute inset-0 bg-black/40"
+            onClick={closeAssignTaskSidebar}
+          />
+          <div className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-border bg-card text-card-foreground shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold truncate">Assign to task</p>
+                {assignMessage?.attachment_name && (
+                  <p className="text-xs text-muted-foreground truncate">{assignMessage.attachment_name}</p>
+                )}
+                {assignMessage?.sender?.name && (
+                  <p className="text-xs text-muted-foreground">Student: {assignMessage.sender.name}</p>
+                )}
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={closeAssignTaskSidebar} aria-label="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Pending tasks for this student (no submission yet). Pick one to store a copy of this file as their
+                submission.
+              </p>
+              {pendingTasksLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : pendingTasksForAssign.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">No pending tasks for this student.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {pendingTasksForAssign.map((task) => (
+                    <li
+                      key={task.id}
+                      className="rounded-lg border border-border bg-muted/30 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{task.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {[task.batch?.title, task.subject?.title].filter(Boolean).join(' · ') || 'Task'}
+                        </p>
+                        {task.expiry_date && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Due {format(new Date(task.expiry_date), 'MMM d, yyyy')}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="shrink-0"
+                        disabled={assigningTaskId === task.id}
+                        onClick={() => handleAssignAttachmentToTask(task.id)}
+                      >
+                        {assigningTaskId === task.id ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                            Assigning…
+                          </>
+                        ) : (
+                          'Assign'
+                        )}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

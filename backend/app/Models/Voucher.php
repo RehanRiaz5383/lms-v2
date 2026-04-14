@@ -22,6 +22,7 @@ class Voucher extends Model
         'approved_by',
         'submission_file',
         'remarks',
+        'archived_at',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class Voucher extends Model
         'promise_date' => 'date',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
+        'archived_at' => 'datetime',
     ];
 
     /**

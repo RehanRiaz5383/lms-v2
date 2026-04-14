@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\Models\SubmittedTask;
+use App\Models\User;
 use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -670,6 +671,70 @@ class StudentTaskController extends ApiController
                 'error' => $e->getMessage(),
             ]);
             return true;
+        }
+    }
+
+    /**
+     * Admin: list tasks for a student that have no submission yet (for inbox → assign attachment).
+     */
+    public function adminPendingForStudent(Request $request, int $studentId): JsonResponse
+    {
+        try {
+            $student = User::find($studentId);
+            if (!$student) {
+                return $this->notFound('Student not found');
+            }
+
+            $userBatchIds = [];
+            if (DB::getSchemaBuilder()->hasColumn('user_batches', 'user_id')) {
+                $userBatchIds = DB::table('user_batches')
+                    ->where('user_id', $studentId)
+                    ->pluck('batch_id')
+                    ->toArray();
+            } elseif (DB::getSchemaBuilder()->hasColumn('user_batches', 'student_id')) {
+                $userBatchIds = DB::table('user_batches')
+                    ->where('student_id', $studentId)
+                    ->pluck('batch_id')
+                    ->toArray();
+            }
+
+            if (empty($userBatchIds)) {
+                return $this->success(['tasks' => []], 'No batches for this student');
+            }
+
+            $submittedTaskIds = SubmittedTask::where('student_id', $studentId)
+                ->pluck('task_id')
+                ->toArray();
+
+            $query = Task::query();
+            if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
+                $query->whereIn('batch_id', $userBatchIds);
+            } elseif (DB::getSchemaBuilder()->hasColumn('tasks', 'user_id')) {
+                $query->where('user_id', $studentId);
+            }
+
+            if (!empty($submittedTaskIds)) {
+                $query->whereNotIn('id', $submittedTaskIds);
+            }
+
+            $hasExpiryDateColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'expiry_date');
+            if ($hasExpiryDateColumn) {
+                $query->orderBy('expiry_date', 'desc')->orderBy('created_at', 'desc');
+            } else {
+                $query->orderBy('created_at', 'desc');
+            }
+
+            $hasCreatedByColumn = DB::getSchemaBuilder()->hasColumn('tasks', 'created_by');
+            $withRelations = ['batch', 'subject'];
+            if ($hasCreatedByColumn) {
+                $withRelations[] = 'creator';
+            }
+
+            $tasks = $query->with($withRelations)->get();
+
+            return $this->success(['tasks' => $tasks], 'Pending tasks retrieved');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to load pending tasks', 500);
         }
     }
 }

@@ -15,6 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { API_ENDPOINTS, buildEndpoint } from '../config/api';
@@ -26,6 +28,8 @@ const FeeVouchers = () => {
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('pending'); // Default to pending
+  /** 'active' = normal queue; 'archived' = left students / cleared clutter */
+  const [archiveScope, setArchiveScope] = useState('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({
     current_page: 1,
@@ -46,7 +50,7 @@ const FeeVouchers = () => {
   useEffect(() => {
     loadVouchers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, pagination.current_page]);
+  }, [statusFilter, pagination.current_page, archiveScope]);
 
   const loadVouchers = async () => {
     try {
@@ -59,6 +63,7 @@ const FeeVouchers = () => {
       if (statusFilter) {
         params.append('status', statusFilter);
       }
+      params.append('archive', archiveScope);
 
       if (searchTerm) {
         params.append('search', searchTerm);
@@ -130,6 +135,38 @@ const FeeVouchers = () => {
     setPagination({ ...pagination, current_page: 1 });
   };
 
+  const handleArchiveScopeChange = (scope) => {
+    setArchiveScope(scope);
+    setPagination({ ...pagination, current_page: 1 });
+    if (scope === 'archived') {
+      setStatusFilter('all');
+    } else {
+      setStatusFilter('pending');
+    }
+  };
+
+  const handleArchive = async (voucherId) => {
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.archive, { id: voucherId });
+      await apiService.post(endpoint);
+      success('Voucher archived');
+      loadVouchers();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to archive voucher');
+    }
+  };
+
+  const handleUnarchive = async (voucherId) => {
+    try {
+      const endpoint = buildEndpoint(API_ENDPOINTS.vouchers.unarchive, { id: voucherId });
+      await apiService.post(endpoint);
+      success('Voucher restored to active list');
+      loadVouchers();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to restore voucher');
+    }
+  };
+
   const handleSearch = () => {
     setPagination({ ...pagination, current_page: 1 });
     loadVouchers();
@@ -166,6 +203,33 @@ const FeeVouchers = () => {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div>
+            <Label className="mb-2 block">Voucher list</Label>
+            <div className="inline-flex rounded-md border border-border p-0.5">
+              <Button
+                type="button"
+                variant={archiveScope === 'active' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="rounded-sm"
+                onClick={() => handleArchiveScopeChange('active')}
+              >
+                Active
+              </Button>
+              <Button
+                type="button"
+                variant={archiveScope === 'archived' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="rounded-sm"
+                onClick={() => handleArchiveScopeChange('archived')}
+              >
+                <Archive className="h-3.5 w-3.5 mr-1" />
+                Archived
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Archive vouchers for students who left so they no longer appear in the active queue. Open Archived to review or restore.
+            </p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="status">Status</Label>
@@ -175,6 +239,7 @@ const FeeVouchers = () => {
                 onChange={(e) => handleStatusFilterChange(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
+                {archiveScope === 'archived' && <option value="all">All statuses</option>}
                 <option value="pending">Pending</option>
                 <option value="submitted">Submitted</option>
                 <option value="paid">Paid (Approved)</option>
@@ -205,8 +270,8 @@ const FeeVouchers = () => {
       <Card>
         <CardHeader>
           <CardTitle>
-            Vouchers ({pagination.total})
-            {statusFilter === 'pending' && ' - Ordered by Most Upcoming'}
+            {archiveScope === 'archived' ? 'Archived vouchers' : 'Active vouchers'} ({pagination.total})
+            {archiveScope === 'active' && statusFilter === 'pending' && ' — ordered by most upcoming'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -313,35 +378,57 @@ const FeeVouchers = () => {
                           )}
                         </td>
                         <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEditClick(voucher)}
-                            >
-                              <Edit className="h-3 w-3 mr-1" />
-                              Edit
-                            </Button>
-                            {(voucher.status === 'submitted' ||
-                              voucher.status === 'pending') && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {archiveScope === 'archived' ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleApprove(voucher.id)}
+                                onClick={() => handleUnarchive(voucher.id)}
                               >
-                                <Check className="h-3 w-3 mr-1" />
-                                Approve
+                                <ArchiveRestore className="h-3 w-3 mr-1" />
+                                Restore
                               </Button>
-                            )}
-                            {voucher.status === 'approved' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleNotify(voucher.id)}
-                              >
-                                <Bell className="h-3 w-3 mr-1" />
-                                Notify
-                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleEditClick(voucher)}
+                                >
+                                  <Edit className="h-3 w-3 mr-1" />
+                                  Edit
+                                </Button>
+                                {(voucher.status === 'submitted' ||
+                                  voucher.status === 'pending') && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleApprove(voucher.id)}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" />
+                                    Approve
+                                  </Button>
+                                )}
+                                {voucher.status === 'approved' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleNotify(voucher.id)}
+                                  >
+                                    <Bell className="h-3 w-3 mr-1" />
+                                    Notify
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleArchive(voucher.id)}
+                                  title="Hide from active list"
+                                >
+                                  <Archive className="h-3 w-3 mr-1" />
+                                  Archive
+                                </Button>
+                              </>
                             )}
                             {voucher.submission_file && (
                               <Button

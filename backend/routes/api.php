@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/messageable-users', [ChatController::class, 'getMessageableUsers']);
         Route::post('/upload-attachment', [ChatController::class, 'uploadAttachment']);
         Route::get('/messages/{id}/download-attachment', [ChatController::class, 'downloadAttachment']);
+        Route::middleware('admin')->post('/messages/{messageId}/assign-task-submission', [TaskController::class, 'assignSubmissionFromChatMessage']);
     });
 
     // Dashboard
@@ -154,6 +155,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/approve', [VoucherController::class, 'approveVoucher']);
         Route::post('/{id}/reject', [VoucherController::class, 'rejectVoucher']);
         Route::post('/{id}/notify', [VoucherController::class, 'notifyPaymentClearance']); // Send payment clearance notification
+        Route::post('/{id}/archive', [VoucherController::class, 'archiveVoucher']);
+        Route::post('/{id}/unarchive', [VoucherController::class, 'unarchiveVoucher']);
         Route::delete('/{id}', [VoucherController::class, 'deleteVoucher']);
     });
 
@@ -206,6 +209,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [TaskController::class, 'index']);
         Route::post('/', [TaskController::class, 'store']);
         // Specific routes must come before parameterized routes
+        Route::middleware('admin')->get('/pending-for-student/{studentId}', [StudentTaskController::class, 'adminPendingForStudent']);
         Route::get('/unchecked-submissions', [TaskController::class, 'getUncheckedSubmissions'])->middleware('admin');
         Route::delete('/submissions/{submissionId}', [TaskController::class, 'deleteSubmission'])->middleware('admin');
         Route::post('/submissions/bulk-delete', [TaskController::class, 'bulkDeleteSubmissions'])->middleware('admin');

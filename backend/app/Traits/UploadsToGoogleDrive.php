@@ -239,5 +239,67 @@ trait UploadsToGoogleDrive
             return false;
         }
     }
+
+    /**
+     * Copy a Google Drive file by ID into a configured LMS folder (same path pattern as upload).
+     */
+    protected function copyGoogleDriveFileToFolder(string $sourceFileId, string $folderNameOrId, string $originalBaseName = 'file'): ?string
+    {
+        try {
+            $folderId = null;
+            $finalDirectoryPath = null;
+            $folder = GoogleDriveFolder::getByName($folderNameOrId);
+            if ($folder) {
+                if (empty($folder->folder_id)) {
+                    throw new \Exception("Google Drive folder ID is not configured for '{$folderNameOrId}'.");
+                }
+                $folderId = $folder->folder_id;
+                $finalDirectoryPath = $folder->directory_path;
+            } else {
+                $folderId = $folderNameOrId;
+                throw new \Exception('Directory path is required when using folder ID directly for copy.');
+            }
+
+            $client = new Client();
+            $client->setClientId(config('services.google.client_id'));
+            $client->setClientSecret(config('services.google.client_secret'));
+            $client->setDeveloperKey(config('services.google.api_key'));
+            $client->addScope(Drive::DRIVE);
+            $client->refreshToken(config('services.google.refresh_token'));
+            if ($client->isAccessTokenExpired()) {
+                $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+            }
+
+            $service = new Drive($client);
+            $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', basename($originalBaseName) ?: 'file');
+            $fileName = time() . '_' . uniqid('', true) . '_' . $safeName;
+
+            $fileMetadata = new DriveFile([
+                'name' => $fileName,
+                'parents' => [$folderId],
+            ]);
+
+            $service->files->copy($sourceFileId, $fileMetadata, [
+                'fields' => 'id, name',
+                'supportsAllDrives' => true,
+            ]);
+
+            $remoteFilePath = rtrim($finalDirectoryPath, '/') . '/' . $fileName;
+
+            Log::info('Google Drive file copied to folder', [
+                'source_file_id' => $sourceFileId,
+                'dest_path' => $remoteFilePath,
+                'folder_name' => $folderNameOrId,
+            ]);
+
+            return $remoteFilePath;
+        } catch (\Exception $e) {
+            Log::error('copyGoogleDriveFileToFolder failed', [
+                'source_file_id' => $sourceFileId,
+                'error' => $e->getMessage(),
+            ]);
+            throw new \Exception('Failed to copy file in Google Drive: ' . $e->getMessage());
+        }
+    }
 }
 

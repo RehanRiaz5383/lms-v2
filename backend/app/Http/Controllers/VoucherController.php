@@ -57,6 +57,7 @@ class VoucherController extends ApiController
             $currentUser = auth()->user();
             
             $vouchers = Voucher::where('student_id', $currentUser->id)
+                ->whereNull('archived_at')
                 ->with(['student', 'approver'])
                 ->orderBy('due_date', 'desc')
                 ->get();
@@ -107,6 +108,7 @@ class VoucherController extends ApiController
             }
 
             $vouchers = Voucher::where('student_id', $studentId)
+                ->whereNull('archived_at')
                 ->with(['student', 'approver'])
                 ->orderBy('due_date', 'desc')
                 ->get();
@@ -122,6 +124,44 @@ class VoucherController extends ApiController
             return $this->success($vouchers, 'Vouchers retrieved successfully');
         } catch (\Exception $e) {
             return $this->error($e->getMessage(), 'Failed to retrieve vouchers', 500);
+        }
+    }
+
+    /**
+     * Archive a voucher (Admin only). Hides it from default lists; students no longer see it.
+     */
+    public function archiveVoucher(Request $request, int $voucherId): JsonResponse
+    {
+        try {
+            $voucher = Voucher::find($voucherId);
+            if (!$voucher) {
+                return $this->notFound('Voucher not found');
+            }
+            $voucher->archived_at = now();
+            $voucher->save();
+
+            return $this->success($voucher->fresh(['student', 'approver']), 'Voucher archived');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to archive voucher', 500);
+        }
+    }
+
+    /**
+     * Restore an archived voucher (Admin only).
+     */
+    public function unarchiveVoucher(Request $request, int $voucherId): JsonResponse
+    {
+        try {
+            $voucher = Voucher::find($voucherId);
+            if (!$voucher) {
+                return $this->notFound('Voucher not found');
+            }
+            $voucher->archived_at = null;
+            $voucher->save();
+
+            return $this->success($voucher->fresh(['student', 'approver']), 'Voucher restored');
+        } catch (\Exception $e) {
+            return $this->error($e->getMessage(), 'Failed to restore voucher', 500);
         }
     }
 
@@ -415,6 +455,7 @@ class VoucherController extends ApiController
 
                     // Check if voucher already exists for this student and due date (same year and month)
                     $existingVoucher = Voucher::where('student_id', $student->id)
+                        ->whereNull('archived_at')
                         ->whereYear('due_date', $dueDate->year)
                         ->whereMonth('due_date', $dueDate->month)
                         ->whereDay('due_date', $dueDate->day)
@@ -689,8 +730,15 @@ class VoucherController extends ApiController
             $query = Voucher::with(['student', 'approver'])
                 ->orderBy('due_date', 'asc'); // Order by most upcoming first
 
+            $archiveScope = $request->get('archive', 'active');
+            if ($archiveScope === 'archived') {
+                $query->whereNotNull('archived_at');
+            } else {
+                $query->whereNull('archived_at');
+            }
+
             // Status filter
-            if ($request->has('status') && !empty($request->get('status'))) {
+            if ($request->has('status') && !empty($request->get('status')) && $request->get('status') !== 'all') {
                 $status = $request->get('status');
                 
                 if ($status === 'paid') {
@@ -704,8 +752,8 @@ class VoucherController extends ApiController
                     // pending, submitted, rejected, etc.
                     $query->where('status', $status);
                 }
-            } else {
-                // Default: show pending vouchers ordered by most upcoming
+            } elseif ($archiveScope !== 'archived') {
+                // Active list default: pending vouchers ordered by most upcoming
                 $query->where('status', 'pending')
                     ->orderBy('due_date', 'asc');
             }
