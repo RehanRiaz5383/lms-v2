@@ -25,8 +25,10 @@ class AdminMiddleware
             ], 403);
         }
 
-        // Check if user is admin (user_type = 1 OR has admin role)
-        $isAdmin = $user->user_type == 1 || $user->hasRole(1);
+        // Admin: user_type 1, role id 1, or role title "admin" (installations vary; must match Inbox UI)
+        $isAdmin = $user->user_type == 1
+            || $user->hasRole(1)
+            || $user->roles()->whereRaw('LOWER(user_types.title) = ?', ['admin'])->exists();
 
         if (!$isAdmin) {
             return response()->json([

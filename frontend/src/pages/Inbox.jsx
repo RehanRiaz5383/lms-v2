@@ -157,13 +157,20 @@ const Inbox = () => {
     setAssignSidebarOpen(true);
     setPendingTasksLoading(true);
     setPendingTasksForAssign([]);
+    const url = buildEndpoint(API_ENDPOINTS.tasks.pendingForStudent, { studentId: msg.sender_id });
     try {
-      const url = buildEndpoint(API_ENDPOINTS.tasks.pendingForStudent, { studentId: msg.sender_id });
       const res = await apiService.get(url);
       const tasks = res.data?.data?.tasks ?? res.data?.tasks ?? [];
       setPendingTasksForAssign(Array.isArray(tasks) ? tasks : []);
     } catch (e) {
-      showError(e.response?.data?.message || 'Could not load this student’s pending tasks');
+      const apiMsg = e.response?.data?.message;
+      const apiErr = e.response?.data?.error;
+      const errStr =
+        apiMsg ||
+        (typeof apiErr === 'string' ? apiErr : Array.isArray(apiErr) ? apiErr.join(', ') : null) ||
+        e.message;
+      console.error('pending-for-student failed', { url, status: e.response?.status, data: e.response?.data });
+      showError(errStr || 'Could not load this student’s pending tasks');
       closeAssignTaskSidebar();
     } finally {
       setPendingTasksLoading(false);

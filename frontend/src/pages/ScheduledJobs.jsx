@@ -43,6 +43,9 @@ const ScheduledJobs = () => {
     enabled: true,
     metadata: null,
   });
+  /** JSON string for job metadata (e.g. {"days_old": 15}); edited separately from formData */
+  const [metadataJson, setMetadataJson] = useState('{}');
+
   const [showLogsDrawer, setShowLogsDrawer] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -77,6 +80,7 @@ const ScheduledJobs = () => {
 
   const handleCreate = () => {
     setEditingJob(null);
+    setMetadataJson('{}');
     setFormData({
       name: '',
       description: '',
@@ -91,6 +95,7 @@ const ScheduledJobs = () => {
 
   const handleEdit = (job) => {
     setEditingJob(job);
+    setMetadataJson(JSON.stringify(job.metadata ?? {}, null, 2));
     setFormData({
       name: job.name || '',
       description: job.description || '',
@@ -105,13 +110,28 @@ const ScheduledJobs = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    let metadata = null;
+    const trimmed = metadataJson.trim();
+    if (trimmed) {
+      try {
+        metadata = JSON.parse(trimmed);
+        if (metadata !== null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
+          showError('Metadata must be a JSON object');
+          return;
+        }
+      } catch {
+        showError('Metadata must be valid JSON');
+        return;
+      }
+    }
+    const payload = { ...formData, metadata };
     try {
       if (editingJob) {
         const endpoint = buildEndpoint(API_ENDPOINTS.scheduledJobs.update, { id: editingJob.id });
-        await apiService.put(endpoint, formData);
+        await apiService.put(endpoint, payload);
         success('Scheduled job updated successfully');
       } else {
-        await apiService.post(API_ENDPOINTS.scheduledJobs.create, formData);
+        await apiService.post(API_ENDPOINTS.scheduledJobs.create, payload);
         success('Scheduled job created successfully');
       }
       setShowDialog(false);
@@ -395,13 +415,40 @@ const ScheduledJobs = () => {
             <Label htmlFor="job_class">Job Class *</Label>
             <Input
               id="job_class"
+              list="scheduled-job-classes"
               value={formData.job_class}
               onChange={(e) => setFormData({ ...formData, job_class: e.target.value })}
               required
-              placeholder="e.g., TaskReminderJob"
+              placeholder="e.g., ClearLogFilesJob"
+            />
+            <datalist id="scheduled-job-classes">
+              <option value="TaskReminderJob" />
+              <option value="VoucherGenerationJob" />
+              <option value="VoucherOverdueNotificationJob" />
+              <option value="VoucherAutoBlockJob" />
+              <option value="ClearLogFilesJob" />
+            </datalist>
+            <p className="text-xs text-muted-foreground mt-1">
+              Built-in identifiers (not PHP namespaces). For Google Drive log cleanup use{' '}
+              <span className="font-mono text-foreground">ClearLogFilesJob</span> with metadata{' '}
+              <span className="font-mono text-foreground">{'{'} &quot;days_old&quot;: 15 {'}'}</span>.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="metadata_json">Metadata (JSON)</Label>
+            <textarea
+              id="metadata_json"
+              value={metadataJson}
+              onChange={(e) => setMetadataJson(e.target.value)}
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              placeholder='{"days_old": 15}'
+              spellCheck={false}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              The class name that handles this job execution
+              Optional. <span className="font-mono">ClearLogFilesJob</span>: deletes files and date folders under the
+              Google Drive folder named <span className="font-mono">logs</span> older than{' '}
+              <span className="font-mono">days_old</span> (1–365, default 15).
             </p>
           </div>
 

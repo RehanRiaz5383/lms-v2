@@ -838,11 +838,13 @@ class ScheduledJobController extends ApiController
 
     /**
      * Execute Clear Log Files Job
-     * Runs daily to remove log files and directories older than 30 days from Google Drive
+     * Removes log files and date folders under the configured Google Drive "logs" folder
+     * older than metadata.days_old (default 15). Job class for UI: ClearLogFilesJob
      */
     private function executeClearLogFilesJob(ScheduledJob $job): void
     {
-        $daysOld = $job->metadata['days_old'] ?? 30;
+        $daysOld = (int) ($job->metadata['days_old'] ?? 15);
+        $daysOld = max(1, min(365, $daysOld));
 
         try {
             $logService = new \App\Services\GoogleDriveLogService;

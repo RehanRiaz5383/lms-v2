@@ -313,12 +313,13 @@ class GoogleDriveLogService
      * @param int $daysOld Number of days - files/folders older than this will be deleted
      * @return array Statistics about deleted items
      */
-    public function clearOldLogs(int $daysOld = 30): array
+    public function clearOldLogs(int $daysOld = 15): array
     {
         $deletedFiles = 0;
         $deletedFolders = 0;
         $errors = [];
-        $cutoffDate = Carbon::now()->subDays($daysOld);
+        // Calendar-day cutoff: delete items strictly before this local date
+        $cutoffDate = Carbon::now(config('app.timezone'))->startOfDay()->subDays($daysOld);
 
         try {
             // Get all folders and files in the logs directory
@@ -328,8 +329,9 @@ class GoogleDriveLogService
                 try {
                     $itemDate = $this->getItemDate($item);
                     
-                    // Check if item is older than cutoff date
-                    if ($itemDate && $itemDate->lt($cutoffDate)) {
+                    // Compare by calendar day so date folders (Y-m-d) align with retention
+                    $itemDay = $itemDate->copy()->startOfDay();
+                    if ($itemDate && $itemDay->lt($cutoffDate)) {
                         if ($item['mimeType'] === 'application/vnd.google-apps.folder') {
                             // Delete folder (this will also delete all files inside)
                             $this->service->files->delete($item['id']);

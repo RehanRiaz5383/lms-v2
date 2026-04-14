@@ -9,6 +9,7 @@ use App\Traits\UploadsToGoogleDrive;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -702,9 +703,20 @@ class StudentTaskController extends ApiController
                 return $this->success(['tasks' => []], 'No batches for this student');
             }
 
-            $submittedTaskIds = SubmittedTask::where('student_id', $studentId)
-                ->pluck('task_id')
-                ->toArray();
+            $submittedTaskIds = [];
+            if (Schema::hasTable('submitted_tasks')) {
+                if (Schema::hasColumn('submitted_tasks', 'student_id')) {
+                    $submittedTaskIds = DB::table('submitted_tasks')
+                        ->where('student_id', $studentId)
+                        ->pluck('task_id')
+                        ->toArray();
+                } elseif (Schema::hasColumn('submitted_tasks', 'user_id')) {
+                    $submittedTaskIds = DB::table('submitted_tasks')
+                        ->where('user_id', $studentId)
+                        ->pluck('task_id')
+                        ->toArray();
+                }
+            }
 
             $query = Task::query();
             if (DB::getSchemaBuilder()->hasColumn('tasks', 'batch_id')) {
