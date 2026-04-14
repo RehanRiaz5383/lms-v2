@@ -26,6 +26,13 @@ const RolesPermissions = () => {
 
   const isPrimary = Boolean(user?.is_primary_platform_admin);
 
+  const normalizeList = (res) => {
+    const payload = res?.data?.data;
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.data)) return payload.data;
+    return [];
+  };
+
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
@@ -33,8 +40,8 @@ const RolesPermissions = () => {
         apiService.get(API_ENDPOINTS.roleManagement.permissions),
         apiService.get(API_ENDPOINTS.roleManagement.roles),
       ]);
-      setPermissions(permRes.data.data || []);
-      setRoles(rolesRes.data.data || []);
+      setPermissions(normalizeList(permRes));
+      setRoles(normalizeList(rolesRes));
     } catch (err) {
       showError(err.response?.data?.message || 'Failed to load roles and permissions');
     } finally {
@@ -173,6 +180,32 @@ const RolesPermissions = () => {
         </Button>
       </div>
 
+      {permissions.length === 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardHeader>
+            <CardTitle className="text-base">Permission catalog is empty</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              The database has no sidebar permission rows yet (or they failed to load). Until you seed them, the
+              Permissions dialog will be blank and every role will show{' '}
+              <span className="font-medium text-foreground">0</span> permissions.
+            </p>
+            <p className="font-medium text-foreground">On the server (SSH), from the Laravel project root, run:</p>
+            <pre className="rounded-md bg-muted p-3 text-xs text-foreground overflow-x-auto whitespace-pre-wrap">
+              php artisan migrate --force{'\n'}
+              php artisan permissions:sync-nav
+            </pre>
+            <p className="text-xs">
+              Alternatively: <code className="rounded bg-muted px-1">php artisan db:seed --class=NavPermissionsSeeder --force</code>
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => loadAll()}>
+              Retry after seeding
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Roles</CardTitle>
@@ -255,32 +288,39 @@ const RolesPermissions = () => {
               System roles can be edited to match your policy. Users need the role assigned under User Management →
               roles.
             </p>
-            {Object.entries(permissionsByAudience)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([audience, rows]) => (
-                <div key={audience}>
-                  <h3 className="text-sm font-semibold capitalize mb-2 text-foreground">{audience}</h3>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {rows.map((p) => (
-                      <label
-                        key={p.id}
-                        className="flex items-start gap-2 rounded-md border border-border/60 p-2 cursor-pointer hover:bg-muted/40"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1"
-                          checked={selectedSlugs.has(p.slug)}
-                          onChange={() => toggleSlug(p.slug)}
-                        />
-                        <span>
-                          <span className="font-medium text-sm block">{p.label}</span>
-                          <span className="text-xs text-muted-foreground font-mono">{p.slug}</span>
-                        </span>
-                      </label>
-                    ))}
+            {permissions.length === 0 ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm text-muted-foreground">
+                No permission definitions loaded. Seed the server (see the yellow box on this page), then open this
+                dialog again.
+              </div>
+            ) : (
+              Object.entries(permissionsByAudience)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([audience, rows]) => (
+                  <div key={audience}>
+                    <h3 className="text-sm font-semibold capitalize mb-2 text-foreground">{audience}</h3>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {rows.map((p) => (
+                        <label
+                          key={p.id}
+                          className="flex items-start gap-2 rounded-md border border-border/60 p-2 cursor-pointer hover:bg-muted/40"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={selectedSlugs.has(p.slug)}
+                            onChange={() => toggleSlug(p.slug)}
+                          />
+                          <span>
+                            <span className="font-medium text-sm block">{p.label}</span>
+                            <span className="text-xs text-muted-foreground font-mono">{p.slug}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+            )}
             <div className="flex justify-end gap-2 pt-2 border-t">
               <Button type="button" variant="outline" onClick={() => setPermDialogOpen(false)}>
                 Cancel

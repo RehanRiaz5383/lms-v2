@@ -593,7 +593,8 @@ Route::get('/check-notifications-table', function () {
 /**
  * Database Upgrade Endpoint - Run migrations and seeders
  * 
- * This endpoint runs all pending migrations and seeders (if not already in DB).
+ * This endpoint runs pending migrations, conditional seeders, NavPermissionsSeeder
+ * (sidebar permissions + role links), and VAPID key checks.
  * No high-end security, just a simple GET URL.
  * 
  * Usage: GET /upgrade-db
@@ -659,6 +660,20 @@ Route::get('/upgrade-db', function () {
                         'message' => 'Missing roles added',
                     ];
                 }
+            }
+
+            // Navigation / sidebar permissions catalog + default role pivots (idempotent; run each deploy)
+            if (\Schema::hasTable('nav_permissions')) {
+                \Artisan::call('db:seed', [
+                    '--class' => 'NavPermissionsSeeder',
+                    '--force' => true,
+                ]);
+                $seederResults[] = [
+                    'seeder' => 'NavPermissionsSeeder',
+                    'success' => true,
+                    'message' => 'Navigation permissions catalog and default role links synced',
+                    'output' => trim(\Artisan::output()) ?: null,
+                ];
             }
 
             // Run ScheduledJobSeeder if scheduled_jobs table exists
