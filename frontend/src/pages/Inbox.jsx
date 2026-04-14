@@ -192,10 +192,11 @@ const Inbox = () => {
     }
   };
 
-  // Load conversations
-  const loadConversations = async () => {
+  // Load conversations (silent = background refresh: keep sidebar list visible)
+  const loadConversations = async (options = {}) => {
+    const { silent = false } = options;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await chatService.getConversations();
       if (response.data) {
         setConversations(response.data);
@@ -204,7 +205,7 @@ const Inbox = () => {
       console.error('Failed to load conversations:', err);
       showError('Failed to load conversations');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -541,7 +542,7 @@ const Inbox = () => {
           clearTimeout(refreshTimeoutRef.current);
         }
         refreshTimeoutRef.current = setTimeout(() => {
-          loadConversations();
+          loadConversations({ silent: true });
         }, 2000); // Increased from 1000ms to 2000ms to reduce API calls
       }
     });

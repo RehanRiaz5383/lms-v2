@@ -231,16 +231,14 @@ function App() {
                 <Profile />
               </BlockedRoute>
             } />
-            <Route path="inbox" element={
-              <BlockedRoute>
-                <Inbox />
-              </BlockedRoute>
-            } />
-            <Route path="inbox/:conversationId" element={
-              <BlockedRoute>
-                <Inbox />
-              </BlockedRoute>
-            } />
+            <Route
+              path="inbox/:conversationId?"
+              element={
+                <BlockedRoute>
+                  <Inbox />
+                </BlockedRoute>
+              }
+            />
             {/* Student routes */}
             <Route path="lecture-videos" element={
               <BlockedRoute>

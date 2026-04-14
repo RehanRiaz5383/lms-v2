@@ -10,9 +10,9 @@ const ROUTES = [
     description: 'Students, subjects, videos, and class tools for this batch.',
   },
   {
-    pattern: '/dashboard/inbox/:conversationId',
+    pattern: '/dashboard/inbox/:conversationId?',
     title: 'Inbox',
-    description: 'Read and reply in this conversation.',
+    description: 'Messages with students and staff.',
   },
   {
     pattern: '/dashboard/notifications/:id',
@@ -96,7 +96,6 @@ const ROUTES = [
   { pattern: '/dashboard/expenses', title: 'Expense management', description: 'Record and track organizational expenses.' },
   { pattern: '/dashboard/fee-vouchers', title: 'Fee vouchers', description: 'Issue and track payment vouchers.' },
   { pattern: '/dashboard/profile', title: 'Profile settings', description: 'Your account information and preferences.' },
-  { pattern: '/dashboard/inbox', title: 'Inbox', description: 'Messages with students and staff.' },
   { pattern: '/dashboard/tasks', title: 'Task assigned', description: 'Your assignments and submission status.' },
   { pattern: '/dashboard/quizzes', title: 'My quizzes', description: 'Take and review quiz attempts.' },
   {

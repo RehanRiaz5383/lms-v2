@@ -1,5 +1,13 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+
+/** Avoid remounting the whole dashboard page when only the inbox conversation id changes. */
+function outletTransitionKey(pathname) {
+  if (/^\/dashboard\/inbox(?:\/[^/]+)?$/.test(pathname)) {
+    return '/dashboard/inbox';
+  }
+  return pathname;
+}
 import { cn } from '../../utils/cn';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -7,6 +15,10 @@ import { SidebarLayoutContext } from './sidebarLayoutContext';
 
 const DashboardLayout = () => {
   const location = useLocation();
+  const outletKey = useMemo(
+    () => outletTransitionKey(location.pathname),
+    [location.pathname]
+  );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** Always start expanded on load/refresh; compact mode is session-only. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -40,7 +52,7 @@ const DashboardLayout = () => {
         >
           <Header onMenuClick={() => setSidebarOpen(true)} />
           <main className="relative z-0 p-4 lg:p-6">
-            <div key={location.pathname} className="animate-page-enter">
+            <div key={outletKey} className="animate-page-enter">
               <Outlet />
             </div>
           </main>
