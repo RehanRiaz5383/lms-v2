@@ -647,7 +647,7 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/10">
               <img src={logo} alt="" className="h-7 w-auto object-contain" aria-hidden />
             </div>
-            <p className="min-w-0 truncate text-sm font-bold tracking-tight text-foreground">LMS</p>
+            <p className="min-w-0 truncate text-sm font-bold tracking-tight text-foreground">Learning Hub</p>
           </div>
 
           {compactRail && (
