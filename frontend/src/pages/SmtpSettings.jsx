@@ -208,7 +208,7 @@ const SmtpSettings = () => {
                     type="text"
                     value={formData.from_name}
                     onChange={handleChange}
-                    placeholder="LMS System"
+                    placeholder="Learning Hub"
                     required
                   />
                 </div>

@@ -54,7 +54,7 @@ class SendLoginLogoutEmail implements ShouldQueue
         Config::set('mail.mailers.smtp.encryption', $smtpSettings->encryption ?? 'tls');
         Config::set('mail.mailers.smtp.timeout', null);
         Config::set('mail.from.address', $smtpSettings->from_address);
-        Config::set('mail.from.name', $smtpSettings->from_name ?? 'LMS System');
+            Config::set('mail.from.name', $smtpSettings->from_name ?? 'Learning Hub');
 
         // Clear mailer instances AFTER setting config to force re-instantiation with new config
         if (app()->bound('mail.manager')) {
@@ -83,7 +83,7 @@ class SendLoginLogoutEmail implements ShouldQueue
             // Use Mail::raw() with HTML content (same pattern as SendNotificationEmail)
             $mailer->raw($this->htmlContent, function ($message) use ($smtpSettings) {
                 $message->to($this->to)
-                        ->from($smtpSettings->from_address, $smtpSettings->from_name ?? 'LMS System')
+                        ->from($smtpSettings->from_address, $smtpSettings->from_name ?? 'Learning Hub')
                         ->subject($this->subject);
             });
 

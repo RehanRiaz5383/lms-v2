@@ -101,7 +101,7 @@ class AppServiceProvider extends ServiceProvider
                 // Set the mailer to use our custom mailer
                 Config::set('mail.default', 'database-smtp');
                 Config::set('mail.from.address', $smtpSettings->from_address);
-                Config::set('mail.from.name', $smtpSettings->from_name ?? 'LMS System');
+                Config::set('mail.from.name', $smtpSettings->from_name ?? 'Learning Hub');
                 
                 Log::info('SMTP configured from database for email sending', [
                     'host' => $smtpSettings->host,

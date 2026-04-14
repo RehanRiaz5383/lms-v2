@@ -241,7 +241,7 @@ trait UploadsToGoogleDrive
     }
 
     /**
-     * Copy a Google Drive file by ID into a configured LMS folder (same path pattern as upload).
+     * Copy a Google Drive file by ID into a configured Learning Hub folder (same path pattern as upload).
      */
     protected function copyGoogleDriveFileToFolder(string $sourceFileId, string $folderNameOrId, string $originalBaseName = 'file'): ?string
     {

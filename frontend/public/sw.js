@@ -40,7 +40,7 @@ self.addEventListener('push', function(event) {
   console.log('Push notification received:', event);
   
   let notificationData = {
-    title: 'LMS Notification',
+    title: 'Learning Hub',
     body: 'You have a new notification',
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',

@@ -15,7 +15,7 @@ abstract class BaseMailable extends Mailable
 {
     use Queueable, SerializesModels;
 
-    protected $headerTitle = 'LMS System';
+    protected $headerTitle = 'Learning Hub';
     protected $title = 'Notification';
 
     /**
@@ -60,7 +60,7 @@ abstract class BaseMailable extends Mailable
                 Config::set('mail.mailers.smtp.encryption', $smtpSettings->encryption ?? 'tls');
                 Config::set('mail.mailers.smtp.timeout', null);
                 Config::set('mail.from.address', $smtpSettings->from_address);
-                Config::set('mail.from.name', $smtpSettings->from_name ?? 'LMS System');
+                Config::set('mail.from.name', $smtpSettings->from_name ?? 'Learning Hub');
                 
                 Log::info('SMTP configured from database in BaseMailable', [
                     'host' => $smtpSettings->host,

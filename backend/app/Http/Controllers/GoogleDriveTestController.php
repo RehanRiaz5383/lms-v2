@@ -158,8 +158,8 @@ class GoogleDriveTestController extends Controller
                     'lms_folder_exists' => $lmsFolderExists,
                     'lms_folder_path' => $lmsFolderPath,
                     'note' => $lmsFolderExists 
-                        ? 'LMS folder found! You can access it using the path above.'
-                        : 'LMS folder not found in root. Make sure the service account has access to it, or it might be in a shared folder/team drive.'
+                        ? 'Learning Hub folder found! You can access it using the path above.'
+                        : 'Learning Hub folder not found in root. Make sure the service account has access to it, or it might be in a shared folder/team drive.'
                 ]
             ]);
         } catch (\Exception $e) {

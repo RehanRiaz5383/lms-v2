@@ -192,7 +192,7 @@ const Signup = () => {
       <div className="mb-8">
         <img 
           src={logo} 
-          alt="LMS Logo" 
+          alt="Learning Hub logo" 
           className="h-24 w-auto object-contain"
         />
       </div>

@@ -27,7 +27,7 @@ class UserLogoutMail extends BaseMailable implements ShouldQueue
      */
     protected function getSubject(): string
     {
-        return 'Account Logout Notification - LMS System';
+        return 'Account Logout Notification - Learning Hub';
     }
 
     /**

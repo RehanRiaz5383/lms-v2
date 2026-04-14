@@ -10,9 +10,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'vite.svg'],
       manifest: {
-        name: 'LMS - Learning Management System',
-        short_name: 'LMS',
-        description: 'Learning Management System by Tech Inn Solutions',
+        name: 'Learning Hub',
+        short_name: 'Learning Hub',
+        description: 'Learning Hub by Tech Inn Solutions',
         theme_color: '#1e40af',
         background_color: '#ffffff',
         display: 'standalone',

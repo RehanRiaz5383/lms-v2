@@ -76,7 +76,7 @@ const PWAInstallPrompt = () => {
     <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50 bg-card border border-border rounded-lg shadow-lg p-4 animate-in slide-in-from-bottom-5">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <h3 className="font-semibold text-foreground mb-1">Install LMS App</h3>
+          <h3 className="font-semibold text-foreground mb-1">Install Learning Hub</h3>
           <p className="text-sm text-muted-foreground mb-3">
             Install this app on your device for a better experience. Access it quickly from your home screen!
           </p>

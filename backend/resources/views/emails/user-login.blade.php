@@ -5,7 +5,7 @@
     
     <p>Hello {{ $userName }},</p>
     
-    <p>Your account has been successfully logged in to the LMS System.</p>
+    <p>Your account has been successfully logged in to Learning Hub.</p>
     
     <div class="highlight-box">
         <strong>🔐 Login Details</strong>
@@ -30,7 +30,7 @@
     </p>
     
     <p style="margin-top: 25px;">Best regards,<br>
-    <strong>LMS System</strong><br>
+    <strong>Learning Hub</strong><br>
     Tech Inn Solutions</p>
 @endsection
 

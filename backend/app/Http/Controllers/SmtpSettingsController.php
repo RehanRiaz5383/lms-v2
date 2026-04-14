@@ -123,7 +123,7 @@ class SmtpSettingsController extends ApiController
 
             // Try to send a test email
             try {
-                Mail::raw('This is a test email from LMS SMTP Settings.', function ($message) use ($testTo) {
+                Mail::raw('This is a test email from Learning Hub SMTP Settings.', function ($message) use ($testTo) {
                     $message->to($testTo)
                             ->subject('SMTP Test Email');
                 });

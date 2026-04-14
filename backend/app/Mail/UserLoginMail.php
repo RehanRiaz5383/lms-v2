@@ -29,7 +29,7 @@ class UserLoginMail extends BaseMailable implements ShouldQueue
      */
     protected function getSubject(): string
     {
-        return 'Account Login Notification - LMS System';
+        return 'Account Login Notification - Learning Hub';
     }
 
     /**

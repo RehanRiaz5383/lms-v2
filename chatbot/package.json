@@ -1,7 +1,7 @@
 {
   "name": "lms-chatbot",
   "version": "1.0.0",
-  "description": "Socket.IO server for LMS chat module",
+  "description": "Socket.IO server for Learning Hub chat module",
   "main": "server.js",
   "type": "module",
   "scripts": {

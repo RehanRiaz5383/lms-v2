@@ -72,15 +72,15 @@ class NotifyEnrolledStudentsAboutNewBatchVideoJob implements ShouldBeUnique, Sho
         $inAppTitle = 'New lecture video';
         $inAppMessage = "{$videoTitle} is now available for {$subjectTitle} in {$batchTitle}. Please review it in Lecture Videos.";
 
-        $emailSubject = "[LMS] New video: {$subjectTitle} — {$batchTitle}";
+        $emailSubject = "[Learning Hub] New video: {$subjectTitle} — {$batchTitle}";
         $emailBody = "Hello,\n\n"
             ."A new lecture video has been uploaded for a subject in your batch.\n\n"
             ."Video: {$videoTitle}\n"
             ."Batch: {$batchTitle}\n"
             ."Subject: {$subjectTitle}\n\n"
-            ."Please sign in to the LMS and open Lecture Videos to review it.\n\n"
+            ."Please sign in to Learning Hub and open Lecture Videos to review it.\n\n"
             ."Direct link path: {$reviewUrl}\n\n"
-            .'— LMS';
+            .'— Learning Hub';
 
         $payload = [
             'video_id' => $video->id,

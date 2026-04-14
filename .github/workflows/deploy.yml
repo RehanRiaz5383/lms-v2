@@ -1,4 +1,4 @@
-name: Auto Deploy LMS
+name: Auto Deploy Learning Hub
 
 on:
   push:

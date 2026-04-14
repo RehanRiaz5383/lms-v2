@@ -1,6 +1,6 @@
-# LMS Chatbot - Socket.IO Server
+# Learning Hub Chatbot - Socket.IO Server
 
-This is the Socket.IO server for the LMS chat module. It handles real-time communication for the "Who's Online" feature and future chat functionality.
+This is the Socket.IO server for the Learning Hub chat module. It handles real-time communication for the "Who's Online" feature and future chat functionality.
 
 ## Setup Instructions
 
@@ -81,7 +81,7 @@ pm2 logs lms-chatbot
 
 ```ini
 [Unit]
-Description=LMS Chatbot Socket.IO Server
+Description=Learning Hub Chatbot Socket.IO Server
 After=network.target
 
 [Service]

@@ -23,6 +23,6 @@
     <p>Please make sure to submit your task before the deadline to avoid any penalties.</p>
     
     <p style="margin-top: 25px;">Best regards,<br>
-    <strong>LMS System</strong><br>
+    <strong>Learning Hub</strong><br>
     Tech Inn Solutions</p>
 @endsection

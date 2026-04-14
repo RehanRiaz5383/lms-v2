@@ -67,7 +67,7 @@ class SendUserLoginLogoutNotification
                     'ipAddress' => $ipAddress,
                 ])->render();
                 
-                $subject = 'Account Login Notification - LMS System';
+                $subject = 'Account Login Notification - Learning Hub';
             } else {
                 $htmlContent = View::make('emails.user-logout', [
                     'headerTitle' => 'Account Logout Notification',
@@ -77,7 +77,7 @@ class SendUserLoginLogoutNotification
                     'logoutDate' => $dateTime,
                 ])->render();
                 
-                $subject = 'Account Logout Notification - LMS System';
+                $subject = 'Account Logout Notification - Learning Hub';
             }
 
             // Dispatch job to send email with pre-rendered HTML using PHPMailer

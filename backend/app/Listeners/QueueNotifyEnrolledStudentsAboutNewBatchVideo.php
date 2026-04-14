@@ -8,7 +8,7 @@ use App\Jobs\NotifyEnrolledStudentsAboutNewBatchVideoJob;
 class QueueNotifyEnrolledStudentsAboutNewBatchVideo
 {
     /**
-     * Notify students enrolled in the batch (videos are scoped by batch + subject in LMS).
+     * Notify students enrolled in the batch (videos are scoped by batch + subject in Learning Hub).
      */
     public function handle(VideoAssignedToBatchSubject $event): void
     {

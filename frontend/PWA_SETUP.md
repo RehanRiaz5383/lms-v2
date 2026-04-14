@@ -77,8 +77,8 @@ The PWA files (manifest.json, service worker) will be automatically generated du
 
 The PWA is configured in `vite.config.js` with the following settings:
 
-- **App Name**: LMS - Learning Management System
-- **Short Name**: LMS
+- **App Name**: Learning Hub
+- **Short Name**: Learning Hub
 - **Theme Color**: #1e40af (blue)
 - **Display Mode**: Standalone (app-like experience)
 - **Orientation**: Portrait (can be changed to "any" if needed)

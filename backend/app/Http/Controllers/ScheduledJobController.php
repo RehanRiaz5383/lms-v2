@@ -706,7 +706,7 @@ class ScheduledJobController extends ApiController
             }
 
             if ($hasMessageColumn) {
-                $notificationData['message'] = "Your {$description} (PKR {$amount}) due date ({$dueDate}) has crossed. You must pay the voucher immediately to avoid auto-blocking of your LMS account.";
+                $notificationData['message'] = "Your {$description} (PKR {$amount}) due date ({$dueDate}) has crossed. You must pay the voucher immediately to avoid auto-blocking of your Learning Hub account.";
             }
 
             if ($hasDataColumn) {
@@ -936,7 +936,7 @@ class ScheduledJobController extends ApiController
             }
 
             if ($hasMessageColumn) {
-                $notificationData['message'] = "Your LMS account has been auto-blocked due to non-payment of {$description} (PKR {$amount}) with due date {$dueDate}. Please contact admin to resolve this issue.";
+                $notificationData['message'] = "Your Learning Hub account has been auto-blocked due to non-payment of {$description} (PKR {$amount}) with due date {$dueDate}. Please contact admin to resolve this issue.";
             }
 
             if ($hasDataColumn) {

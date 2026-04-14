@@ -1,6 +1,6 @@
 # Email Template Guide
 
-This guide explains how to use the beautiful email template system for all emails in the LMS.
+This guide explains how to use the beautiful email template system for all emails in Learning Hub.
 
 ## Overview
 
@@ -84,7 +84,7 @@ Create a new Blade view at `resources/views/emails/your-email.blade.php`:
     </div>
     
     <p style="margin-top: 25px;">Best regards,<br>
-    <strong>LMS System</strong><br>
+    <strong>Learning Hub</strong><br>
     Tech Inn Solutions</p>
 @endsection
 ```

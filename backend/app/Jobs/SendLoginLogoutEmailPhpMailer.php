@@ -76,7 +76,7 @@ class SendLoginLogoutEmailPhpMailer implements ShouldQueue
             $mail->SMTPDebug = 0; // Set to 2 for debugging
 
             // Recipients
-            $mail->setFrom($smtpSettings->from_address, $smtpSettings->from_name ?? 'LMS System');
+            $mail->setFrom($smtpSettings->from_address, $smtpSettings->from_name ?? 'Learning Hub');
             $mail->addAddress($this->to);
 
             // Content

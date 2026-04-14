@@ -1,6 +1,6 @@
 # Chat Module Setup Guide
 
-This guide explains how to set up the Socket.IO chat module for the LMS system.
+This guide explains how to set up the Socket.IO chat module for Learning Hub.
 
 ## Overview
 
@@ -112,7 +112,7 @@ pm2 monit
 1. Create service file `/etc/systemd/system/lms-chatbot.service`:
 ```ini
 [Unit]
-Description=LMS Chatbot Socket.IO Server
+Description=Learning Hub Chatbot Socket.IO Server
 After=network.target
 
 [Service]

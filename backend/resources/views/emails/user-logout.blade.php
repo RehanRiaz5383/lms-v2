@@ -5,7 +5,7 @@
     
     <p>Hello {{ $userName }},</p>
     
-    <p>Your account has been successfully logged out from the LMS System.</p>
+    <p>Your account has been successfully logged out from Learning Hub.</p>
     
     <div class="highlight-box">
         <strong>👋 Logout Details</strong>
@@ -23,7 +23,7 @@
     <p>Thank you for using our system. We hope to see you again soon!</p>
     
     <p style="margin-top: 25px;">Best regards,<br>
-    <strong>LMS System</strong><br>
+    <strong>Learning Hub</strong><br>
     Tech Inn Solutions</p>
 @endsection
 
