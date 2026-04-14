@@ -33,6 +33,7 @@ import ExpenseManagement from './pages/ExpenseManagement';
 import IncomeExpenseReport from './pages/IncomeExpenseReport';
 import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
+import RolesPermissions from './pages/RolesPermissions';
 import PendingTaskSubmissions from './pages/PendingTaskSubmissions';
 import Inbox from './pages/Inbox';
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -194,6 +195,11 @@ function App() {
             <Route path="settings/google-drive-folders" element={
               <BlockedRoute>
                 <GoogleDriveFolders />
+              </BlockedRoute>
+            } />
+            <Route path="settings/roles" element={
+              <BlockedRoute>
+                <RolesPermissions />
               </BlockedRoute>
             } />
             <Route path="scheduled-jobs" element={

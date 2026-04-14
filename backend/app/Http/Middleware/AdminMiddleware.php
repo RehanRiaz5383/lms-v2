@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\NavPermissionService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,7 +18,7 @@ class AdminMiddleware
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
                 'message' => 'Unauthorized. Admin access required.',
                 'data' => null,
@@ -25,12 +26,7 @@ class AdminMiddleware
             ], 403);
         }
 
-        // Admin: user_type 1, role id 1, or role title "admin" (installations vary; must match Inbox UI)
-        $isAdmin = $user->user_type == 1
-            || $user->hasRole(1)
-            || $user->roles()->whereRaw('LOWER(user_types.title) = ?', ['admin'])->exists();
-
-        if (!$isAdmin) {
+        if (! NavPermissionService::canAccessAdminPanel($user)) {
             return response()->json([
                 'message' => 'Unauthorized. Admin access required.',
                 'data' => null,

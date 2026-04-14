@@ -30,7 +30,10 @@ import {
   Plug,
   Inbox,
   Menu,
+  Shield,
+  ListChecks,
 } from 'lucide-react';
+import { userHasNavPermission } from '../../config/routePermissionMap';
 
 /** Compact rail: icon-only row + flyout panel attached to `left-16`. */
 const CollapsedSubmenuFlyout = ({
@@ -129,6 +132,22 @@ const navSubActive =
 const navSubRow =
   'flex min-h-10 items-center gap-2.5 rounded-lg py-2 pl-3 pr-2 text-[13px] font-medium transition-colors duration-150';
 
+function filterNavItemsByPermission(items, user) {
+  if (!items?.length) return [];
+  return items
+    .map((item) => {
+      if (item.submenu?.length) {
+        const sub = item.submenu.filter((s) => !s.permission || userHasNavPermission(user, s.permission));
+        if (sub.length === 0) return null;
+        if (item.permission && !userHasNavPermission(user, item.permission)) return null;
+        return { ...item, submenu: sub };
+      }
+      if (item.permission && !userHasNavPermission(user, item.permission)) return null;
+      return item;
+    })
+    .filter(Boolean);
+}
+
 const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
@@ -187,6 +206,9 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
   const hasAdminRole = userRoles.includes('admin');
   const hasStudentRole = userRoles.includes('student');
   const hasTeacherRole = userRoles.includes('teacher') || userRoles.includes('cr');
+  const hasAdminPanelAccess =
+    user?.can_access_admin_panel === true ||
+    (user?.can_access_admin_panel !== false && hasAdminRole);
 
   const toggleMenu = (menuKey) => {
     setExpandedMenus((prev) => {
@@ -198,105 +220,136 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
   };
 
   const studentMenuItems = [
-    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
-    { title: 'Lecture Videos', icon: Video, path: '/dashboard/lecture-videos' },
-    { title: 'Task Assigned', icon: ClipboardList, path: '/dashboard/tasks' },
-    { title: 'My Quizes', icon: HelpCircle, path: '/dashboard/quizzes' },
-    { title: 'Class Participations', icon: Users, path: '/dashboard/class-participations' },
-    { title: 'Account Book', icon: Wallet, path: '/dashboard/account-book' },
+    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', permission: 'student.dashboard' },
+    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox', permission: 'student.inbox' },
+    { title: 'Lecture Videos', icon: Video, path: '/dashboard/lecture-videos', permission: 'student.lecture_videos' },
+    { title: 'Task Assigned', icon: ClipboardList, path: '/dashboard/tasks', permission: 'student.tasks' },
+    { title: 'My Quizes', icon: HelpCircle, path: '/dashboard/quizzes', permission: 'student.quizzes' },
+    { title: 'Class Participations', icon: Users, path: '/dashboard/class-participations', permission: 'student.class_participations' },
+    { title: 'Account Book', icon: Wallet, path: '/dashboard/account-book', permission: 'student.account_book' },
     {
       title: 'Settings',
       icon: Settings,
       key: 'student-settings',
       submenu: [
-        { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications' },
+        { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications', permission: 'student.settings.notifications' },
       ],
     },
   ];
 
-  const adminMenuItems = [
-    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox' },
-    {
-      title: 'Management',
-      icon: FolderOpen,
-      key: 'management',
-      submenu: [
-        { title: 'User Management', icon: UserCog, path: '/dashboard/users' },
-      ],
-    },
-    {
-      title: 'Academics',
-      icon: GraduationCap,
-      key: 'academics',
-      submenu: [
-        { title: 'Batch Management', icon: Layers, path: '/dashboard/batches' },
-        { title: 'Subjects', icon: BookOpen, path: '/dashboard/subjects' },
-        { title: 'Videos', icon: Video, path: '/dashboard/videos' },
-        { title: 'Tasks', icon: ClipboardList, path: '/dashboard/admin-tasks' },
-      ],
-    },
-    {
-      title: 'Accounts',
-      icon: DollarSign,
-      key: 'accounts',
-      submenu: [
-        { title: 'Fee Vouchers', icon: Wallet, path: '/dashboard/fee-vouchers' },
-        { title: 'Expense Management', icon: FileText, path: '/dashboard/expenses' },
-        { title: 'Income & Expense Report', icon: BarChart3, path: '/dashboard/income-expense-report' },
-      ],
-    },
-    {
-      title: 'Reports',
-      icon: BarChart3,
-      key: 'reports',
-      submenu: [{ title: 'Income Report', icon: DollarSign, path: '/dashboard/reports/income' }],
-    },
-    { title: 'Documents', icon: FileText, path: '/dashboard/documents' },
-    {
-      title: 'Settings',
-      icon: Settings,
-      key: 'settings',
-      submenu: [
-        { title: 'SMTP Settings', icon: Mail, path: '/dashboard/settings/smtp' },
-        { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications' },
-        { title: 'Scheduled Jobs', icon: Clock, path: '/dashboard/scheduled-jobs' },
-        { title: 'Google Drive Folders', icon: FolderOpen, path: '/dashboard/settings/google-drive-folders' },
-      ],
-    },
-    { title: 'Internal Integrations', icon: Plug, path: '/dashboard/integrations/internal' },
-  ];
+  const buildAdminMenuItems = () => {
+    const settingsSubmenu = [
+      { title: 'SMTP Settings', icon: Mail, path: '/dashboard/settings/smtp', permission: 'admin.settings.smtp' },
+      { title: 'Notifications', icon: Bell, path: '/dashboard/settings/notifications', permission: 'admin.settings.notifications' },
+      { title: 'Scheduled Jobs', icon: Clock, path: '/dashboard/scheduled-jobs', permission: 'admin.settings.scheduled_jobs' },
+      { title: 'Google Drive Folders', icon: FolderOpen, path: '/dashboard/settings/google-drive-folders', permission: 'admin.settings.google_drive_folders' },
+      { title: 'Internal Integrations', icon: Plug, path: '/dashboard/integrations/internal', permission: 'admin.integrations.internal' },
+    ];
+    if (userHasNavPermission(user, 'admin.settings.roles')) {
+      settingsSubmenu.push({
+        title: 'Roles & Permissions',
+        icon: Shield,
+        path: '/dashboard/settings/roles',
+        permission: 'admin.settings.roles',
+      });
+    }
+    const items = [
+      { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', permission: 'admin.dashboard' },
+      { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox', permission: 'admin.inbox' },
+      {
+        title: 'Management',
+        icon: FolderOpen,
+        key: 'management',
+        submenu: [
+          { title: 'User Management', icon: UserCog, path: '/dashboard/users', permission: 'admin.management.users' },
+        ],
+      },
+      {
+        title: 'Academics',
+        icon: GraduationCap,
+        key: 'academics',
+        submenu: [
+          { title: 'Batch Management', icon: Layers, path: '/dashboard/batches', permission: 'admin.academics.batches' },
+          { title: 'Subjects', icon: BookOpen, path: '/dashboard/subjects', permission: 'admin.academics.subjects' },
+          { title: 'Videos', icon: Video, path: '/dashboard/videos', permission: 'admin.academics.videos' },
+          { title: 'Tasks', icon: ClipboardList, path: '/dashboard/admin-tasks', permission: 'admin.academics.tasks' },
+          {
+            title: 'Pending submissions',
+            icon: ListChecks,
+            path: '/dashboard/pending-task-submissions',
+            permission: 'admin.tools.pending_task_submissions',
+          },
+        ],
+      },
+      {
+        title: 'Accounts',
+        icon: DollarSign,
+        key: 'accounts',
+        submenu: [
+          { title: 'Fee Vouchers', icon: Wallet, path: '/dashboard/fee-vouchers', permission: 'admin.accounts.fee_vouchers' },
+          { title: 'Expense Management', icon: FileText, path: '/dashboard/expenses', permission: 'admin.accounts.expenses' },
+          { title: 'Income & Expense Report', icon: BarChart3, path: '/dashboard/income-expense-report', permission: 'admin.accounts.income_expense_report' },
+        ],
+      },
+      {
+        title: 'Reports',
+        icon: BarChart3,
+        key: 'reports',
+        submenu: [{ title: 'Income Report', icon: DollarSign, path: '/dashboard/reports/income', permission: 'admin.reports.income' }],
+      },
+      { title: 'Documents', icon: FileText, path: '/dashboard/documents', permission: 'admin.documents' },
+      {
+        title: 'Settings',
+        icon: Settings,
+        key: 'settings',
+        submenu: settingsSubmenu,
+      },
+    ];
+    return items;
+  };
 
   const teacherMenuItems = [
-    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+    { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', permission: 'teacher.dashboard' },
+    { title: 'Inbox', icon: Inbox, path: '/dashboard/inbox', permission: 'teacher.inbox' },
     {
       title: 'Academics',
       icon: GraduationCap,
       key: 'academics',
-      submenu: [{ title: 'Batch Management', icon: Layers, path: '/dashboard/batches' }],
+      submenu: [{ title: 'Batch Management', icon: Layers, path: '/dashboard/batches', permission: 'teacher.academics.batches' }],
     },
   ];
 
   const buildMenuItems = () => {
     const menuGroups = [];
 
-    if (hasAdminRole) {
-      menuGroups.push({ role: 'Admin', items: adminMenuItems });
+    if (hasAdminPanelAccess) {
+      menuGroups.push({
+        role: 'Staff',
+        items: filterNavItemsByPermission(buildAdminMenuItems(), user),
+      });
     }
 
-    if (hasTeacherRole && !hasAdminRole) {
+    if (hasTeacherRole && !hasAdminPanelAccess) {
       const roleLabel =
         userRoles.includes('cr') && !userRoles.includes('teacher') ? 'Class Representative' : 'Teacher';
-      menuGroups.push({ role: roleLabel, items: teacherMenuItems });
+      menuGroups.push({
+        role: roleLabel,
+        items: filterNavItemsByPermission(teacherMenuItems, user),
+      });
     }
 
     if (hasStudentRole) {
-      menuGroups.push({ role: 'Student', items: studentMenuItems });
+      menuGroups.push({
+        role: 'Student',
+        items: filterNavItemsByPermission(studentMenuItems, user),
+      });
     }
 
     if (menuGroups.length === 0) {
-      menuGroups.push({ role: 'Admin', items: adminMenuItems });
+      menuGroups.push({
+        role: 'Menu',
+        items: [{ title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', permission: null }],
+      });
     }
 
     return menuGroups;
@@ -318,7 +371,7 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
     });
 
     setExpandedMenus(activeMenuKeys);
-  }, [location.pathname, hasAdminRole, hasStudentRole, hasTeacherRole]);
+  }, [location.pathname, hasAdminPanelAccess, hasStudentRole, hasTeacherRole, user]);
 
   useEffect(() => {
     if (!compactRail) return;

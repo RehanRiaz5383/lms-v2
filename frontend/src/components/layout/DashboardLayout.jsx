@@ -1,5 +1,11 @@
-import { useState, useCallback, useMemo } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useAppSelector } from '../../hooks/redux';
+import { cn } from '../../utils/cn';
+import Sidebar from './Sidebar';
+import Header from './Header';
+import { SidebarLayoutContext } from './sidebarLayoutContext';
+import { getRequiredPermissionRule, userHasNavPermission } from '../../config/routePermissionMap';
 
 /** Avoid remounting the whole dashboard page when only the inbox conversation id changes. */
 function outletTransitionKey(pathname) {
@@ -8,13 +14,11 @@ function outletTransitionKey(pathname) {
   }
   return pathname;
 }
-import { cn } from '../../utils/cn';
-import Sidebar from './Sidebar';
-import Header from './Header';
-import { SidebarLayoutContext } from './sidebarLayoutContext';
 
 const DashboardLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAppSelector((state) => state.auth);
   const outletKey = useMemo(
     () => outletTransitionKey(location.pathname),
     [location.pathname]
@@ -22,6 +26,14 @@ const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   /** Always start expanded on load/refresh; compact mode is session-only. */
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const rule = getRequiredPermissionRule(location.pathname);
+    if (!userHasNavPermission(user, rule)) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [location.pathname, user, navigate]);
 
   const toggleSidebarCollapsed = useCallback(() => {
     setSidebarCollapsed((c) => !c);

@@ -26,6 +26,7 @@ use App\Http\Controllers\GoogleDriveTestController;
 use App\Http\Controllers\SocketController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\AppVersionController;
+use App\Http\Controllers\RolePermissionController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -63,6 +64,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+
+    // Role & sidebar permission management (primary admin only)
+    Route::middleware('super_admin')->prefix('role-management')->group(function () {
+        Route::get('/permissions', [RolePermissionController::class, 'listPermissions']);
+        Route::get('/roles', [RolePermissionController::class, 'indexRoles']);
+        Route::get('/roles/{id}', [RolePermissionController::class, 'showRole']);
+        Route::post('/roles', [RolePermissionController::class, 'storeRole']);
+        Route::put('/roles/{id}', [RolePermissionController::class, 'updateRole']);
+        Route::delete('/roles/{id}', [RolePermissionController::class, 'destroyRole']);
+        Route::put('/roles/{id}/permissions', [RolePermissionController::class, 'syncRolePermissions']);
+    });
 
     // Socket routes
     Route::prefix('socket')->group(function () {

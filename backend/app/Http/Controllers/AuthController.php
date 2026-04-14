@@ -7,6 +7,7 @@ use App\Events\StudentLogout;
 use App\Events\StudentRegistered;
 use App\Models\CloudflareTurnstileSettings;
 use App\Models\User;
+use App\Services\NavPermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -60,23 +61,7 @@ class AuthController extends ApiController
         }
 
         return $this->success([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'user_type' => $user->user_type,
-                'user_type_title' => $user->userType?->title ?? null,
-                'picture' => $user->picture,
-                'picture_url' => $user->picture_url, // Uses getPictureUrlAttribute() accessor
-                'block' => $user->block ?? 0,
-                'block_reason' => $user->block_reason,
-                'roles' => $user->roles->map(function($role) {
-                    return [
-                        'id' => $role->id,
-                        'title' => $role->title,
-                    ];
-                }),
-            ],
+            'user' => $this->buildAuthUserPayload($user),
             'token' => $token,
         ], 'Login successful');
     }
@@ -119,23 +104,7 @@ class AuthController extends ApiController
             $user->picture_url; // Trigger the accessor
         }
 
-        return $this->success([
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'user_type' => $user->user_type,
-            'user_type_title' => $user->userType?->title ?? null,
-            'picture' => $user->picture,
-            'picture_url' => $user->picture_url, // Uses getPictureUrlAttribute() accessor
-            'block' => $user->block ?? 0,
-            'block_reason' => $user->block_reason,
-            'roles' => $user->roles->map(function($role) {
-                return [
-                    'id' => $role->id,
-                    'title' => $role->title,
-                ];
-            }),
-        ], 'User retrieved successfully');
+        return $this->success($this->buildAuthUserPayload($user), 'User retrieved successfully');
     }
 
     /**
@@ -404,23 +373,38 @@ class AuthController extends ApiController
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return $this->success([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'user_type' => $user->user_type,
-                'user_type_title' => $user->userType?->title ?? null,
-                'block' => $user->block ?? 0,
-                'block_reason' => $user->block_reason,
-                'roles' => $user->roles->map(function($role) {
-                    return [
-                        'id' => $role->id,
-                        'title' => $role->title,
-                    ];
-                }),
-            ],
+            'user' => $this->buildAuthUserPayload($user),
             'token' => $token,
         ], 'Signup successful', 201);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildAuthUserPayload(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'user_type' => $user->user_type,
+            'user_type_title' => $user->userType?->title ?? null,
+            'picture' => $user->picture,
+            'picture_url' => $user->picture_url,
+            'block' => $user->block ?? 0,
+            'block_reason' => $user->block_reason,
+            'roles' => $user->roles->map(function ($role) {
+                return [
+                    'id' => $role->id,
+                    'title' => $role->title,
+                    'slug' => $role->slug,
+                    'is_system' => (bool) $role->is_system,
+                ];
+            }),
+            'nav_permissions' => NavPermissionService::slugsForUser($user),
+            'can_access_admin_panel' => NavPermissionService::canAccessAdminPanel($user),
+            'is_primary_platform_admin' => NavPermissionService::isPrimaryPlatformAdmin($user),
+        ];
     }
 
     /**

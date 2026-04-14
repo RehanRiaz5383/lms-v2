@@ -15,6 +15,11 @@ const ROUTES = [
     description: 'Messages with students and staff.',
   },
   {
+    pattern: '/dashboard/settings/roles',
+    title: 'Roles & permissions',
+    description: 'Define custom roles and sidebar access for staff.',
+  },
+  {
     pattern: '/dashboard/notifications/:id',
     title: 'Notification',
     description: 'Full details for this notification.',

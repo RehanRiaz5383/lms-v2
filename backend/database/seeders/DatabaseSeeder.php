@@ -15,9 +15,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Seed user types (roles) first
+        // Deploy: `php artisan migrate --force` then `php artisan db:seed --force`
+        // Ensures default roles + sidebar permission catalog and role links exist.
         $this->call([
             UserTypeSeeder::class,
+            NavPermissionsSeeder::class,
         ]);
 
         // User::factory(10)->create();

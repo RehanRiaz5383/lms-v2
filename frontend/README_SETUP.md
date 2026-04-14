@@ -58,9 +58,12 @@ frontend/
 
 ## API Configuration
 
-All API endpoints are configured in `src/config/api.js`. To add new endpoints:
+- **Path templates** (`API_ENDPOINTS`): edit `src/config/apiEndpoints.js` (safe to commit with the rest of the repo).
+- **Environment** (`APP_MODE`, base URL, timeouts): edit `src/config/api.js` (you can gitignore this file locally if each machine needs different values; keep `apiEndpoints.js` in git).
 
-1. Add the endpoint to `API_ENDPOINTS` object
+To add a new API route:
+
+1. Add the path to `API_ENDPOINTS` in `src/config/apiEndpoints.js`
 2. Use `apiService` from `src/services/api.js` to make requests
 
 Example:
