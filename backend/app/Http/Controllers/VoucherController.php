@@ -142,6 +142,8 @@ class VoucherController extends ApiController
 
             return $this->success($voucher->fresh(['student', 'approver']), 'Voucher archived');
         } catch (\Exception $e) {
+            report($e);
+
             return $this->error($e->getMessage(), 'Failed to archive voucher', 500);
         }
     }
@@ -161,6 +163,8 @@ class VoucherController extends ApiController
 
             return $this->success($voucher->fresh(['student', 'approver']), 'Voucher restored');
         } catch (\Exception $e) {
+            report($e);
+
             return $this->error($e->getMessage(), 'Failed to restore voucher', 500);
         }
     }

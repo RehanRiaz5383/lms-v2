@@ -23,6 +23,17 @@ import { API_ENDPOINTS, buildEndpoint } from '../config/api';
 import { cn } from '../utils/cn';
 import { formatCurrency } from '../utils/currency';
 
+/** API puts user-facing text in `message` and technical detail in `error` (e.g. SQL). */
+function formatApiError(err, fallback) {
+  const d = err?.response?.data;
+  if (!d) return fallback;
+  let text = d.message || fallback;
+  if (typeof d.error === 'string' && d.error.trim() && !text.includes(d.error)) {
+    text = `${text}: ${d.error}`;
+  }
+  return text;
+}
+
 const FeeVouchers = () => {
   const { success, error: showError } = useToast();
   const [vouchers, setVouchers] = useState([]);
@@ -152,7 +163,8 @@ const FeeVouchers = () => {
       success('Voucher archived');
       loadVouchers();
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to archive voucher');
+      console.error('Archive voucher failed:', err.response?.data || err.message);
+      showError(formatApiError(err, 'Failed to archive voucher'));
     }
   };
 
@@ -163,7 +175,8 @@ const FeeVouchers = () => {
       success('Voucher restored to active list');
       loadVouchers();
     } catch (err) {
-      showError(err.response?.data?.message || 'Failed to restore voucher');
+      console.error('Unarchive voucher failed:', err.response?.data || err.message);
+      showError(formatApiError(err, 'Failed to restore voucher'));
     }
   };
 
