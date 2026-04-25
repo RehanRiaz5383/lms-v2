@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Batch;
 use App\Models\Subject;
+use App\Services\NavPermissionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,8 @@ class BatchController extends ApiController
         $user = $request->user();
         $query = Batch::with('subjects');
 
-        // If user is a teacher or CR (has teacher/CR role), only show batches assigned to them
+        // If user is a teacher or CR (by role title), we historically only showed batches assigned to them.
+        // BUT: if the role has Course Management permissions, they should be able to manage all batches.
         if ($user) {
             $user->load('roles');
             $hasTeacherRole = $user->roles->contains(function ($role) {
@@ -34,8 +36,13 @@ class BatchController extends ApiController
             $hasAdminRole = $user->roles->contains(function ($role) {
                 return strtolower($role->title) === 'admin';
             }) || $user->user_type == 1;
-            
-            if ($hasTeacherRole && !$hasAdminRole) {
+
+            $hasCourseManagementAccess = NavPermissionService::hasAny($user, [
+                'admin.academics.batches',
+                'teacher.academics.batches',
+            ]);
+
+            if ($hasTeacherRole && !$hasAdminRole && ! $hasCourseManagementAccess) {
                 // Only show batches assigned to this teacher/CR
                 $query->whereHas('users', function ($q) use ($user) {
                     $q->where('users.id', $user->id);
@@ -289,7 +296,6 @@ class BatchController extends ApiController
 
         // Transform students to include picture_url
         $students->getCollection()->transform(function ($student) {
-            $student->picture_url = $student->picture_url;
             return $student;
         });
 

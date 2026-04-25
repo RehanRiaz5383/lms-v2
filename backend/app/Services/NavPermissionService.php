@@ -26,6 +26,25 @@ class NavPermissionService
             ->all();
     }
 
+    public static function has(User $user, string $slug): bool
+    {
+        return in_array($slug, self::slugsForUser($user), true);
+    }
+
+    /**
+     * @param list<string> $slugs
+     */
+    public static function hasAny(User $user, array $slugs): bool
+    {
+        $granted = self::slugsForUser($user);
+        foreach ($slugs as $slug) {
+            if (in_array($slug, $granted, true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function canAccessAdminPanel(User $user): bool
     {
         if ((int) $user->user_type === 1) {

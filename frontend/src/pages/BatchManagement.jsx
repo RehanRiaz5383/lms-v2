@@ -45,34 +45,14 @@ const BatchManagement = () => {
   const { user } = useAppSelector((state) => state.auth);
   const { success, error: showError } = useToast();
 
-  // Check if user is admin (has admin role)
-  const isAdmin = () => {
-    if (!user) return false;
-    // Check roles array (primary method)
-    if (user.roles && Array.isArray(user.roles)) {
-      return user.roles.some(role => role.title?.toLowerCase() === 'admin');
-    }
-    // Fallback to user_type (backward compatibility)
-    return user.user_type === 1 || user.user_type_title?.toLowerCase() === 'admin';
-  };
+  const hasCourseManagementAccess = !!user?.is_primary_platform_admin
+    || Number(user?.user_type) === 1
+    || (Array.isArray(user?.nav_permissions)
+      && (user.nav_permissions.includes('admin.academics.batches')
+        || user.nav_permissions.includes('teacher.academics.batches')));
 
-  // Check if user is teacher or CR (has teacher/CR role but not admin)
-  const isTeacherOrCR = () => {
-    if (!user) return false;
-    // Check roles array (primary method)
-    if (user.roles && Array.isArray(user.roles)) {
-      const hasTeacher = user.roles.some(role => {
-        const title = role.title?.toLowerCase();
-        return title === 'teacher' || title === 'class representative (cr)';
-      });
-      const hasAdmin = user.roles.some(role => role.title?.toLowerCase() === 'admin');
-      return hasTeacher && !hasAdmin;
-    }
-    return false; // Don't use user_type for teacher/CR
-  };
-
-  const hasAdminAccess = isAdmin();
-  const isTeacherCR = isTeacherOrCR();
+  const hasAdminAccess = hasCourseManagementAccess;
+  const isTeacherCR = hasCourseManagementAccess;
 
   const [showDrawer, setShowDrawer] = useState(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
