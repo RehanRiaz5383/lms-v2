@@ -676,6 +676,20 @@ Route::get('/upgrade-db', function () {
                 ];
             }
 
+            // Deposit account information (single row; safe to run)
+            if (\Schema::hasTable('deposit_account_informations')) {
+                \Artisan::call('db:seed', [
+                    '--class' => 'DepositAccountInformationSeeder',
+                    '--force' => true,
+                ]);
+                $seederResults[] = [
+                    'seeder' => 'DepositAccountInformationSeeder',
+                    'success' => true,
+                    'message' => 'Deposit account information seeded',
+                    'output' => trim(\Artisan::output()) ?: null,
+                ];
+            }
+
             // Run ScheduledJobSeeder if scheduled_jobs table exists
             if (\Schema::hasTable('scheduled_jobs')) {
                 // Check for all expected jobs

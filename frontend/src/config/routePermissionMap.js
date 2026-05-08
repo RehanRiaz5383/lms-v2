@@ -9,6 +9,7 @@ const PREFIX_RULES = [
   { prefix: '/dashboard/settings/smtp', permission: 'admin.settings.smtp' },
   { prefix: '/dashboard/pending-task-submissions', permission: 'admin.tools.pending_task_submissions' },
   { prefix: '/dashboard/income-expense-report', permission: 'admin.accounts.income_expense_report' },
+  { prefix: '/dashboard/deposit-account-information', permission: 'admin.accounts.deposit_account_information' },
   { prefix: '/dashboard/reports/income', permission: 'admin.reports.income' },
   { prefix: '/dashboard/integrations/internal', permission: 'admin.integrations.internal' },
   { prefix: '/dashboard/scheduled-jobs', permission: 'admin.settings.scheduled_jobs' },

@@ -76,6 +76,7 @@ class NavPermissionsSeeder extends Seeder
             ['slug' => 'admin.accounts.fee_vouchers', 'label' => 'Fee Vouchers', 'route_path' => '/dashboard/fee-vouchers', 'audience' => 'admin'],
             ['slug' => 'admin.accounts.expenses', 'label' => 'Expense Management', 'route_path' => '/dashboard/expenses', 'audience' => 'admin'],
             ['slug' => 'admin.accounts.income_expense_report', 'label' => 'Income & Expense Report', 'route_path' => '/dashboard/income-expense-report', 'audience' => 'admin'],
+            ['slug' => 'admin.accounts.deposit_account_information', 'label' => 'Deposit Account information', 'route_path' => '/dashboard/deposit-account-information', 'audience' => 'admin'],
             ['slug' => 'admin.reports.income', 'label' => 'Income Report', 'route_path' => '/dashboard/reports/income', 'audience' => 'admin'],
             ['slug' => 'admin.documents', 'label' => 'Documents', 'route_path' => '/dashboard/documents', 'audience' => 'admin'],
             ['slug' => 'admin.settings.smtp', 'label' => 'SMTP Settings', 'route_path' => '/dashboard/settings/smtp', 'audience' => 'admin'],

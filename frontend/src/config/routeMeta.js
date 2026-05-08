@@ -100,6 +100,11 @@ const ROUTES = [
   { pattern: '/dashboard/videos', title: 'Videos', description: 'Upload, link, and organize learning videos.' },
   { pattern: '/dashboard/expenses', title: 'Expense management', description: 'Record and track organizational expenses.' },
   { pattern: '/dashboard/fee-vouchers', title: 'Fee vouchers', description: 'Issue and track payment vouchers.' },
+  {
+    pattern: '/dashboard/deposit-account-information',
+    title: 'Deposit account information',
+    description: 'Edit the “How to deposit fee” instructions shown to students.',
+  },
   { pattern: '/dashboard/profile', title: 'Profile settings', description: 'Your account information and preferences.' },
   { pattern: '/dashboard/tasks', title: 'Task assigned', description: 'Your assignments and submission status.' },
   { pattern: '/dashboard/quizzes', title: 'My quizzes', description: 'Take and review quiz attempts.' },

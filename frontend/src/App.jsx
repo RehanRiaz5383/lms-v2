@@ -31,6 +31,7 @@ import FeeVouchers from './pages/FeeVouchers';
 import IncomeReport from './pages/IncomeReport';
 import ExpenseManagement from './pages/ExpenseManagement';
 import IncomeExpenseReport from './pages/IncomeExpenseReport';
+import DepositAccountInformation from './pages/DepositAccountInformation';
 import Signup from './pages/Signup';
 import InternalIntegrations from './pages/InternalIntegrations';
 import RolesPermissions from './pages/RolesPermissions';
@@ -230,6 +231,11 @@ function App() {
             <Route path="income-expense-report" element={
               <BlockedRoute>
                 <IncomeExpenseReport />
+              </BlockedRoute>
+            } />
+            <Route path="deposit-account-information" element={
+              <BlockedRoute>
+                <DepositAccountInformation />
               </BlockedRoute>
             } />
             <Route path="profile" element={

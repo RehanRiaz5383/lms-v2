@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             UserTypeSeeder::class,
             NavPermissionsSeeder::class,
+            DepositAccountInformationSeeder::class,
         ]);
 
         // User::factory(10)->create();

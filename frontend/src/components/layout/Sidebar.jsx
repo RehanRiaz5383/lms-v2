@@ -289,6 +289,12 @@ const Sidebar = ({ isOpen, onClose, collapsed, onToggleCollapsed }) => {
           { title: 'Fee Vouchers', icon: Wallet, path: '/dashboard/fee-vouchers', permission: 'admin.accounts.fee_vouchers' },
           { title: 'Expense Management', icon: FileText, path: '/dashboard/expenses', permission: 'admin.accounts.expenses' },
           { title: 'Income & Expense Report', icon: BarChart3, path: '/dashboard/income-expense-report', permission: 'admin.accounts.income_expense_report' },
+          {
+            title: 'Deposit Account information',
+            icon: FileText,
+            path: '/dashboard/deposit-account-information',
+            permission: 'admin.accounts.deposit_account_information',
+          },
         ],
       },
       {

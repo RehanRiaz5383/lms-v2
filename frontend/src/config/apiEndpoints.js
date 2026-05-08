@@ -218,6 +218,11 @@ export const API_ENDPOINTS = {
     update: '/notification-settings',
   },
 
+  depositAccountInformation: {
+    get: '/deposit-account-information',
+    update: '/deposit-account-information',
+  },
+
   // Push Notifications
   pushNotifications: {
     subscribe: '/push-notifications/subscribe',

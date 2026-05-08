@@ -27,6 +27,7 @@ use App\Http\Controllers\SocketController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\AppVersionController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\DepositAccountInformationController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -293,6 +294,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [NotificationSettingsController::class, 'index']);
         Route::put('/', [NotificationSettingsController::class, 'update']);
     });
+
+    // Deposit account information (admin edits, students view)
+    Route::get('/deposit-account-information', [DepositAccountInformationController::class, 'show']);
+    Route::middleware('admin')->put('/deposit-account-information', [DepositAccountInformationController::class, 'update']);
 
     // Push Notifications (available to all authenticated users)
     Route::prefix('push-notifications')->group(function () {

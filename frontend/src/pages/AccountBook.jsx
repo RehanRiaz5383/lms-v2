@@ -31,6 +31,9 @@ const AccountBook = () => {
   const [loading, setLoading] = useState(true);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [showDepositInfoDialog, setShowDepositInfoDialog] = useState(false);
+  const [depositInfoLoading, setDepositInfoLoading] = useState(false);
+  const [depositInfoHtml, setDepositInfoHtml] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
@@ -52,6 +55,18 @@ const AccountBook = () => {
       showError(err.response?.data?.message || 'Failed to load vouchers');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDepositInfo = async () => {
+    setDepositInfoLoading(true);
+    try {
+      const res = await apiService.get(API_ENDPOINTS.depositAccountInformation.get);
+      setDepositInfoHtml(res?.data?.data?.content_html ?? '');
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to load deposit information');
+    } finally {
+      setDepositInfoLoading(false);
     }
   };
 
@@ -198,6 +213,19 @@ const AccountBook = () => {
           <CardDescription>All your fee vouchers and their status</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex justify-end pb-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                setShowDepositInfoDialog(true);
+                await loadDepositInfo();
+              }}
+            >
+              How to deposit fee
+            </Button>
+          </div>
+
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -306,6 +334,25 @@ const AccountBook = () => {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        isOpen={showDepositInfoDialog}
+        onClose={() => setShowDepositInfoDialog(false)}
+        title="How to deposit fee"
+        maxWidth="max-w-3xl"
+      >
+        {depositInfoLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        ) : (
+          <div
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: depositInfoHtml || '<p>No instructions provided yet.</p>' }}
+          />
+        )}
+      </Dialog>
 
       {/* Submit Payment Dialog */}
       <Dialog
