@@ -349,11 +349,16 @@ Route::get('/api/storage/google/{path}', function ($path) {
             $mimeType = $mimeTypes[strtolower($extension)] ?? 'application/octet-stream';
         }
         
-        // Return file with proper headers
-        return response($fileContents, 200, [
+        $headers = [
             'Content-Type' => $mimeType,
-            'Cache-Control' => 'public, max-age=31536000', // Cache for 1 year
-        ]);
+            'Cache-Control' => 'public, max-age=31536000',
+        ];
+        if (is_string($mimeType) && str_starts_with($mimeType, 'video/')) {
+            $headers['Content-Disposition'] = 'inline';
+            $headers['Accept-Ranges'] = 'bytes';
+        }
+
+        return response($fileContents, 200, $headers);
     } catch (\Exception $e) {
         \Log::error('Google Drive storage route error', [
             'path' => $path,

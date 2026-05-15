@@ -20,7 +20,8 @@ import {
   X,
 } from 'lucide-react';
 import { apiService } from '../services/api';
-import { API_ENDPOINTS, getStorageUrl } from '../config/api';
+import { API_ENDPOINTS } from '../config/api';
+import { openVideoInNewTab, resolveInternalVideoPlaybackUrl } from '../utils/videoPlayback';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../utils/cn';
 
@@ -215,16 +216,11 @@ const StudentLectureVideos = () => {
 
   const handleViewVideo = (video) => {
     if (video.source_type === 'internal') {
-      if (video.video_url) {
-        window.open(video.video_url, '_blank');
-      } else {
-        const videoPath = video.path || video.internal_path;
-        if (videoPath) {
-          const videoUrl = getStorageUrl(videoPath);
-          if (videoUrl) window.open(videoUrl, '_blank');
-        }
+      const url = resolveInternalVideoPlaybackUrl(video);
+      if (!url || !openVideoInNewTab(url)) {
+        showError('Could not open video. Allow pop-ups for this site and try again.');
       }
-    } else {
+    } else if (video.external_url) {
       window.open(video.external_url, '_blank');
     }
   };

@@ -16,7 +16,7 @@ import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { DateRangePicker } from '../components/ui/date-range-picker';
-import { getStorageUrl } from '../config/api';
+import { openVideoInNewTab, resolveInternalVideoPlaybackUrl } from '../utils/videoPlayback';
 import {
   Plus,
   Search,
@@ -133,20 +133,8 @@ const VideosManagement = () => {
       video_file: null, // Don't pre-fill file
       external_url: video.external_url || '',
     });
-    // Set preview for internal videos - use video_url (direct download) if available, otherwise fallback to path
     if (video.source_type === 'internal') {
-      // If video has a direct download URL (from video_url accessor), use it
-      if (video.video_url) {
-        setVideoPreview(video.video_url);
-      } else {
-        // Fallback to generating URL from path
-        const videoPath = video.path || video.internal_path;
-        if (videoPath) {
-          setVideoPreview(getStorageUrl(videoPath));
-        } else {
-          setVideoPreview(null);
-        }
-      }
+      setVideoPreview(resolveInternalVideoPlaybackUrl(video));
     } else {
       setVideoPreview(null);
     }
@@ -382,21 +370,6 @@ const VideosManagement = () => {
     } finally {
       setDraggedIndex(null);
     }
-  };
-
-  const getVideoUrl = (video) => {
-    if (video.source_type === 'internal') {
-      // If video has a direct download URL (from video_url accessor), use it
-      if (video.video_url) {
-        return video.video_url;
-      }
-      // Fallback to generating URL from path
-      const videoPath = video.path || video.internal_path;
-      if (videoPath) {
-        return getStorageUrl(videoPath);
-      }
-    }
-    return video.external_url;
   };
 
   const handleBackfillGoogleDriveIds = async () => {
@@ -686,12 +659,7 @@ const VideosManagement = () => {
                     setFormData({ ...formData, source_type: e.target.value, external_url: '' });
                     // Restore preview if editing internal video - use path column first
                     if (editingVideo && editingVideo.source_type === 'internal') {
-                      const videoPath = editingVideo.path || editingVideo.internal_path;
-                      if (videoPath) {
-                        setVideoPreview(getStorageUrl(videoPath));
-                      } else {
-                        setVideoPreview(null);
-                      }
+                      setVideoPreview(resolveInternalVideoPlaybackUrl(editingVideo));
                     } else {
                       setVideoPreview(null);
                     }
@@ -734,9 +702,8 @@ const VideosManagement = () => {
                       setVideoPreview(previewUrl);
                     } else {
                       // If no new file, show existing video if editing
-                      if (editingVideo && (editingVideo.path || editingVideo.internal_path)) {
-                        const videoPath = editingVideo.path || editingVideo.internal_path;
-                        setVideoPreview(getStorageUrl(videoPath));
+                      if (editingVideo) {
+                        setVideoPreview(resolveInternalVideoPlaybackUrl(editingVideo));
                       } else {
                         setVideoPreview(null);
                       }
@@ -763,41 +730,8 @@ const VideosManagement = () => {
                       type="button"
                       variant="outline"
                       onClick={() => {
-                        if (videoPreview.startsWith('blob:')) {
-                          // For blob URLs (newly uploaded files), create a temporary page
-                          const newWindow = window.open('', '_blank');
-                          if (newWindow) {
-                            newWindow.document.write(`
-                              <!DOCTYPE html>
-                              <html>
-                                <head>
-                                  <title>Video Preview</title>
-                                  <style>
-                                    body {
-                                      margin: 0;
-                                      padding: 20px;
-                                      display: flex;
-                                      justify-content: center;
-                                      align-items: center;
-                                      min-height: 100vh;
-                                      background: #000;
-                                    }
-                                    video {
-                                      max-width: 100%;
-                                      max-height: 90vh;
-                                    }
-                                  </style>
-                                </head>
-                                <body>
-                                  <video src="${videoPreview}" controls autoplay></video>
-                                </body>
-                              </html>
-                            `);
-                            newWindow.document.close();
-                          }
-                        } else {
-                          // For storage URLs (existing videos), open directly
-                          window.open(videoPreview, '_blank');
+                        if (!openVideoInNewTab(videoPreview)) {
+                          showError('Could not open video. Allow pop-ups for this site and try again.');
                         }
                       }}
                     >
