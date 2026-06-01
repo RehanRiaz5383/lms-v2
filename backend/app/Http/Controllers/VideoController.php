@@ -555,29 +555,16 @@ class VideoController extends ApiController
             return $this->error('Direct download is only available for internal videos', 400);
         }
 
-        if (!$video->google_drive_file_id) {
-            // Fallback to regular storage URL if file ID is not available
-            $videoPath = $video->path ?? $video->internal_path;
-            if ($videoPath) {
-                return redirect(url('/load-storage/' . $videoPath));
-            }
-            return $this->error('Video file not found', 404);
+        if ($video->google_drive_file_id) {
+            return redirect(Video::googleDriveViewUrl($video->google_drive_file_id));
         }
 
-        // Get direct download URL from Google Drive
-        $downloadUrl = $this->getGoogleDriveDownloadUrl($video->google_drive_file_id);
-
-        if (!$downloadUrl) {
-            // Fallback to regular storage URL if direct download URL cannot be obtained
-            $videoPath = $video->path ?? $video->internal_path;
-            if ($videoPath) {
-                return redirect(url('/load-storage/' . $videoPath));
-            }
-            return $this->error('Failed to get download URL', 500);
+        $videoPath = $video->path ?? $video->internal_path;
+        if ($videoPath) {
+            return redirect(url('/load-storage/' . $videoPath));
         }
 
-        // Redirect to Google Drive's direct download URL
-        return redirect($downloadUrl);
+        return $this->error('Video file not found', 404);
     }
 
     /**

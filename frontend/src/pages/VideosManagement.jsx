@@ -16,7 +16,7 @@ import { Drawer } from '../components/ui/drawer';
 import { Dialog } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { DateRangePicker } from '../components/ui/date-range-picker';
-import { openVideoInNewTab, resolveInternalVideoPlaybackUrl } from '../utils/videoPlayback';
+import { openVideoInNewTab, resolveInternalVideoOpenUrl } from '../utils/videoPlayback';
 import {
   Plus,
   Search,
@@ -134,7 +134,7 @@ const VideosManagement = () => {
       external_url: video.external_url || '',
     });
     if (video.source_type === 'internal') {
-      setVideoPreview(resolveInternalVideoPlaybackUrl(video));
+      setVideoPreview(resolveInternalVideoOpenUrl(video));
     } else {
       setVideoPreview(null);
     }
@@ -659,7 +659,7 @@ const VideosManagement = () => {
                     setFormData({ ...formData, source_type: e.target.value, external_url: '' });
                     // Restore preview if editing internal video - use path column first
                     if (editingVideo && editingVideo.source_type === 'internal') {
-                      setVideoPreview(resolveInternalVideoPlaybackUrl(editingVideo));
+                      setVideoPreview(resolveInternalVideoOpenUrl(editingVideo));
                     } else {
                       setVideoPreview(null);
                     }
@@ -703,7 +703,7 @@ const VideosManagement = () => {
                     } else {
                       // If no new file, show existing video if editing
                       if (editingVideo) {
-                        setVideoPreview(resolveInternalVideoPlaybackUrl(editingVideo));
+                        setVideoPreview(resolveInternalVideoOpenUrl(editingVideo));
                       } else {
                         setVideoPreview(null);
                       }

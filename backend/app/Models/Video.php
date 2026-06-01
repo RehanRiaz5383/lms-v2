@@ -47,22 +47,26 @@ class Video extends Model
 
     /**
      * Get the video URL based on source type.
-     * If google_drive_file_id exists, returns direct download URL endpoint.
+     * Internal videos with a Google Drive file id open in Drive's viewer.
      */
     public function getVideoUrlAttribute(): ?string
     {
         if ($this->source_type === 'internal') {
-            // If we have a Google Drive file ID, use direct download endpoint
             if ($this->google_drive_file_id) {
-                return url('/api/videos/' . $this->id . '/direct-download');
+                return self::googleDriveViewUrl($this->google_drive_file_id);
             }
-            
-            // Use path column first, fallback to internal_path for backward compatibility
+
             $videoPath = $this->path ?? $this->internal_path;
+
             return $videoPath ? url('/load-storage/' . $videoPath) : null;
         }
-        
+
         return $this->external_url;
+    }
+
+    public static function googleDriveViewUrl(string $fileId): string
+    {
+        return 'https://drive.google.com/file/d/'.trim($fileId).'/view';
     }
 
     /**

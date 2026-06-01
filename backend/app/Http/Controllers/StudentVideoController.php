@@ -135,9 +135,8 @@ class StudentVideoController extends ApiController
             return $this->notFound('Video not found');
         }
 
-        // If Google Drive file ID exists, redirect to direct download endpoint
         if ($videoModel->google_drive_file_id) {
-            return redirect(url('/api/videos/' . $id . '/direct-download'));
+            return redirect(Video::googleDriveViewUrl($videoModel->google_drive_file_id));
         }
 
         // Fallback to local storage if no Google Drive file ID
